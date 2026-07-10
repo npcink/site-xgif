@@ -25,7 +25,7 @@ test("publisher exposes local public URLs and keeps empty result panels hidden",
 });
 
 test("publisher writes the metadata required by Astro collections", async () => {
-  const [server, html] = await Promise.all([read("server.js"), read("public/index.html")]);
+  const [server, html, app] = await Promise.all([read("server.js"), read("public/index.html"), read("public/app.js")]);
 
   assert.match(server, /sourceKind/);
   assert.match(server, /licenseUrl/);
@@ -34,4 +34,11 @@ test("publisher writes the metadata required by Astro collections", async () => 
   assert.match(html, /name="sourceKind"/);
   assert.match(html, /用户提供素材/);
   assert.match(html, /name="licenseUrl"/);
+  assert.match(server, /function inspectImageUpload/);
+  assert.match(server, /PUBLISHER_MAX_IMAGE_BYTES/);
+  assert.match(server, /图片文件重复/);
+  assert.match(server, /409/);
+  assert.match(html, /data-image-preview="detail"/);
+  assert.match(app, /function imagePayload/);
+  assert.match(app, /window\.confirm/);
 });

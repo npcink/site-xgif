@@ -250,8 +250,15 @@
         </form>
 
         <aside class="preview">
-          <p class="eyebrow">预览</p>
+          <div class="preview-heading">
+            <p class="eyebrow">发布前预览</p>
+            <div class="preview-tabs" aria-label="图片预览类型">
+              <button class="preview-tab active" data-image-preview="card" type="button">列表卡片</button>
+              <button class="preview-tab" data-image-preview="detail" type="button">图片详情</button>
+            </div>
+          </div>
           <article class="image-card" id="image-preview"></article>
+          <article class="image-detail-preview" id="image-detail-preview" hidden></article>
           <pre class="result" id="image-result"></pre>
         </aside>
       </section>

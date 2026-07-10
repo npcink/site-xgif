@@ -45,6 +45,9 @@ const target = {
 
 const port = Number(process.env.PORT || 8787);
 const maxBodyBytes = Number(process.env.PUBLISHER_MAX_BODY_BYTES || 50 * 1024 * 1024);
+const maxImageBytes = Number(process.env.PUBLISHER_MAX_IMAGE_BYTES || 8 * 1024 * 1024);
+const minImageDimension = Number(process.env.PUBLISHER_MIN_IMAGE_DIMENSION || 160);
+const maxImageDimension = Number(process.env.PUBLISHER_MAX_IMAGE_DIMENSION || 6000);
 const aiTimeoutMs = Number(process.env.XGIF_AI_TIMEOUT_MS || 45_000);
 const localSiteUrl = new URL("http://localhost:4321");
 
@@ -58,6 +61,13 @@ const mimeTypes = new Map([
   [".jpeg", "image/jpeg"],
   [".gif", "image/gif"],
   [".webp", "image/webp"],
+]);
+
+const imageExtensions = new Map([
+  ["image/jpeg", ".jpg"],
+  ["image/png", ".png"],
+  ["image/gif", ".gif"],
+  ["image/webp", ".webp"],
 ]);
 
 function sendJson(res, statusCode, payload) {
@@ -131,6 +141,108 @@ function yamlArray(values) {
 function markdownBody(value) {
   const body = String(value || "").trim();
   return body ? `${body}\n` : "";
+}
+
+function imageValidationError(message, statusCode = 422) {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  return error;
+}
+
+function suggestedImageRatio(width, height) {
+  const ratio = width / height;
+  if (ratio >= 1.25) return "wide";
+  if (ratio <= 0.8) return "tall";
+  return "square";
+}
+
+function readJpegDimensions(buffer) {
+  let offset = 2;
+  while (offset < buffer.length) {
+    if (buffer[offset] !== 0xff) {
+      offset += 1;
+      continue;
+    }
+    const marker = buffer[offset + 1];
+    offset += 2;
+    if (marker === 0xd8 || marker === 0xd9) continue;
+    if (offset + 2 > buffer.length) break;
+    const length = buffer.readUInt16BE(offset);
+    if (length < 2 || offset + length > buffer.length) break;
+    if ([0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf].includes(marker)) {
+      if (length < 7) break;
+      return { width: buffer.readUInt16BE(offset + 5), height: buffer.readUInt16BE(offset + 3) };
+    }
+    offset += length;
+  }
+  throw imageValidationError("JPEG 图片缺少可用的尺寸信息。");
+}
+
+function readWebpDimensions(buffer) {
+  const chunk = buffer.subarray(12, 16).toString("ascii");
+  if (chunk === "VP8X" && buffer.length >= 30) {
+    return {
+      width: 1 + buffer.readUIntLE(24, 3),
+      height: 1 + buffer.readUIntLE(27, 3),
+    };
+  }
+  if (chunk === "VP8L" && buffer.length >= 25 && buffer[20] === 0x2f) {
+    const bits = buffer.readUInt32LE(21);
+    return { width: (bits & 0x3fff) + 1, height: ((bits >> 14) & 0x3fff) + 1 };
+  }
+  if (chunk === "VP8 " && buffer.length >= 30) {
+    return { width: buffer.readUInt16LE(26) & 0x3fff, height: buffer.readUInt16LE(28) & 0x3fff };
+  }
+  throw imageValidationError("WebP 图片缺少可用的尺寸信息。");
+}
+
+function inspectImageUpload(fileData) {
+  const match = String(fileData || "").match(/^data:([^;]+);base64,([A-Za-z0-9+/]+={0,2})$/);
+  if (!match) throw imageValidationError("图片数据格式无效，请重新选择文件。", 400);
+  const [, declaredMime, encoded] = match;
+  if (!imageExtensions.has(declaredMime)) throw imageValidationError("仅支持 JPEG、PNG、WebP 和 GIF 图片。");
+
+  const buffer = Buffer.from(encoded, "base64");
+  if (buffer.length === 0) throw imageValidationError("图片文件为空。");
+  if (buffer.length > maxImageBytes) throw imageValidationError(`图片文件超过 ${Math.floor(maxImageBytes / 1024 / 1024)} MB 限制。`);
+
+  let mime = "";
+  let dimensions;
+  if (buffer.subarray(0, 3).equals(Buffer.from([0xff, 0xd8, 0xff]))) {
+    mime = "image/jpeg";
+    dimensions = readJpegDimensions(buffer);
+  } else if (buffer.subarray(0, 8).equals(Buffer.from("\x89PNG\r\n\x1a\n", "binary")) && buffer.length >= 24) {
+    mime = "image/png";
+    dimensions = { width: buffer.readUInt32BE(16), height: buffer.readUInt32BE(20) };
+  } else if (["GIF87a", "GIF89a"].includes(buffer.subarray(0, 6).toString("ascii")) && buffer.length >= 10) {
+    mime = "image/gif";
+    dimensions = { width: buffer.readUInt16LE(6), height: buffer.readUInt16LE(8) };
+  } else if (buffer.subarray(0, 4).toString("ascii") === "RIFF" && buffer.subarray(8, 12).toString("ascii") === "WEBP") {
+    mime = "image/webp";
+    dimensions = readWebpDimensions(buffer);
+  } else {
+    throw imageValidationError("文件内容不是可支持的图片格式。");
+  }
+
+  if (mime !== declaredMime) throw imageValidationError("图片扩展类型与实际文件内容不一致。");
+  if (!dimensions.width || !dimensions.height) throw imageValidationError("图片尺寸无效。");
+  if (dimensions.width < minImageDimension || dimensions.height < minImageDimension) {
+    throw imageValidationError(`图片尺寸至少需要 ${minImageDimension} × ${minImageDimension} 像素。`);
+  }
+  if (dimensions.width > maxImageDimension || dimensions.height > maxImageDimension) {
+    throw imageValidationError(`图片单边不能超过 ${maxImageDimension} 像素。`);
+  }
+
+  return {
+    buffer,
+    mime,
+    extension: imageExtensions.get(mime),
+    width: dimensions.width,
+    height: dimensions.height,
+    byteLength: buffer.length,
+    sha256: createHash("sha256").update(buffer).digest("hex"),
+    ratio: suggestedImageRatio(dimensions.width, dimensions.height),
+  };
 }
 
 function slugify(input) {
@@ -325,10 +437,12 @@ async function scanDuplicateArticle({ title, sourceUrl }) {
     }));
 }
 
-async function scanDuplicateImage({ title, sha256 }) {
+async function scanDuplicateImage({ title, sha256, excludeFile }) {
   const records = await scanMarkdownFrontmatter(target.imageEntries);
   const normalizedTitle = normalizeText(title);
+  const excludedPath = excludeFile ? path.resolve(repoRoot, excludeFile) : "";
   const titleMatches = records
+    .filter((record) => !excludedPath || path.resolve(record.file) !== excludedPath)
     .filter((record) => normalizedTitle && normalizeText(record.title) === normalizedTitle)
     .map((record) => ({
       file: path.relative(repoRoot, record.file),
@@ -553,6 +667,7 @@ async function checkArticleQuality(payload) {
 async function checkImageQuality(payload) {
   const issues = [];
   const tags = normalizeList(payload.tags);
+  let asset = null;
   if (!String(payload.title || "").trim()) issues.push(qualityIssue("error", "缺少标题。"));
   if (!String(payload.description || "").trim()) issues.push(qualityIssue("error", "缺少图片描述。"));
   try {
@@ -565,9 +680,34 @@ async function checkImageQuality(payload) {
   if (tags.length > 6) issues.push(qualityIssue("warning", "标签较多，建议控制在 2 到 6 个。"));
   if (!String(payload.mood || "").trim()) issues.push(qualityIssue("warning", "建议填写情绪，方便表情包检索。"));
   if (!String(payload.scenes || "").trim()) issues.push(qualityIssue("warning", "建议填写使用场景，方便表情包检索。"));
-  const duplicates = await scanDuplicateImage(payload);
-  if (duplicates.length) issues.push(qualityIssue("warning", `发现 ${duplicates.length} 条重复内容。`));
-  return { ok: !issues.some((item) => item.level === "error"), issues, duplicates };
+  if (payload.fileData) {
+    try {
+      asset = inspectImageUpload(payload.fileData);
+      if (String(payload.ratio || "") && payload.ratio !== asset.ratio) {
+        issues.push(qualityIssue("warning", `当前图片更适合“${asset.ratio}”比例，已选择“${payload.ratio}”。`));
+      }
+    } catch (error) {
+      issues.push(qualityIssue("error", error.message));
+    }
+  }
+  const duplicates = await scanDuplicateImage({ ...payload, sha256: asset?.sha256 || payload.sha256 });
+  const exactDuplicates = duplicates.filter((item) => item.reason === "图片文件重复");
+  const titleDuplicates = duplicates.filter((item) => item.reason === "标题重复");
+  if (exactDuplicates.length) issues.push(qualityIssue("error", `已存在 ${exactDuplicates.length} 个完全相同的图片文件，不能重复发布。`));
+  if (titleDuplicates.length) issues.push(qualityIssue("warning", `发现 ${titleDuplicates.length} 条同标题内容，请确认不是重复发布。`));
+  return {
+    ok: !issues.some((item) => item.level === "error"),
+    issues,
+    duplicates,
+    asset: asset && {
+      mime: asset.mime,
+      byteLength: asset.byteLength,
+      width: asset.width,
+      height: asset.height,
+      ratio: asset.ratio,
+      sha256: asset.sha256,
+    },
+  };
 }
 
 function sanitizeImageSuggestion(value) {
@@ -887,20 +1027,20 @@ async function handleApi(req, res) {
       "fileData",
     ]);
     payload = normalizeImageAttribution(payload);
+    const asset = inspectImageUpload(payload.fileData);
+    const duplicates = await scanDuplicateImage({ title: payload.title, sha256: asset.sha256 });
+    if (duplicates.some((item) => item.reason === "图片文件重复")) {
+      throw imageValidationError("已存在完全相同的图片文件，不能重复发布。", 409);
+    }
 
     const date = payload.pubDate || todayIso();
     const year = date.slice(0, 4);
-    const originalExt = path.extname(payload.fileName).toLowerCase() || ".png";
     const imageBaseName = `${date}-${slugify(payload.slug || payload.title)}`;
     const assetDir = path.join(target.memeAssets, year);
     await mkdir(assetDir, { recursive: true });
 
-    const assetPath = await uniquePath(assetDir, imageBaseName, originalExt);
-    const base64 = String(payload.fileData).replace(/^data:[^;]+;base64,/, "");
-    const imageBuffer = Buffer.from(base64, "base64");
-    const sha256 = createHash("sha256").update(imageBuffer).digest("hex");
-    const duplicates = await scanDuplicateImage({ title: payload.title, sha256 });
-    await writeFile(assetPath, imageBuffer);
+    const assetPath = await uniquePath(assetDir, imageBaseName, asset.extension);
+    await writeFile(assetPath, asset.buffer);
 
     const publicImagePath = `/${path.relative(path.join(siteRoot, "public"), assetPath).split(path.sep).join("/")}`;
     await mkdir(target.imageEntries, { recursive: true });
@@ -923,7 +1063,14 @@ async function handleApi(req, res) {
       file: path.relative(repoRoot, entryPath),
       image: path.relative(repoRoot, assetPath),
       publicImagePath,
-      sha256,
+      sha256: asset.sha256,
+      asset: {
+        mime: asset.mime,
+        byteLength: asset.byteLength,
+        width: asset.width,
+        height: asset.height,
+        ratio: asset.ratio,
+      },
       git,
       duplicates,
     });

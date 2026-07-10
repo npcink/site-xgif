@@ -16,6 +16,7 @@ const libraryOpen = $("#library-open");
 let selectedImage = null;
 let activeContent = null;
 let articlePreviewMode = "card";
+let imagePreviewMode = "card";
 
 for (const input of $$("input[type=\"date\"]")) input.value = today;
 
@@ -88,11 +89,20 @@ function updateArticlePreview() {
 function updateImagePreview() {
   const data = formData(imageForm);
   const image = selectedImage?.dataUrl || "";
+  const source = data.sourceKind === "user_provided"
+    ? "图片来源：用户提供 · 已确认可公开发布"
+    : `图片来源备注：${data.source || "外部来源待填写"}`;
   $("#image-preview").innerHTML = `
     ${image ? `<img src="${image}" alt="${escapeHtml(data.title || "图片预览")}" />` : ""}
     <div class="copy"><div class="meta"><span>${escapeHtml(data.category || "表情包")}</span><span>${escapeHtml(data.pubDate || today)}</span></div>
     <h2>${escapeHtml(data.title || "图片标题")}</h2><p class="summary">${escapeHtml(data.description || "图片说明会显示在这里。")}</p>
     <div class="tags">${renderTags(data.tags)}</div></div>`;
+  $("#image-detail-preview").innerHTML = `
+    <figure>${image ? `<img src="${image}" alt="${escapeHtml(data.title || "图片预览")}" />` : ""}</figure>
+    <div class="copy"><p class="eyebrow">REACTION / 图片详情</p><h2>${escapeHtml(data.title || "图片标题")}</h2>
+    <p class="summary">${escapeHtml(data.description || "图片说明会显示在这里。")}</p>
+    <dl><div><dt>分类</dt><dd>${escapeHtml(data.category || "表情包")}</dd></div><div><dt>情绪</dt><dd>${escapeHtml(data.mood || "未分类")}</dd></div><div><dt>场景</dt><dd>${escapeHtml(data.scenes || "通用")}</dd></div></dl>
+    <div class="tags">${renderTags(data.tags)}</div><p class="image-source">${escapeHtml(source)}</p></div>`;
 }
 
 function syncImageAttribution() {
@@ -200,9 +210,37 @@ async function sha256FromDataUrl(dataUrl) {
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
+async function imageDimensions(dataUrl) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve({ width: image.naturalWidth, height: image.naturalHeight });
+    image.onerror = () => reject(new Error("浏览器无法读取这张图片。"));
+    image.src = dataUrl;
+  });
+}
+
+function suggestRatio(width, height) {
+  if (width / height >= 1.25) return "wide";
+  if (width / height <= 0.8) return "tall";
+  return "square";
+}
+
+function imagePayload() {
+  const data = formData(imageForm);
+  if (selectedImage?.dataUrl?.startsWith("data:")) data.fileData = selectedImage.dataUrl;
+  if (imageForm.dataset.editFile) data.excludeFile = imageForm.dataset.editFile;
+  return data;
+}
+
+function formatAsset(asset) {
+  if (!asset) return "";
+  return `文件：${asset.mime.replace("image/", "").toUpperCase()} · ${asset.width} × ${asset.height} · ${(asset.byteLength / 1024).toFixed(1)} KB · 建议 ${asset.ratio}`;
+}
+
 function formatQuality(result) {
-  if (!result.issues.length) return "质量检查通过。";
-  return result.issues.map((item) => `${item.level === "error" ? "必须处理" : "建议处理"}：${item.message}`).join("\n");
+  const asset = formatAsset(result.asset);
+  const issues = result.issues.map((item) => `${item.level === "error" ? "必须处理" : "建议处理"}：${item.message}`);
+  return [asset, issues.length ? issues.join("\n") : "质量检查通过。"].filter(Boolean).join("\n");
 }
 
 function formatPublish(result) {
@@ -280,7 +318,7 @@ for (const input of $$("input, textarea, select", imageForm)) {
   input.addEventListener("change", () => { syncImageAttribution(); updateImagePreview(); saveLocalDraft(imageForm); });
 }
 
-for (const tab of $$(".preview-tab")) {
+for (const tab of $$('[data-preview]')) {
   tab.addEventListener("click", () => {
     articlePreviewMode = tab.dataset.preview;
     $$(".preview-tab").forEach((item) => item.classList.toggle("active", item === tab));
@@ -289,13 +327,32 @@ for (const tab of $$(".preview-tab")) {
   });
 }
 
+for (const tab of $$('[data-image-preview]')) {
+  tab.addEventListener("click", () => {
+    imagePreviewMode = tab.dataset.imagePreview;
+    $$('[data-image-preview]').forEach((item) => item.classList.toggle("active", item === tab));
+    $("#image-preview").hidden = imagePreviewMode !== "card";
+    $("#image-detail-preview").hidden = imagePreviewMode !== "detail";
+  });
+}
+
 $('input[name="file"]', imageForm).addEventListener("change", async (event) => {
   const file = event.target.files[0];
   if (!file) return;
-  selectedImage = { name: file.name, dataUrl: await fileToDataUrl(file) };
-  imageForm.dataset.image = "";
-  updateImagePreview();
-  saveLocalDraft(imageForm);
+  try {
+    const dataUrl = await fileToDataUrl(file);
+    const dimensions = await imageDimensions(dataUrl);
+    const ratio = suggestRatio(dimensions.width, dimensions.height);
+    selectedImage = { name: file.name, dataUrl };
+    $('[name="ratio"]', imageForm).value = ratio;
+    $("#image-editor-state").textContent = `已读取 ${dimensions.width} × ${dimensions.height} 像素，比例已设为“${ratio}”。`;
+    imageForm.dataset.image = "";
+    updateImagePreview();
+    saveLocalDraft(imageForm);
+  } catch (error) {
+    selectedImage = null;
+    showError(imageResult, error);
+  }
 });
 
 $('[data-check="article"]').addEventListener("click", async () => {
@@ -318,7 +375,7 @@ $('[data-quality="article"]').addEventListener("click", async () => {
 });
 
 $('[data-quality="image"]').addEventListener("click", async () => {
-  try { showResult(imageResult, formatQuality(await api("/api/quality/image", formData(imageForm)))); }
+  try { showResult(imageResult, formatQuality(await api("/api/quality/image", imagePayload()))); }
   catch (error) { showError(imageResult, error); }
 });
 
@@ -357,8 +414,18 @@ articleForm.addEventListener("submit", async (event) => {
 imageForm.addEventListener("submit", async (event) => {
   event.preventDefault(); showResult(imageResult, "正在保存图片...");
   try {
-    const data = formData(imageForm);
+    const data = imagePayload();
     if (!imageForm.dataset.editFile && !selectedImage) throw new Error("请选择图片或 GIF。");
+    const quality = await api("/api/quality/image", data);
+    if (!quality.ok) {
+      showResult(imageResult, formatQuality(quality));
+      return;
+    }
+    const warnings = quality.issues.filter((item) => item.level === "warning");
+    if (warnings.length && !window.confirm(`发布前请确认：\n${warnings.map((item) => `- ${item.message}`).join("\n")}`)) {
+      showResult(imageResult, "已取消发布，请调整内容后再试。");
+      return;
+    }
     const result = imageForm.dataset.editFile
       ? await api("/api/content/update", { type: "image", file: imageForm.dataset.editFile, data: { ...data, image: imageForm.dataset.image } })
       : await api("/api/publish/image", { ...data, fileName: selectedImage?.name, fileData: selectedImage?.dataUrl });
