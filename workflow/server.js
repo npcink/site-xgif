@@ -555,6 +555,11 @@ async function checkImageQuality(payload) {
   const tags = normalizeList(payload.tags);
   if (!String(payload.title || "").trim()) issues.push(qualityIssue("error", "缺少标题。"));
   if (!String(payload.description || "").trim()) issues.push(qualityIssue("error", "缺少图片描述。"));
+  try {
+    normalizeImageAttribution(payload);
+  } catch (error) {
+    issues.push(qualityIssue("error", error.message));
+  }
   if (!String(payload.category || "").trim()) issues.push(qualityIssue("warning", "建议填写分类，方便后续管理。"));
   if (tags.length === 0) issues.push(qualityIssue("error", "至少需要一个标签。"));
   if (tags.length > 6) issues.push(qualityIssue("warning", "标签较多，建议控制在 2 到 6 个。"));
@@ -650,10 +655,13 @@ function buildLegacyImageMarkdown(payload) {
 function buildImageMarkdown(payload) {
   const sourceLine = "\nsource: " + yamlString(payload.source || "本地上传") + "\n";
   const attributionLines = sourceLine
-    + "sourceUrl: " + yamlString(payload.sourceUrl) + "\n"
-    + "author: " + yamlString(payload.author) + "\n"
-    + "license: " + yamlString(payload.license) + "\n"
-    + "licenseUrl: " + yamlString(payload.licenseUrl) + "\n";
+    + "sourceKind: " + yamlString(payload.sourceKind || "original") + "\n"
+    + (payload.sourceKind === "user_provided"
+      ? "license: " + yamlString(payload.license) + "\n"
+      : "sourceUrl: " + yamlString(payload.sourceUrl) + "\n"
+        + "author: " + yamlString(payload.author) + "\n"
+        + "license: " + yamlString(payload.license) + "\n"
+        + "licenseUrl: " + yamlString(payload.licenseUrl) + "\n");
   return buildLegacyImageMarkdown(payload).replace(sourceLine, attributionLines);
 }
 
@@ -666,6 +674,20 @@ function validateRequired(payload, fields) {
   }
 }
 
+function normalizeImageAttribution(payload) {
+  const sourceKind = String(payload.sourceKind || "original").trim();
+  if (!["original", "user_provided"].includes(sourceKind)) {
+    const error = new Error("图片来源类型只能是外部来源或用户提供素材。");
+    error.statusCode = 400;
+    throw error;
+  }
+  if (sourceKind === "user_provided") {
+    return { ...payload, sourceKind, source: "用户提供", license: "用户确认可发布" };
+  }
+  validateRequired(payload, ["source", "sourceUrl", "author", "license", "licenseUrl"]);
+  return { ...payload, sourceKind };
+}
+
 async function updateManagedContent(type, file, payload) {
   const filePath = resolveManagedFile(type, file);
   const existing = parseFrontmatter(await readFile(filePath, "utf8"));
@@ -675,8 +697,9 @@ async function updateManagedContent(type, file, payload) {
     validateRequired(payload, ["title", "summary", "source", "sourceUrl"]);
     markdown = buildArticleMarkdown(payload);
   } else {
-    validateRequired(payload, ["title", "description", "sourceUrl", "author", "license", "licenseUrl"]);
-    markdown = buildImageMarkdown({ ...existing.data, ...payload, image: payload.image || existing.data.image });
+    const imagePayload = normalizeImageAttribution({ ...existing.data, ...payload, image: payload.image || existing.data.image });
+    validateRequired(imagePayload, ["title", "description"]);
+    markdown = buildImageMarkdown(imagePayload);
   }
 
   await writeFile(filePath, markdown, "utf8");
@@ -856,17 +879,14 @@ async function handleApi(req, res) {
   }
 
   if (pathname === "/api/publish/image" && req.method === "POST") {
-    const payload = await readJson(req);
+    let payload = await readJson(req);
     validateRequired(payload, [
       "title",
       "description",
       "fileName",
       "fileData",
-      "sourceUrl",
-      "author",
-      "license",
-      "licenseUrl",
     ]);
+    payload = normalizeImageAttribution(payload);
 
     const date = payload.pubDate || todayIso();
     const year = date.slice(0, 4);

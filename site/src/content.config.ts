@@ -7,6 +7,7 @@ const httpUrl = z.url().refine((value) => /^https?:\/\//.test(value), {
 });
 
 const sourceKind = z.enum(["original", "publication", "editorial"]);
+const imageSourceKind = z.enum(["original", "user_provided"]);
 
 const imagePath = z.string().refine((value) => value.startsWith("/") || /^https?:\/\//.test(value), {
   message: "图片必须使用 public 目录路径或 http/https 地址",
@@ -36,10 +37,11 @@ const images = defineCollection({
     description: z.string(),
     image: imagePath,
     source: z.string(),
-    sourceUrl: httpUrl,
-    author: z.string(),
-    license: z.string(),
-    licenseUrl: httpUrl,
+    sourceKind: imageSourceKind.default("original"),
+    sourceUrl: httpUrl.optional(),
+    author: z.string().optional(),
+    license: z.string().optional(),
+    licenseUrl: httpUrl.optional(),
     tags: z.array(z.string()).min(1),
     category: z.string(),
     mood: z.array(z.string()).default([]),
@@ -48,6 +50,16 @@ const images = defineCollection({
     public: z.boolean().default(true),
     ratio: z.enum(["wide", "tall", "square"]).default("square"),
     draft: z.boolean().default(false),
+  }).superRefine((data, context) => {
+    if (data.sourceKind === "user_provided") return;
+    for (const [name, value] of Object.entries({
+      sourceUrl: data.sourceUrl,
+      author: data.author,
+      license: data.license,
+      licenseUrl: data.licenseUrl,
+    })) {
+      if (!value) context.addIssue({ code: "custom", path: [name], message: "外部来源图片必须保留完整署名与授权信息" });
+    }
   }),
 });
 

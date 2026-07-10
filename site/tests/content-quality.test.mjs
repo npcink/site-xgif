@@ -33,6 +33,11 @@ test("images include attribution and license metadata", async () => {
   const required = ["sourceUrl", "author", "license", "licenseUrl"];
 
   for (const image of images) {
+    if (field(image.text, "sourceKind") === "user_provided") {
+      assert.equal(field(image.text, "source"), "用户提供", `${path.basename(image.file)} 必须如实标记为用户提供`);
+      assert.equal(field(image.text, "license"), "用户确认可发布", `${path.basename(image.file)} 必须记录用户确认的发布授权`);
+      continue;
+    }
     for (const name of required) {
       assert.ok(field(image.text, name), `${path.basename(image.file)} 缺少 ${name}`);
     }

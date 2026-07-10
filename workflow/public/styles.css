@@ -137,6 +137,13 @@ button {
   min-height: 18px;
 }
 
+.form-note {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.55;
+  margin: 0;
+}
+
 .ai-action {
   background: var(--accent-2);
   border-color: var(--accent-2);

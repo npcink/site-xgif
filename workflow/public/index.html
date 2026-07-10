@@ -182,25 +182,33 @@
               <input name="scenes" placeholder="回复, 吐槽" />
             </label>
             <label>
+              来源类型
+              <select name="sourceKind">
+                <option value="original">外部来源</option>
+                <option value="user_provided">用户提供素材</option>
+              </select>
+            </label>
+            <label data-external-attribution>
               来源
               <input name="source" placeholder="本地上传 / 来源备注" />
             </label>
-            <label>
+            <label data-external-attribution>
               图片来源链接
               <input name="sourceUrl" type="url" placeholder="https://example.com/source" />
             </label>
-            <label>
+            <label data-external-attribution>
               作者 / 署名
               <input name="author" placeholder="作者名称" />
             </label>
-            <label>
+            <label data-external-attribution>
               授权名称
               <input name="license" placeholder="例如 Unsplash License" />
             </label>
-            <label>
+            <label data-external-attribution>
               授权链接
               <input name="licenseUrl" type="url" placeholder="https://example.com/license" />
             </label>
+            <p class="form-note span-2" id="user-provided-note" hidden>将如实标记为“用户提供”，并记录“用户确认可发布”；不会虚构作者、外部来源或授权链接。</p>
             <label>
               图片比例
               <select name="ratio">

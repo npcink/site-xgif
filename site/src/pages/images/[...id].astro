@@ -18,15 +18,16 @@ const allArticles = (await getCollection("articles")).filter((entry) => !entry.d
 const relatedArticles = allArticles
   .filter((entry) => entry.data.tags.some((tag) => item.data.tags.includes(tag)))
   .slice(0, 2);
+const isUserProvided = item.data.sourceKind === "user_provided";
 const jsonLd = {
   "@context": "https://schema.org",
   "@type": "ImageObject",
   name: item.data.title,
   description: item.data.description,
   contentUrl: item.data.image,
-  creditText: item.data.author,
-  license: item.data.licenseUrl,
-  acquireLicensePage: item.data.sourceUrl,
+  ...(item.data.author ? { creditText: item.data.author } : {}),
+  ...(item.data.licenseUrl ? { license: item.data.licenseUrl } : {}),
+  ...(item.data.sourceUrl ? { acquireLicensePage: item.data.sourceUrl } : {}),
   datePublished: item.data.pubDate.toISOString(),
   mainEntityOfPage: new URL(Astro.url.pathname, Astro.site).href,
 };
@@ -52,7 +53,9 @@ const jsonLd = {
           {item.data.tags.map((tag) => <a href={`/tags/${encodeURIComponent(tag)}/`}>#{tag}</a>)}
         </div>
         <div class="prose image-note"><Content /></div>
-        <p class="image-source">图片来源备注：{item.data.source}</p>
+        <p class="image-source">
+          {isUserProvided ? "图片来源：用户提供 · 已确认可公开发布" : `图片来源备注：${item.data.source}`}
+        </p>
       </div>
     </div>
   </article>

@@ -29,7 +29,9 @@ test("publisher writes the metadata required by Astro collections", async () => 
 
   assert.match(server, /sourceKind/);
   assert.match(server, /licenseUrl/);
-  assert.match(server, /validateRequired\(payload, \["title", "description", "sourceUrl", "author", "license", "licenseUrl"\]\)/);
+  assert.match(server, /function normalizeImageAttribution/);
+  assert.match(server, /user_provided/);
   assert.match(html, /name="sourceKind"/);
+  assert.match(html, /用户提供素材/);
   assert.match(html, /name="licenseUrl"/);
 });

@@ -95,6 +95,12 @@ function updateImagePreview() {
     <div class="tags">${renderTags(data.tags)}</div></div>`;
 }
 
+function syncImageAttribution() {
+  const isUserProvided = $('[name="sourceKind"]', imageForm).value === "user_provided";
+  for (const field of $$('[data-external-attribution]', imageForm)) field.hidden = isUserProvided;
+  $("#user-provided-note").hidden = !isUserProvided;
+}
+
 function showResult(node, data) {
   node.classList.remove("error");
   node.hidden = false;
@@ -253,6 +259,7 @@ function openActiveContent() {
     switchTab("article");
   } else {
     setFormValues(imageForm, { ...data, tags: list(data.tags).join(", "), mood: list(data.mood).join(", "), scenes: list(data.scenes).join(", "), body });
+    syncImageAttribution();
     selectedImage = data.image ? { name: "existing-image", dataUrl: data.image } : null;
     imageForm.dataset.image = data.image || "";
     setEditing(imageForm, { file });
@@ -269,8 +276,8 @@ for (const input of $$("input, textarea, select", articleForm)) {
 }
 
 for (const input of $$("input, textarea, select", imageForm)) {
-  input.addEventListener("input", () => { updateImagePreview(); saveLocalDraft(imageForm); });
-  input.addEventListener("change", () => { updateImagePreview(); saveLocalDraft(imageForm); });
+  input.addEventListener("input", () => { syncImageAttribution(); updateImagePreview(); saveLocalDraft(imageForm); });
+  input.addEventListener("change", () => { syncImageAttribution(); updateImagePreview(); saveLocalDraft(imageForm); });
 }
 
 for (const tab of $$(".preview-tab")) {
@@ -395,6 +402,7 @@ async function loadStatus() {
 
 restoreLocalDraft(articleForm, $("#article-editor-state"));
 restoreLocalDraft(imageForm, $("#image-editor-state"));
+syncImageAttribution();
 updateArticlePreview();
 updateImagePreview();
 loadStatus();
