@@ -63,32 +63,45 @@ const popularTags = ["AI", "互联网", "打工", "无语", "反转", "群聊", 
       <p>从摘要快速了解，也用一张图说完复杂情绪。</p>
     </div>
 
-    <form class="search-panel" action="/search/" method="get">
+    <div class="search-panel" data-home-discovery>
       <label class="search-box">
         <span aria-hidden="true">⌕</span>
-        <input name="q" placeholder="搜索文章、图片、标签或来源…" aria-label="搜索内容" />
+        <input data-home-filter-input placeholder="搜索文章、图片、标签或来源…" aria-label="搜索内容" />
+        <button type="button" data-home-filter-clear aria-label="清空搜索" hidden>×</button>
       </label>
-      <button class="search-submit" type="submit">开始搜索 <span>→</span></button>
-    </form>
+      <div class="view-tabs" role="group" aria-label="内容类型">
+        <button class="active" type="button" data-home-view="all" aria-pressed="true">全部</button>
+        <button type="button" data-home-view="articles" aria-pressed="false">文章摘要</button>
+        <button type="button" data-home-view="images" aria-pressed="false">图片 / GIF</button>
+      </div>
+    </div>
+    <p class="result-note" data-home-result-note hidden>关于“<span data-home-query></span>”找到 <strong data-home-visible-count>0</strong> 条内容</p>
 
-    <div class="content-section" id="articles">
+    <div class="content-section" id="articles" data-home-section="articles">
       <div class="content-title">
         <h2>文章摘要 <sup>{String(articles.length).padStart(2, "0")}</sup></h2>
-        <a href="/articles/">查看全部文章 →</a>
+        <span>省下时间，不省掉重点</span>
       </div>
       <div class="article-grid">
-        {articles.slice(0, 4).map((article, index) => <ArticleCard article={article} index={index} />)}
+        {articles.map((article, index) => <ArticleCard article={article} index={index} />)}
       </div>
     </div>
 
-    <div class="content-section image-section" id="images">
+    <div class="content-section image-section" id="images" data-home-section="images">
       <div class="content-title">
         <h2>图片 / 表情包 <sup>{String(images.length).padStart(2, "0")}</sup></h2>
-        <a href="/images/">进入图片库 →</a>
+        <span>不知道怎么说？那就发张图</span>
       </div>
       <div class="masonry-grid">
-        {images.slice(0, 6).map((item) => <ImageCard item={item} />)}
+        {images.map((item) => <ImageCard item={item} />)}
       </div>
+    </div>
+
+    <div class="empty-state" data-home-empty hidden>
+      <span>¯\_(ツ)_/¯</span>
+      <h3>这次真的什么都没搜到</h3>
+      <p>换个更短的关键词，或者从热门标签开始。</p>
+      <button type="button" data-home-reset>看看全部内容</button>
     </div>
   </section>
 
@@ -114,9 +127,11 @@ const popularTags = ["AI", "互联网", "打工", "无语", "反转", "群聊", 
       <h2>别追热点，让好内容来找你。</h2>
       <p>每周一次，只有文章摘要、图片和一点编辑判断。无广告轰炸。</p>
     </div>
-    <div class="newsletter-placeholder">
-      <span>第一阶段暂不收集邮箱</span>
-      <a href="/articles/">先看看本周内容 →</a>
-    </div>
+    <form data-newsletter-form>
+      <input type="email" autocomplete="email" placeholder="你的邮箱" aria-label="邮箱地址" required />
+      <button type="submit">暂存订阅 <span>→</span></button>
+      <small data-newsletter-status aria-live="polite">演示入口 · 第一阶段暂不收集数据</small>
+    </form>
   </section>
+  <script is:inline src="/scripts/home-discovery.js"></script>
 </BaseLayout>

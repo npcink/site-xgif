@@ -15,16 +15,22 @@ test("image dialog keeps the archived Next two-column design contract", async ()
   assert.doesNotMatch(dialog, /<span>关闭<\/span>/);
   assert.match(page, /class="image-source"/);
   assert.match(styles, /grid-template-columns: minmax\(0, 1\.15fr\) minmax\(0, \.85fr\)/);
+  assert.match(styles, /\.detail-dialog-body \.image-detail-grid \{[\s\S]*height: 520px;/);
+  assert.match(styles, /\.detail-dialog-body \.image-detail figure img \{[^}]*min-height: 0;/);
   assert.match(styles, /\.detail-dialog\[data-detail-kind="image"\] \.image-detail figure\.ratio-wide/);
   assert.match(styles, /figure\.ratio-square \{ aspect-ratio: auto; \}/);
+  assert.match(styles, /\.detail-dialog\[data-detail-kind="image"\] \{[\s\S]*inset-block: auto;/);
+  assert.match(styles, /\.detail-dialog\[data-detail-kind="image"\] \.detail-dialog-body \{ min-height: 0; \}/);
 });
 
 test("home and discovery routes preserve the editorial visual hierarchy", async () => {
-  const [home, imageCard, search, tagIndex] = await Promise.all([
+  const [home, imageCard, search, tagIndex, styles, homeDiscovery] = await Promise.all([
     read("src/pages/index.astro"),
     read("src/components/ImageCard.astro"),
     read("src/pages/search.astro"),
     read("src/pages/tags/index.astro"),
+    read("src/styles/global.css"),
+    read("public/scripts/home-discovery.js"),
   ]);
 
   assert.match(home, /class="hero"/);
@@ -34,6 +40,26 @@ test("home and discovery routes preserve the editorial visual hierarchy", async 
   assert.match(imageCard, /class="image-shade"/);
   assert.match(search, /class="search-page"/);
   assert.match(tagIndex, /class="tag-index"/);
+  assert.match(styles, /@fontsource-variable\/geist/);
+  assert.match(styles, /font-family: var\(--font-geist-sans\)/);
+  assert.match(styles, /font-family: var\(--font-geist-mono\)/);
+  assert.match(styles, /\.hero \{[\s\S]*min-height: 680px;/);
+  assert.match(home, /data-home-discovery/);
+  assert.match(home, /data-home-view="articles"/);
+  assert.match(home, /data-home-view="images"/);
+  assert.match(home, /data-newsletter-form/);
+  assert.match(homeDiscovery, /data-home-section/);
+  assert.match(homeDiscovery, /newsletterForm\.reset\(\)/);
+  assert.match(homeDiscovery, /未保存邮箱地址/);
+});
+
+test("visual baseline keeps the original desktop search and newsletter layout contracts", async () => {
+  const styles = await read("src/styles/global.css");
+
+  assert.match(styles, /\.search-panel \{[^}]*max-width: 1200px;[^}]*display: flex;[^}]*border: 1px solid var\(--ink\)/);
+  assert.match(styles, /\.view-tabs \{ display: flex; border-left: 1px solid var\(--ink\); \}/);
+  assert.match(styles, /\.newsletter \{[^}]*grid-template-columns: 110px 1fr minmax\(320px, \.7fr\)/);
+  assert.match(styles, /\.newsletter form \{[^}]*grid-template-columns: 1fr auto;[^}]*border-bottom: 1px solid var\(--ink\)/);
 });
 
 test("article dialogs remain quick previews while direct pages retain full reading content", async () => {
