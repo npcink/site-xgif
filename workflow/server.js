@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..");
+const siteRoot = path.join(repoRoot, "site");
 const publicDir = path.join(__dirname, "public");
 
 async function loadLocalEnv() {
@@ -37,15 +38,15 @@ async function loadLocalEnv() {
 await loadLocalEnv();
 
 const target = {
-  articles: path.join(repoRoot, "src", "content", "articles"),
-  imageEntries: path.join(repoRoot, "src", "content", "images"),
-  memeAssets: path.join(repoRoot, "public", "images", "memes"),
+  articles: path.join(siteRoot, "src", "content", "articles"),
+  imageEntries: path.join(siteRoot, "src", "content", "images"),
+  memeAssets: path.join(siteRoot, "public", "images", "memes"),
 };
 
 const port = Number(process.env.PORT || 8787);
 const maxBodyBytes = Number(process.env.PUBLISHER_MAX_BODY_BYTES || 50 * 1024 * 1024);
 const aiTimeoutMs = Number(process.env.XGIF_AI_TIMEOUT_MS || 45_000);
-const siteUrl = new URL(process.env.XGIF_SITE_URL || "http://localhost:4321");
+const localSiteUrl = new URL("http://localhost:4321");
 
 const mimeTypes = new Map([
   [".html", "text/html; charset=utf-8"],
@@ -248,7 +249,7 @@ function publicContentUrl(type, filePath) {
     .map((segment) => encodeURIComponent(segment))
     .join("/") + "/";
 
-  return new URL(route, siteUrl).href;
+  return new URL(route, localSiteUrl).href;
 }
 
 function resolveManagedFile(type, relativeFile) {
@@ -881,7 +882,7 @@ async function handleApi(req, res) {
     const duplicates = await scanDuplicateImage({ title: payload.title, sha256 });
     await writeFile(assetPath, imageBuffer);
 
-    const publicImagePath = `/${path.relative(path.join(repoRoot, "public"), assetPath).split(path.sep).join("/")}`;
+    const publicImagePath = `/${path.relative(path.join(siteRoot, "public"), assetPath).split(path.sep).join("/")}`;
     await mkdir(target.imageEntries, { recursive: true });
     const entryPath = await uniquePath(target.imageEntries, imageBaseName);
     await writeFile(

@@ -2,6 +2,7 @@
 
 # dependencies
 /node_modules
+/site/node_modules
 /.pnp
 .pnp.*
 .yarn/*
@@ -18,6 +19,10 @@
 /.edgeone/
 /.vinext/
 /dist/
+/site/.astro/
+/site/.edgeone/
+/site/.vinext/
+/site/dist/
 
 # misc
 .DS_Store

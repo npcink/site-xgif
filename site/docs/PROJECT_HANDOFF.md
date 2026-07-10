@@ -16,7 +16,7 @@
 ### 内容与站点
 
 - Astro 读取 Content Collections，构建纯静态站点。
-- 文章写入 `src/content/articles/`，图片元数据写入 `src/content/images/`，图片文件写入 `public/images/memes/`。
+- 文章写入 `site/src/content/articles/`，图片元数据写入 `site/src/content/images/`，图片文件写入 `site/public/images/memes/`。
 - 所有卡片都有真实详情 URL。JavaScript 可用时用弹层快速浏览；直接访问、刷新或脚本失败时始终回退到独立静态详情页。
 - 标签是导航入口，搜索页复用文章与图片卡片，不做数据库检索。
 
@@ -41,7 +41,6 @@ XGIF_AI_API_KEY="..."
 XGIF_AI_MODEL="..."
 XGIF_AI_BASE_URL="https://api.openai.com/v1"
 XGIF_AI_TIMEOUT_MS="45000"
-XGIF_SITE_URL="https://www.xgif.cn"
 ```
 
 `XGIF_AI_BASE_URL`、模型名和超时均可按实际服务商调整。AI 超时、鉴权失败或模型不可用时，仍可完全手工发布内容；应先检查 `.env`、服务商模型权限和网络，再重启发布器。
@@ -50,16 +49,17 @@ XGIF_SITE_URL="https://www.xgif.cn"
 
 | 路径 | 职责 |
 | --- | --- |
-| `src/pages/` | 首页、文章、图片、标签、搜索和静态详情路由。 |
-| `src/components/` | 卡片、导航、页脚和共享详情弹层。 |
-| `src/content/` | Markdown 内容真相来源。 |
-| `public/images/memes/` | 本地表情包图片文件。 |
-| `public/scripts/` | 搜索筛选和详情弹层的渐进增强脚本。 |
-| `src/styles/global.css` | 全局视觉规则与响应式布局。 |
+| `site/src/pages/` | 首页、文章、图片、标签、搜索和静态详情路由。 |
+| `site/src/components/` | 卡片、导航、页脚和共享详情弹层。 |
+| `site/src/content/` | Markdown 内容真相来源。 |
+| `site/public/images/memes/` | 本地表情包图片文件。 |
+| `site/public/scripts/` | 搜索筛选和详情弹层的渐进增强脚本。 |
+| `site/src/styles/global.css` | 全局视觉规则与响应式布局。 |
 | `workflow/` | 仅本机运行的发布器，包含服务端、表单 UI 和配置示例。 |
-| `docs/design-baseline/` | 图片弹层的视觉基线、回归截图和验收说明。 |
+| `site/docs/design-baseline/` | 图片弹层的视觉基线、回归截图和验收说明。 |
 | `old/next-design-baseline/` | 迁移前 Next 版本的只读设计档案，不参与当前构建。 |
-| `tests/` | 内容质量、发布器、详情弹层和视觉结构契约测试。 |
+| `site/tests/` | Astro 构建、内容质量、详情弹层和视觉结构契约测试。 |
+| `workflow/tests/` | 发布台契约测试。 |
 
 ## 4. 视觉与交互约定
 
@@ -78,6 +78,7 @@ XGIF_SITE_URL="https://www.xgif.cn"
 ### 运行站点
 
 ```bash
+cd site
 npm install
 npm run dev
 ```
@@ -104,7 +105,7 @@ npm start
 
 ## 6. Git 与部署
 
-部署目标是 EdgeOne Pages：导入 Git 仓库，构建命令为 `npm run build`，输出目录为 `dist`，再绑定 `www.xgif.cn`。
+部署时将 `site/` 设为工作目录，构建命令为 `npm run build`，输出目录为 `dist`。若平台不支持工作目录，则从仓库根运行 `cd site && npm ci && npm run build`，并使用 `site/dist` 作为输出目录。
 
 当前工作区尚未配置 Git remote，因此自动 `git push` 会提示没有 push destination。这不是发布器生成内容的错误。设置远程后再启用自动推送：
 
@@ -120,7 +121,8 @@ git push -u origin <branch>
 每次影响主题、内容结构或发布器时，至少运行：
 
 ```bash
-npm test
+cd site && npm test
+cd workflow && npm test
 git diff --check
 ```
 

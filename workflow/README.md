@@ -32,19 +32,13 @@ XGIF_AI_BASE_URL="https://api.openai.com/v1"
 
 ## 写入位置
 
-- 文章：`src/content/articles/*.md`
-- 图片内容：`src/content/images/*.md`
-- 图片文件：`public/images/memes/<year>/*`
+- 文章：`site/src/content/articles/*.md`
+- 图片内容：`site/src/content/images/*.md`
+- 图片文件：`site/public/images/memes/<year>/*`
 
 ## 从内容管理打开页面
 
-“内容管理”会为已公开的文章和图片显示“在网站打开”按钮。默认打开本机 Astro 预览地址 `http://localhost:4321`；如需打开正式站，在 `workflow/.env` 设置：
-
-```bash
-XGIF_SITE_URL="https://www.xgif.cn"
-```
-
-草稿和未公开图片不会提供公开页面入口。操作结果区域只在成功或失败时显示。
+“内容管理”只打开本机 Astro 预览地址 `http://localhost:4321`，用于发布前验证。草稿和未公开图片不会提供公开页面入口；操作结果区域只在成功或失败时显示。
 
 ## 发布流程
 
