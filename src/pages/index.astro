@@ -1,0 +1,122 @@
+---
+import { getCollection } from "astro:content";
+import ArticleCard from "../components/ArticleCard.astro";
+import ImageCard from "../components/ImageCard.astro";
+import BaseLayout from "../layouts/BaseLayout.astro";
+import { allTags, sortByDate } from "../lib/content";
+
+const articles = sortByDate((await getCollection("articles")).filter((entry) => !entry.data.draft));
+const images = sortByDate(
+  (await getCollection("images")).filter((entry) => !entry.data.draft && entry.data.public),
+);
+const featured = articles.find((entry) => entry.data.featured) ?? articles[0];
+const tags = allTags(articles, images);
+const popularTags = ["AI", "互联网", "打工", "无语", "反转", "群聊", "职场", "观察"].filter((tag) =>
+  tags.includes(tag),
+);
+---
+
+<BaseLayout>
+  <section class="hero" id="top">
+    <div class="hero-copy reveal">
+      <p class="eyebrow"><span></span> 轻内容，每日手工整理</p>
+      <h1>值得看的，<br /><em>三分钟看懂。</em></h1>
+      <p class="hero-intro">
+        文章负责整理信息，图片负责表达情绪。<br />
+        AI 帮忙归纳，最后由人决定什么值得留下。
+      </p>
+      <div class="hero-actions">
+        <a class="primary-button" href="#discover">开始浏览 <span>↘</span></a>
+        <span class="edition">ASTRO · MARKDOWN · EDGEONE</span>
+      </div>
+    </div>
+
+    <div class="hero-feature reveal-late" aria-label="今日推荐">
+      <div class="feature-topline"><span>今日推荐</span><span>01 / {String(articles.length).padStart(2, "0")}</span></div>
+      <div class="feature-visual">
+        <div class="feature-orbit orbit-one"></div>
+        <div class="feature-orbit orbit-two"></div>
+        <div class="feature-face">◉</div>
+        <div class="feature-sticker">AI<br />观察</div>
+      </div>
+      <div class="feature-copy">
+        <span class="mini-label">READ · {featured.data.readTime.toUpperCase()}</span>
+        <h2>{featured.data.title}</h2>
+        <a href={`/articles/${featured.id}/`} data-detail-link>读摘要 <span>→</span></a>
+      </div>
+    </div>
+  </section>
+
+  <section class="tag-ticker" aria-label="热门标签">
+    <div class="ticker-label">本周热词</div>
+    <div class="ticker-track">
+      {popularTags.slice(0, 5).map((tag) => <a href={`/tags/${encodeURIComponent(tag)}/`}>#{tag}</a>)}
+    </div>
+  </section>
+
+  <section class="explore" id="discover">
+    <div class="section-heading">
+      <div>
+        <p class="section-kicker">DISCOVER / 发现</p>
+        <h2>今天有什么好东西？</h2>
+      </div>
+      <p>从摘要快速了解，也用一张图说完复杂情绪。</p>
+    </div>
+
+    <form class="search-panel" action="/search/" method="get">
+      <label class="search-box">
+        <span aria-hidden="true">⌕</span>
+        <input name="q" placeholder="搜索文章、图片、标签或来源…" aria-label="搜索内容" />
+      </label>
+      <button class="search-submit" type="submit">开始搜索 <span>→</span></button>
+    </form>
+
+    <div class="content-section" id="articles">
+      <div class="content-title">
+        <h2>文章摘要 <sup>{String(articles.length).padStart(2, "0")}</sup></h2>
+        <a href="/articles/">查看全部文章 →</a>
+      </div>
+      <div class="article-grid">
+        {articles.slice(0, 4).map((article, index) => <ArticleCard article={article} index={index} />)}
+      </div>
+    </div>
+
+    <div class="content-section image-section" id="images">
+      <div class="content-title">
+        <h2>图片 / 表情包 <sup>{String(images.length).padStart(2, "0")}</sup></h2>
+        <a href="/images/">进入图片库 →</a>
+      </div>
+      <div class="masonry-grid">
+        {images.slice(0, 6).map((item) => <ImageCard item={item} />)}
+      </div>
+    </div>
+  </section>
+
+  <section class="tag-library" id="tags">
+    <div class="tag-intro">
+      <p class="section-kicker">INDEX / 标签索引</p>
+      <h2>沿着标签，<br />继续逛下去。</h2>
+      <p>主题、情绪和使用场景，共同把文章与表情包连接起来。</p>
+    </div>
+    <div class="tag-cloud">
+      {popularTags.map((tag, index) => (
+        <a href={`/tags/${encodeURIComponent(tag)}/`}>
+          <span>{String(index + 1).padStart(2, "0")}</span> {tag} <b>↗</b>
+        </a>
+      ))}
+    </div>
+  </section>
+
+  <section class="newsletter">
+    <div class="newsletter-mark">每周<br />一封</div>
+    <div>
+      <p class="section-kicker">WEEKLY DIGEST</p>
+      <h2>别追热点，让好内容来找你。</h2>
+      <p>每周一次，只有文章摘要、图片和一点编辑判断。无广告轰炸。</p>
+    </div>
+    <div class="newsletter-placeholder">
+      <span>第一阶段暂不收集邮箱</span>
+      <a href="/articles/">先看看本周内容 →</a>
+    </div>
+  </section>
+</BaseLayout>

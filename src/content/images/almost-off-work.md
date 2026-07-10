@@ -1,0 +1,19 @@
+---
+title: "好消息：快下班了"
+description: "坏消息：需求也刚刚来了。"
+image: "https://images.unsplash.com/photo-1531297484001-80022131f5a1?auto=format&fit=crop&w=1200&q=85"
+source: "Unsplash · Ales Nesetril"
+sourceUrl: "https://unsplash.com"
+author: "Ales Nesetril"
+license: "Unsplash License"
+licenseUrl: "https://unsplash.com/license"
+tags: ["打工", "反转", "尴尬"]
+category: "反应图"
+mood: ["尴尬", "无语"]
+scenes: ["打工", "群聊"]
+pubDate: 2026-07-06
+public: true
+ratio: "wide"
+---
+
+先用上半句制造希望，再用下半句完成熟悉的职场反转。

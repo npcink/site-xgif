@@ -1,0 +1,35 @@
+---
+import type { CollectionEntry } from "astro:content";
+import { formatShortDate } from "../lib/content";
+
+interface Props {
+  article: CollectionEntry<"articles">;
+  index?: number;
+}
+
+const { article, index = 0 } = Astro.props;
+const accents = ["coral", "sage", "blue", "yellow"];
+const accent = accents[index % accents.length];
+---
+
+<article
+  class:list={["article-card", accent]}
+  data-search-item
+  data-search={`${article.data.title} ${article.data.summary} ${article.data.source} ${article.data.tags.join(" ")}`.toLowerCase()}
+>
+  <div class="article-meta">
+    <span>{article.data.source}</span>
+    <time datetime={article.data.pubDate.toISOString()}>{formatShortDate(article.data.pubDate)}</time>
+  </div>
+  <div class="article-number">{String(index + 1).padStart(2, "0")}</div>
+  <h3><a href={`/articles/${article.id}/`} data-detail-link>{article.data.title}</a></h3>
+  <p>{article.data.summary}</p>
+  {article.data.note && <blockquote>{article.data.note}</blockquote>}
+  <div class="card-tags">
+    {article.data.tags.map((tag) => <a href={`/tags/${encodeURIComponent(tag)}/`}>#{tag}</a>)}
+  </div>
+  <div class="article-footer">
+    <span>{article.data.readTime}</span>
+    <a href={`/articles/${article.id}/`} data-detail-link>读完整摘要 <span aria-hidden="true">→</span></a>
+  </div>
+</article>

@@ -1,0 +1,46 @@
+---
+import { getCollection } from "astro:content";
+import ArticleCard from "../../components/ArticleCard.astro";
+import ImageCard from "../../components/ImageCard.astro";
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import { allTags, sortByDate } from "../../lib/content";
+
+export async function getStaticPaths() {
+  const articles = (await getCollection("articles")).filter((entry) => !entry.data.draft);
+  const images = (await getCollection("images")).filter((entry) => !entry.data.draft && entry.data.public);
+  return allTags(articles, images).map((tag) => ({ params: { tag }, props: { tag } }));
+}
+
+const { tag } = Astro.props;
+const articles = sortByDate(
+  (await getCollection("articles")).filter((entry) => !entry.data.draft && entry.data.tags.includes(tag)),
+);
+const images = sortByDate(
+  (await getCollection("images")).filter(
+    (entry) => !entry.data.draft && entry.data.public && entry.data.tags.includes(tag),
+  ),
+);
+---
+
+<BaseLayout title={`#${tag} — xgif.cn`} description={`浏览与 ${tag} 相关的文章摘要和图片。`}>
+  <section class="tag-detail-hero">
+    <a class="back-link" href="/tags/">← 全部标签</a>
+    <p class="section-kicker">TAG / 聚合</p>
+    <h1>#{tag}</h1>
+    <p>{articles.length} 篇文章 · {images.length} 张图片</p>
+  </section>
+  <section class="archive-content tag-results">
+    {articles.length > 0 && (
+      <div class="content-section">
+        <div class="content-title"><h2>相关文章</h2><span>{articles.length} 篇</span></div>
+        <div class="article-grid">{articles.map((article, index) => <ArticleCard article={article} index={index} />)}</div>
+      </div>
+    )}
+    {images.length > 0 && (
+      <div class="content-section image-section">
+        <div class="content-title"><h2>相关图片</h2><span>{images.length} 张</span></div>
+        <div class="masonry-grid">{images.map((item) => <ImageCard item={item} />)}</div>
+      </div>
+    )}
+  </section>
+</BaseLayout>

@@ -1,0 +1,40 @@
+---
+import { getCollection } from "astro:content";
+import ArticleCard from "../components/ArticleCard.astro";
+import ImageCard from "../components/ImageCard.astro";
+import BaseLayout from "../layouts/BaseLayout.astro";
+import { sortByDate } from "../lib/content";
+
+const articles = sortByDate((await getCollection("articles")).filter((entry) => !entry.data.draft));
+const images = sortByDate(
+  (await getCollection("images")).filter((entry) => !entry.data.draft && entry.data.public),
+);
+---
+
+<BaseLayout title="搜索 — xgif.cn" description="搜索文章、图片、标签与来源。" noindex>
+  <section class="search-page">
+    <p class="section-kicker">SEARCH / 搜索</p>
+    <h1>想找什么？</h1>
+    <label class="search-page-input">
+      <span>⌕</span>
+      <input data-filter-input placeholder="输入文章、图片、标签或来源…" autofocus aria-label="搜索内容" />
+      <button type="button" data-clear aria-label="清空搜索">×</button>
+    </label>
+    <p class="filter-count">找到 <span data-visible-count>{articles.length + images.length}</span> 条内容</p>
+
+    <div data-filter-list>
+      <div class="content-section search-group" data-search-group>
+        <div class="content-title"><h2>文章摘要</h2><span>ARTICLES</span></div>
+        <div class="article-grid">{articles.map((article, index) => <ArticleCard article={article} index={index} />)}</div>
+      </div>
+      <div class="content-section image-section search-group" data-search-group>
+        <div class="content-title"><h2>图片 / 表情包</h2><span>IMAGES</span></div>
+        <div class="masonry-grid">{images.map((item) => <ImageCard item={item} />)}</div>
+      </div>
+    </div>
+    <div class="empty-state" data-empty hidden>
+      <span>¯\_(ツ)_/¯</span><h2>这次真的什么都没搜到</h2><p>换个更短的关键词，或者从标签页开始。</p>
+    </div>
+  </section>
+  <script is:inline src="/scripts/filter.js"></script>
+</BaseLayout>

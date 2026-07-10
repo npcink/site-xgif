@@ -1,0 +1,31 @@
+---
+import { getCollection } from "astro:content";
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import { allTags } from "../../lib/content";
+
+const articles = (await getCollection("articles")).filter((entry) => !entry.data.draft);
+const images = (await getCollection("images")).filter((entry) => !entry.data.draft && entry.data.public);
+const tags = allTags(articles, images).map((tag) => ({
+  name: tag,
+  articles: articles.filter((entry) => entry.data.tags.includes(tag)).length,
+  images: images.filter((entry) => entry.data.tags.includes(tag)).length,
+}));
+---
+
+<BaseLayout title="标签索引 — xgif.cn" description="按主题、情绪和使用场景浏览文章与图片。">
+  <section class="archive-hero tags-archive-hero">
+    <p class="section-kicker">INDEX / 标签索引</p>
+    <h1>从一个词，<br /><em>逛到另一件事。</em></h1>
+    <p>主题、情绪与使用场景，把不同类型的内容连接起来。</p>
+  </section>
+  <section class="tag-index">
+    {tags.map((tag, index) => (
+      <a href={`/tags/${encodeURIComponent(tag.name)}/`}>
+        <span class="tag-order">{String(index + 1).padStart(2, "0")}</span>
+        <strong>{tag.name}</strong>
+        <span>{tag.articles} 篇文章 · {tag.images} 张图片</span>
+        <b>↗</b>
+      </a>
+    ))}
+  </section>
+</BaseLayout>

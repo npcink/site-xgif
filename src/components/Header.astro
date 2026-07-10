@@ -1,0 +1,31 @@
+---
+const pathname = Astro.url.pathname;
+const links = [
+  { href: "/articles/", label: "文章" },
+  { href: "/images/", label: "图片 / GIF" },
+  { href: "/tags/", label: "标签" },
+];
+---
+
+<header class="site-header">
+  <a class="brand" href="/" aria-label="xgif.cn 首页">xgif<span>.cn</span></a>
+  <nav class="desktop-nav" aria-label="主导航">
+    {links.map((link) => (
+      <a href={link.href} aria-current={pathname.startsWith(link.href) ? "page" : undefined}>
+        {link.label}
+      </a>
+    ))}
+  </nav>
+  <a class="header-search" href="/search/">
+    <span aria-hidden="true">⌕</span> 搜一搜
+  </a>
+  <details class="mobile-nav">
+    <summary>菜单 <span aria-hidden="true">+</span></summary>
+    <nav aria-label="移动端主导航">
+      {links.map((link) => (
+        <a href={link.href} aria-current={pathname.startsWith(link.href) ? "page" : undefined}>{link.label}</a>
+      ))}
+      <a href="/search/">搜索内容</a>
+    </nav>
+  </details>
+</header>
