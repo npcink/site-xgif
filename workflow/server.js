@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { createServer } from "node:http";
 import { execFile } from "node:child_process";
-import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -41,6 +41,7 @@ const target = {
   articles: path.join(siteRoot, "src", "content", "articles"),
   imageEntries: path.join(siteRoot, "src", "content", "images"),
   memeAssets: path.join(siteRoot, "public", "images", "memes"),
+  userProvidedLedger: path.join(__dirname, "records", "user-provided-assets.jsonl"),
 };
 
 const port = Number(process.env.PORT || 8787);
@@ -877,6 +878,27 @@ async function commitAndMaybePush(files, message, shouldPush) {
   return { relativeFiles, commitSha, push };
 }
 
+async function recordUserProvidedAsset({ payload, asset, entryPath, assetPath }) {
+  if (payload.sourceKind !== "user_provided") return "";
+
+  const confirmedAt = String(payload.confirmedAt || payload.pubDate || todayIso());
+  const record = {
+    schemaVersion: 1,
+    recordId: `xgif-user-${confirmedAt.replace(/[^0-9]/g, "")}-${asset.sha256.slice(0, 12)}`,
+    confirmedAt,
+    provider: "用户确认",
+    authorization: "允许在 xgif.cn 公开发布",
+    contentFile: path.relative(repoRoot, entryPath),
+    assetFile: path.relative(repoRoot, assetPath),
+    sha256: asset.sha256,
+    publicScope: payload.public !== false && !payload.draft ? "xgif.cn public" : "draft",
+  };
+
+  await mkdir(path.dirname(target.userProvidedLedger), { recursive: true });
+  await appendFile(target.userProvidedLedger, `${JSON.stringify(record)}\n`, "utf8");
+  return target.userProvidedLedger;
+}
+
 async function handleApi(req, res) {
   const requestUrl = new URL(req.url, `http://localhost:${port}`);
   const pathname = requestUrl.pathname;
@@ -1053,9 +1075,10 @@ async function handleApi(req, res) {
       }),
       "utf8",
     );
+    const ledgerPath = await recordUserProvidedAsset({ payload, asset, entryPath, assetPath });
 
     const git = payload.commit
-      ? await commitAndMaybePush([assetPath, entryPath], `Add image: ${payload.title}`, Boolean(payload.push))
+      ? await commitAndMaybePush([assetPath, entryPath, ...(ledgerPath ? [ledgerPath] : [])], `Add image: ${payload.title}`, Boolean(payload.push))
       : null;
 
     sendJson(res, 200, {
@@ -1071,6 +1094,7 @@ async function handleApi(req, res) {
         height: asset.height,
         ratio: asset.ratio,
       },
+      ledger: ledgerPath ? path.relative(repoRoot, ledgerPath) : "",
       git,
       duplicates,
     });

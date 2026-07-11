@@ -33,6 +33,7 @@ test("publisher writes the metadata required by Astro collections", async () => 
   assert.match(server, /user_provided/);
   assert.match(html, /name="sourceKind"/);
   assert.match(html, /用户提供素材/);
+  assert.match(html, /name="confirmedAt"/);
   assert.match(html, /name="licenseUrl"/);
   assert.match(server, /function inspectImageUpload/);
   assert.match(server, /PUBLISHER_MAX_IMAGE_BYTES/);
@@ -41,4 +42,6 @@ test("publisher writes the metadata required by Astro collections", async () => 
   assert.match(html, /data-image-preview="detail"/);
   assert.match(app, /function imagePayload/);
   assert.match(app, /window\.confirm/);
+  assert.match(server, /function recordUserProvidedAsset/);
+  assert.match(server, /user-provided-assets\.jsonl/);
 });

@@ -188,6 +188,10 @@
                 <option value="user_provided">用户提供素材</option>
               </select>
             </label>
+            <label data-user-provided-field hidden>
+              公开发布确认日期
+              <input name="confirmedAt" type="date" />
+            </label>
             <label data-external-attribution>
               来源
               <input name="source" placeholder="本地上传 / 来源备注" />
@@ -208,7 +212,7 @@
               授权链接
               <input name="licenseUrl" type="url" placeholder="https://example.com/license" />
             </label>
-            <p class="form-note span-2" id="user-provided-note" hidden>将如实标记为“用户提供”，并记录“用户确认可发布”；不会虚构作者、外部来源或授权链接。</p>
+            <p class="form-note span-2" id="user-provided-note" hidden>将如实标记为“用户提供”，并记录确认日期与“用户确认可发布”；不会虚构作者、外部来源或授权链接。</p>
             <label>
               图片比例
               <select name="ratio">

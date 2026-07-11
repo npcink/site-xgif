@@ -108,6 +108,7 @@ function updateImagePreview() {
 function syncImageAttribution() {
   const isUserProvided = $('[name="sourceKind"]', imageForm).value === "user_provided";
   for (const field of $$('[data-external-attribution]', imageForm)) field.hidden = isUserProvided;
+  for (const field of $$('[data-user-provided-field]', imageForm)) field.hidden = !isUserProvided;
   $("#user-provided-note").hidden = !isUserProvided;
 }
 
