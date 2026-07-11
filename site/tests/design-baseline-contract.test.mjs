@@ -15,6 +15,7 @@ test("image dialog keeps the archived Next two-column design contract", async ()
   assert.doesNotMatch(dialog, /<span>关闭<\/span>/);
   assert.match(page, /class="image-source"/);
   assert.match(styles, /grid-template-columns: minmax\(0, 1\.15fr\) minmax\(0, \.85fr\)/);
+  assert.match(styles, /\.detail-dialog-body \.image-detail-grid \{[\s\S]*align-items: stretch;/);
   assert.match(styles, /\.detail-dialog-body \.image-detail-grid \{[\s\S]*height: 520px;/);
   assert.match(styles, /\.detail-dialog-body \.image-detail figure img \{[^}]*min-height: 0;/);
   assert.match(styles, /\.detail-dialog\[data-detail-kind="image"\] \.image-detail figure\.ratio-wide/);
@@ -60,6 +61,50 @@ test("visual baseline keeps the original desktop search and newsletter layout co
   assert.match(styles, /\.view-tabs \{ display: flex; border-left: 1px solid var\(--ink\); \}/);
   assert.match(styles, /\.newsletter \{[^}]*grid-template-columns: 110px 1fr minmax\(320px, \.7fr\)/);
   assert.match(styles, /\.newsletter form \{[^}]*grid-template-columns: 1fr auto;[^}]*border-bottom: 1px solid var\(--ink\)/);
+});
+
+test("mobile hero preserves the archived first-screen rhythm", async () => {
+  const styles = await read("src/styles/global.css");
+
+  assert.match(styles, /@media \(max-width: 600px\) \{[\s\S]*\.hero-copy \{ min-height: 560px;/);
+  assert.match(styles, /@media \(max-width: 600px\) \{[\s\S]*\.hero-feature \{ min-height: 560px;/);
+});
+
+test("image discovery and search retain filterable archive states", async () => {
+  const [images, search, filter] = await Promise.all([
+    read("src/pages/images/index.astro"),
+    read("src/pages/search.astro"),
+    read("public/scripts/filter.js"),
+  ]);
+
+  assert.match(images, /class="archive-toolbar"/);
+  assert.match(images, /data-filter-input/);
+  assert.match(images, /data-filter-list/);
+  assert.match(images, /data-filter=/);
+  assert.match(search, /class="search-page"/);
+  assert.match(search, /data-clear/);
+  assert.match(search, /data-search-group/);
+  assert.match(search, /data-empty/);
+  assert.match(filter, /window\.history\.replaceState/);
+  assert.match(filter, /group\.hidden = !hasVisible/);
+});
+
+test("article and tag routes retain their direct-reading and discovery hierarchy", async () => {
+  const [article, tagIndex, tagDetail] = await Promise.all([
+    read("src/pages/articles/[...id].astro"),
+    read("src/pages/tags/index.astro"),
+    read("src/pages/tags/[tag].astro"),
+  ]);
+
+  assert.match(article, /class="detail-page article-detail"/);
+  assert.match(article, /class="detail-grid"/);
+  assert.match(article, /class="related-section"/);
+  assert.match(tagIndex, /class="archive-hero tags-archive-hero"/);
+  assert.match(tagIndex, /class="tag-index"/);
+  assert.match(tagDetail, /class="tag-detail-hero"/);
+  assert.match(tagDetail, /class="archive-content tag-results"/);
+  assert.match(tagDetail, /class="article-grid"/);
+  assert.match(tagDetail, /class="masonry-grid"/);
 });
 
 test("article dialogs remain quick previews while direct pages retain full reading content", async () => {
