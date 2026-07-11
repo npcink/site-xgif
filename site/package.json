@@ -12,7 +12,12 @@
     "build": "astro check && astro build",
     "preview": "astro preview",
     "check": "astro check",
-    "test": "npm run build && node --test tests/*.test.mjs"
+    "test": "npm run build && node --test tests/*.test.mjs",
+    "test:visual": "playwright test --config playwright.config.mjs",
+    "test:visual:update": "playwright test --config playwright.config.mjs --update-snapshots",
+    "test:visual:linux": "sh scripts/run-visual-baseline.sh",
+    "test:visual:update:linux": "sh scripts/run-visual-baseline.sh --update-snapshots",
+    "test:all": "npm run test && npm run test:visual"
   },
   "dependencies": {
     "@fontsource-variable/geist": "^5.2.9",
@@ -21,6 +26,7 @@
   },
   "devDependencies": {
     "@astrojs/check": "0.9.6",
+    "@playwright/test": "^1.61.1",
     "typescript": "5.9.3"
   },
   "overrides": {

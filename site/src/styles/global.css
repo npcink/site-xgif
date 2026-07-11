@@ -316,6 +316,7 @@ body.detail-dialog-open { overflow: hidden; }
 .detail-dialog-body > .image-detail { padding: 0; }
 .detail-dialog-body .image-detail-grid {
   grid-template-columns: minmax(0, 1.15fr) minmax(0, .85fr);
+  align-items: stretch;
   gap: 0;
   margin: 0;
   height: 520px;
@@ -489,13 +490,13 @@ body.detail-dialog-open { overflow: hidden; }
   .brand { font-size: 26px; }
   .header-search { font-size: 0; }
   .header-search span { font-size: 23px; }
-  .hero-copy { min-height: 520px; padding: 54px 22px 38px; }
+  .hero-copy { min-height: 560px; padding: 54px 22px 38px; }
   .hero h1 { font-size: clamp(49px, 15vw, 72px); margin-top: 38px; }
   .hero h1 em { white-space: normal; }
   .hero-intro { font-size: 15px; }
   .hero-actions { gap: 16px; }
   .edition { display: none; }
-  .hero-feature { min-height: 520px; }
+  .hero-feature { min-height: 560px; }
   .feature-visual { min-height: 310px; }
   .feature-copy h2 { font-size: 24px; }
   .tag-ticker { grid-template-columns: 90px 1fr; }

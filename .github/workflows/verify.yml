@@ -17,6 +17,9 @@ jobs:
   site:
     name: Astro site
     runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.61.1-noble
+      options: --ipc=host
     defaults:
       run:
         working-directory: site
@@ -28,7 +31,14 @@ jobs:
           cache: npm
           cache-dependency-path: site/package-lock.json
       - run: npm ci
-      - run: npm test
+      - run: npm run test:all
+      - name: Upload visual diff artifacts
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: site-visual-diffs
+          path: site/test-results/
+          if-no-files-found: ignore
 
   publisher:
     name: Local publisher
