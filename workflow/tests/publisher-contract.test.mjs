@@ -69,3 +69,23 @@ test("publisher imports flomo exports locally as deduplicated drafts", async () 
   assert.match(css, /\.import-list/);
   assert.match(readme, /原始 ZIP 不会保存到仓库/);
 });
+
+test("publisher keeps R2 optional and Git metadata authoritative", async () => {
+  const [server, storage, envExample, readme, records] = await Promise.all([
+    read("server.js"),
+    read("r2-storage.js"),
+    read(".env.example"),
+    read("README.md"),
+    read("records/README.md"),
+  ]);
+
+  assert.match(server, /ensureR2Asset/);
+  assert.match(server, /r2-assets\.jsonl/);
+  assert.match(server, /cloudflare-r2/);
+  assert.match(storage, /memes\/\$\{hash\}/);
+  assert.match(storage, /max-age=31536000, immutable/);
+  assert.match(storage, /--remote/);
+  assert.match(envExample, /XGIF_R2_ENABLED="false"/);
+  assert.match(readme, /已有 `site\/public\/images\/memes\/` 图片不会自动迁移/);
+  assert.match(records, /R2 只保存图片字节/);
+});

@@ -34,7 +34,8 @@ XGIF_AI_BASE_URL="https://api.openai.com/v1"
 
 - 文章：`site/src/content/articles/*.md`
 - 图片内容：`site/src/content/images/*.md`
-- 图片文件：`site/public/images/memes/<year>/*`
+- 新图片文件：启用 R2 后写入 `xgif-memes-prod/memes/<sha256>.<ext>`
+- 旧图片文件与本地回退：`site/public/images/memes/<year>/*`
 
 ## 从内容管理打开页面
 
@@ -61,6 +62,32 @@ PUBLISHER_MAX_IMPORT_UNCOMPRESSED_BYTES="52428800"
 4. 点击“质量检查”。完全相同的图片文件会被拦截；同标题内容仅提示确认，避免误伤裁剪或改图。
 5. 点击“发布”。服务端会再次执行相同校验，不能绕过页面直接重复发布。
 
+## Cloudflare R2 图片存储
+
+R2 是新图片的可选存储层，不是线上 CMS。标题、来源、授权和发布状态仍由 Markdown 与 Git 管理；D1、Vectorize 和线上后台不在这条链路中。已有 `site/public/images/memes/` 图片不会自动迁移。
+
+启用前先安装站点依赖并完成一次 Cloudflare 登录：
+
+```bash
+cd site
+npm ci
+npx wrangler login
+```
+
+确认 Cloudflare 中已经存在 Bucket `xgif-memes-prod`，并将 `img.xgif.cn` 作为 R2 自定义域名后，在 `workflow/.env` 设置：
+
+```bash
+XGIF_R2_ENABLED="true"
+XGIF_R2_BUCKET="xgif-memes-prod"
+XGIF_R2_PUBLIC_BASE_URL="https://img.xgif.cn"
+```
+
+启用后，发布器会先校验图片并计算 SHA-256，再通过仓库锁定的 Wrangler 上传至 `memes/<sha256>.<ext>`，写入 `Cache-Control: public, max-age=31536000, immutable`，并验证自定义域名可以读取对象。只有上传和验证成功后才会生成 Markdown；失败时不会写入指向坏地址的内容文件。对象哈希会记录在 `records/r2-assets.jsonl` 并参与后续查重。
+
+线上保护固定为：`/memes/` 一年 Edge TTL、外站非空 Referer 拦截、查询串拦截，以及排除已验证机器人的单 IP `200 次/10 秒` 限速。空 Referer 仍允许，以兼容直接访问和消息应用预览；因此这套规则用于降低盗链与刷流量成本，不是私有访问控制。R2 图片 URL 不支持查询参数。
+
+如需临时回到原来的 Git 图片目录，将 `XGIF_R2_ENABLED` 设为 `false` 并重启发布器即可；已经发布的 R2 URL 不受影响。
+
 默认会自动执行：
 
 ```bash
@@ -81,11 +108,11 @@ PUBLISHER_MIN_IMAGE_DIMENSION="160"
 PUBLISHER_MAX_IMAGE_DIMENSION="6000"
 ```
 
-这些限制仅影响本地发布台；网站构建和线上静态站点不读取这些变量。
+这些限制仅影响本地发布台；网站构建和线上静态站点不读取这些变量。R2 的单对象限制不能替代这里的发布校验。
 
 ## 用户提供素材台账
 
-选择“用户提供素材”发布图片时，请填写“公开发布确认日期”。发布台会在 `workflow/records/user-provided-assets.jsonl` 自动追加最小授权记录，并和图片、内容文件一起提交。该台账不参与 Astro 构建，不会在网站公开页显示；只保留确认日期、资源哈希、文件路径与公开范围，禁止记录真实姓名、联系方式或原始素材链接。详见 [`records/README.md`](records/README.md)。
+选择“用户提供素材”发布图片时，请填写“公开发布确认日期”。发布台会在 `workflow/records/user-provided-assets.jsonl` 自动追加最小授权记录，并和内容文件、图片位置台账一起提交。该台账不参与 Astro 构建，不会在网站公开页显示；只保留确认日期、资源哈希、资源文件或 R2 地址与公开范围，禁止记录真实姓名、联系方式或原始素材链接。详见 [`records/README.md`](records/README.md)。
 
 ## 说明
 

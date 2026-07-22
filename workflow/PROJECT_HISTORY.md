@@ -60,12 +60,16 @@ GitHub Actions 同时验证 Astro 站点与本地发布台。`v0.2.0` 标记视�
 
 Cloudflare Worker 只上传 `site/dist` 静态资源，不包含 Worker 运行时脚本。GitHub `main` 是生产部署来源，`www.xgif.cn` 是唯一正式域名；构建、Wrangler dry-run 与依赖审计共同作为上线门槛。详见 [`site/docs/decisions/ADR-004-workers-static-assets-deployment.md`](../site/docs/decisions/ADR-004-workers-static-assets-deployment.md)。
 
+### 8. R2 新图片存储决策
+
+新发布的表情包可以由本地发布台按 SHA-256 上传至 R2，并通过 `img.xgif.cn` 公开读取。图片字节进入 R2，内容、来源、授权和对象位置台账仍进入 Git；旧图片不迁移，不新增 D1、Vectorize、Worker 上传 API 或线上后台。详见 [`site/docs/decisions/ADR-005-r2-image-storage.md`](../site/docs/decisions/ADR-005-r2-image-storage.md)。
+
 ## 当前开发原则
 
 1. **保持简单。** 网站的核心是分享内容，而不是建设复杂后台。没有真实重复痛点的功能不提前开发。
 2. **内容优先。** 新阶段优先发布和验证真实文章、表情包，而不是继续增加管理界面。
 3. **诚实标注来源。** 不知道第三方作者或来源时不能编造；只有明确确认可公开发布的素材才能使用“用户提供”契约。
-4. **发布应可追溯。** 所有公开内容通过 Git 提交，用户提供素材同时保留最小授权记录。
+4. **发布应可追溯。** 所有公开内容通过 Git 提交，用户提供素材同时保留最小授权记录；R2 图片保留内容寻址位置台账。
 5. **自动化保持轻量。** 本地预览与 GitHub CI 已足够；只有 CI 或实际发布反复暴露同一种问题，才增加新的检查。
 6. **按痛点扩展。** 例如“替换已发布图片”“台账批量校验”等能力，只有在实际多次发生且影响发布时再实现。
 

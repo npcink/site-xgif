@@ -5,6 +5,7 @@ import { appendFile, mkdir, readdir, readFile, stat, writeFile } from "node:fs/p
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { contentHash, diceSimilarity, normalizeImportText, parseFlomoZipData } from "./flomo-import.js";
+import { ensureR2Asset, getR2StorageConfig } from "./r2-storage.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..");
@@ -44,6 +45,7 @@ const target = {
   memeAssets: path.join(siteRoot, "public", "images", "memes"),
   userProvidedLedger: path.join(__dirname, "records", "user-provided-assets.jsonl"),
   flomoImportLedger: path.join(__dirname, "records", "flomo-imports.jsonl"),
+  r2AssetLedger: path.join(__dirname, "records", "r2-assets.jsonl"),
 };
 
 const port = Number(process.env.PORT || 8787);
@@ -55,6 +57,7 @@ const aiTimeoutMs = Number(process.env.XGIF_AI_TIMEOUT_MS || 45_000);
 const maxImportZipBytes = Number(process.env.PUBLISHER_MAX_IMPORT_ZIP_BYTES || 10 * 1024 * 1024);
 const maxImportUncompressedBytes = Number(process.env.PUBLISHER_MAX_IMPORT_UNCOMPRESSED_BYTES || 50 * 1024 * 1024);
 const localSiteUrl = new URL("http://localhost:4321");
+const r2Storage = getR2StorageConfig({ env: process.env, siteRoot });
 
 const mimeTypes = new Map([
   [".html", "text/html; charset=utf-8"],
@@ -628,6 +631,7 @@ async function scanDuplicateImage({ title, sha256, excludeFile }) {
     }));
 
   const hashMatches = sha256 ? await findFilesByHash(target.memeAssets, sha256) : [];
+  const r2Matches = sha256 ? await findR2AssetsByHash(sha256) : [];
 
   return [
     ...titleMatches,
@@ -637,7 +641,29 @@ async function scanDuplicateImage({ title, sha256, excludeFile }) {
       image: "",
       reason: "图片文件重复",
     })),
+    ...r2Matches.map((record) => ({
+      file: record.contentFile || record.objectKey,
+      title: "",
+      image: record.publicUrl || "",
+      reason: "图片文件重复",
+    })),
   ];
+}
+
+async function readJsonLines(filePath) {
+  try {
+    return (await readFile(filePath, "utf8"))
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .map((line) => JSON.parse(line));
+  } catch (error) {
+    if (error?.code === "ENOENT") return [];
+    throw error;
+  }
+}
+
+async function findR2AssetsByHash(sha256) {
+  return (await readJsonLines(target.r2AssetLedger)).filter((record) => record.sha256 === sha256);
 }
 
 async function findFilesByHash(dir, sha256) {
@@ -1080,7 +1106,26 @@ async function commitAndMaybePush(files, message, shouldPush) {
   return { relativeFiles, commitSha, push };
 }
 
-async function recordUserProvidedAsset({ payload, asset, entryPath, assetPath }) {
+async function recordR2Asset({ asset, entryPath, upload }) {
+  const record = {
+    schemaVersion: 1,
+    storage: "cloudflare-r2",
+    bucket: r2Storage.bucket,
+    objectKey: upload.objectKey,
+    publicUrl: upload.publicUrl,
+    sha256: asset.sha256,
+    mime: asset.mime,
+    byteLength: asset.byteLength,
+    uploadedAt: new Date().toISOString(),
+    contentFile: path.relative(repoRoot, entryPath),
+  };
+
+  await mkdir(path.dirname(target.r2AssetLedger), { recursive: true });
+  await appendFile(target.r2AssetLedger, `${JSON.stringify(record)}\n`, "utf8");
+  return target.r2AssetLedger;
+}
+
+async function recordUserProvidedAsset({ payload, asset, entryPath, assetPath, assetUrl, objectKey }) {
   if (payload.sourceKind !== "user_provided") return "";
 
   const confirmedAt = String(payload.confirmedAt || payload.pubDate || todayIso());
@@ -1091,7 +1136,9 @@ async function recordUserProvidedAsset({ payload, asset, entryPath, assetPath })
     provider: "用户确认",
     authorization: "允许在 xgif.cn 公开发布",
     contentFile: path.relative(repoRoot, entryPath),
-    assetFile: path.relative(repoRoot, assetPath),
+    ...(assetPath ? { assetFile: path.relative(repoRoot, assetPath) } : {}),
+    ...(assetUrl ? { assetUrl } : {}),
+    ...(objectKey ? { objectKey } : {}),
     sha256: asset.sha256,
     publicScope: payload.public !== false && !payload.draft ? "xgif.cn public" : "draft",
   };
@@ -1116,11 +1163,15 @@ async function handleApi(req, res) {
         available: getAiConfig().available,
         model: getAiConfig().model || null,
       },
+      imageStorage: r2Storage.enabled
+        ? { provider: "cloudflare-r2", bucket: r2Storage.bucket, publicBaseUrl: r2Storage.publicBaseUrl }
+        : { provider: "local" },
       target: {
         articles: path.relative(repoRoot, target.articles),
         images: path.relative(repoRoot, target.imageEntries),
         memeAssets: path.relative(repoRoot, target.memeAssets),
         flomoImportLedger: path.relative(repoRoot, target.flomoImportLedger),
+        r2AssetLedger: path.relative(repoRoot, target.r2AssetLedger),
       },
     });
     return;
@@ -1272,13 +1323,20 @@ async function handleApi(req, res) {
     const date = payload.pubDate || todayIso();
     const year = date.slice(0, 4);
     const imageBaseName = `${date}-${slugify(payload.slug || payload.title)}`;
-    const assetDir = path.join(target.memeAssets, year);
-    await mkdir(assetDir, { recursive: true });
+    let assetPath = "";
+    let r2Upload = null;
+    let publicImagePath = "";
+    if (r2Storage.enabled) {
+      r2Upload = await ensureR2Asset({ asset, config: r2Storage, siteRoot });
+      publicImagePath = r2Upload.publicUrl;
+    } else {
+      const assetDir = path.join(target.memeAssets, year);
+      await mkdir(assetDir, { recursive: true });
+      assetPath = await uniquePath(assetDir, imageBaseName, asset.extension);
+      await writeFile(assetPath, asset.buffer);
+      publicImagePath = `/${path.relative(path.join(siteRoot, "public"), assetPath).split(path.sep).join("/")}`;
+    }
 
-    const assetPath = await uniquePath(assetDir, imageBaseName, asset.extension);
-    await writeFile(assetPath, asset.buffer);
-
-    const publicImagePath = `/${path.relative(path.join(siteRoot, "public"), assetPath).split(path.sep).join("/")}`;
     await mkdir(target.imageEntries, { recursive: true });
     const entryPath = await uniquePath(target.imageEntries, imageBaseName);
     await writeFile(
@@ -1289,17 +1347,28 @@ async function handleApi(req, res) {
       }),
       "utf8",
     );
-    const ledgerPath = await recordUserProvidedAsset({ payload, asset, entryPath, assetPath });
+    const r2LedgerPath = r2Upload ? await recordR2Asset({ asset, entryPath, upload: r2Upload }) : "";
+    const ledgerPath = await recordUserProvidedAsset({
+      payload,
+      asset,
+      entryPath,
+      assetPath,
+      assetUrl: r2Upload?.publicUrl,
+      objectKey: r2Upload?.objectKey,
+    });
+
+    const generatedFiles = [assetPath, entryPath, r2LedgerPath, ledgerPath].filter(Boolean);
 
     const git = payload.commit
-      ? await commitAndMaybePush([assetPath, entryPath, ...(ledgerPath ? [ledgerPath] : [])], `Add image: ${payload.title}`, Boolean(payload.push))
+      ? await commitAndMaybePush(generatedFiles, `Add image: ${payload.title}`, Boolean(payload.push))
       : null;
 
     sendJson(res, 200, {
       ok: true,
       file: path.relative(repoRoot, entryPath),
-      image: path.relative(repoRoot, assetPath),
+      image: assetPath ? path.relative(repoRoot, assetPath) : r2Upload.objectKey,
       publicImagePath,
+      storage: r2Upload ? "cloudflare-r2" : "local",
       sha256: asset.sha256,
       asset: {
         mime: asset.mime,
@@ -1309,6 +1378,7 @@ async function handleApi(req, res) {
         ratio: asset.ratio,
       },
       ledger: ledgerPath ? path.relative(repoRoot, ledgerPath) : "",
+      r2Ledger: r2LedgerPath ? path.relative(repoRoot, r2LedgerPath) : "",
       git,
       duplicates,
     });
