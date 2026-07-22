@@ -45,3 +45,27 @@ test("publisher writes the metadata required by Astro collections", async () => 
   assert.match(server, /function recordUserProvidedAsset/);
   assert.match(server, /user-provided-assets\.jsonl/);
 });
+
+test("publisher imports flomo exports locally as deduplicated drafts", async () => {
+  const [server, importer, html, app, css, readme] = await Promise.all([
+    read("server.js"),
+    read("flomo-import.js"),
+    read("public/index.html"),
+    read("public/app.js"),
+    read("public/styles.css"),
+    read("README.md"),
+  ]);
+
+  assert.match(html, /data-tab="import"/);
+  assert.match(html, /id="flomo-file"/);
+  assert.match(server, /\/api\/import\/flomo\/inspect/);
+  assert.match(server, /\/api\/import\/flomo\/apply/);
+  assert.match(server, /flomo-imports\.jsonl/);
+  assert.match(server, /draft: true/);
+  assert.match(importer, /normalizeImportText/);
+  assert.match(importer, /inflateRawSync/);
+  assert.match(html, /AI 整理选中项/);
+  assert.match(app, /aiOrganizeSelectedImports/);
+  assert.match(css, /\.import-list/);
+  assert.match(readme, /原始 ZIP 不会保存到仓库/);
+});

@@ -20,7 +20,7 @@ const relatedImages = allImages
   .filter((entry) => entry.data.tags.some((tag) => article.data.tags.includes(tag)))
   .slice(0, 3);
 const sourceLabel = {
-  original: "去看原文",
+  original: "原创内容",
   publication: "访问来源站",
   editorial: "查看编辑手记",
 }[article.data.sourceKind];
@@ -31,7 +31,7 @@ const jsonLd = {
   description: article.data.summary,
   datePublished: article.data.pubDate.toISOString(),
   author: { "@type": "Organization", name: article.data.source },
-  isBasedOn: article.data.sourceUrl,
+  ...(article.data.sourceUrl ? { isBasedOn: article.data.sourceUrl } : {}),
   mainEntityOfPage: new URL(Astro.url.pathname, Astro.site).href,
 };
 ---
@@ -51,9 +51,11 @@ const jsonLd = {
         {article.data.tags.map((tag) => <a href={`/tags/${encodeURIComponent(tag)}/`}>#{tag}</a>)}
       </div>
       <div class="dialog-article-actions">
-        <a class="primary-button" href={article.data.sourceUrl} target="_blank" rel="noreferrer">
-          {sourceLabel} <span>↗</span>
-        </a>
+        {article.data.sourceUrl && (
+          <a class="primary-button" href={article.data.sourceUrl} target="_blank" rel="noreferrer">
+            {sourceLabel} <span>↗</span>
+          </a>
+        )}
         <a class="dialog-full-link" href={`/articles/${article.id}/`}>在独立页面阅读全文 →</a>
       </div>
     </header>
@@ -62,9 +64,11 @@ const jsonLd = {
       <aside>
         <span class="section-kicker">EDITOR&apos;S NOTE</span>
         <p>{article.data.note ?? "保留来源，快速看懂重点。"}</p>
-        <a class="primary-button" href={article.data.sourceUrl} target="_blank" rel="noreferrer">
-          {sourceLabel} <span>↗</span>
-        </a>
+        {article.data.sourceUrl && (
+          <a class="primary-button" href={article.data.sourceUrl} target="_blank" rel="noreferrer">
+            {sourceLabel} <span>↗</span>
+          </a>
+        )}
       </aside>
       <div class="prose"><Content /></div>
     </div>

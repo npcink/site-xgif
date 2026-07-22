@@ -19,7 +19,7 @@ const articles = defineCollection({
     title: z.string(),
     summary: z.string(),
     source: z.string(),
-    sourceUrl: httpUrl,
+    sourceUrl: httpUrl.optional(),
     sourceKind: sourceKind.default("original"),
     tags: z.array(z.string()).min(1),
     pubDate: z.coerce.date(),
@@ -27,6 +27,10 @@ const articles = defineCollection({
     note: z.string().optional(),
     featured: z.boolean().default(false),
     draft: z.boolean().default(false),
+  }).superRefine((data, context) => {
+    if (data.sourceKind !== "original" && !data.sourceUrl) {
+      context.addIssue({ code: "custom", path: ["sourceUrl"], message: "外部来源文章必须保留来源链接" });
+    }
   }),
 });
 

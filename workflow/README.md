@@ -40,6 +40,19 @@ XGIF_AI_BASE_URL="https://api.openai.com/v1"
 
 “内容管理”只打开本机 Astro 预览地址 `http://localhost:4321`，用于发布前验证。草稿和未公开图片不会提供公开页面入口；操作结果区域只在成功或失败时显示。
 
+## 从 flomo 批量导入
+
+“批量导入”接受 flomo 官方导出的 ZIP，并在本机完成解析、正文指纹查重和草稿生成。原始 ZIP 不会保存到仓库，也不会上传 Cloudflare；页面默认只勾选无重复且字段较完整的内容。短笔记、缺少候选标题或与现有文章高度相似的内容需要人工确认，精确重复不能再次导入。
+
+导入结果始终是 `draft: true` 的原创 Markdown，不会自动提交或推送。若点击“AI 整理选中项”，只有当前勾选的正文会发送给 `.env` 中配置的 AI 服务。每次成功导入会在 `records/flomo-imports.jsonl` 追加正文哈希、时间和目标文件；台账不保存正文。
+
+默认 ZIP 上限为 10 MB、解压后上限为 50 MB，可按需在 `.env` 中调整：
+
+```bash
+PUBLISHER_MAX_IMPORT_ZIP_BYTES="10485760"
+PUBLISHER_MAX_IMPORT_UNCOMPRESSED_BYTES="52428800"
+```
+
 ## 发布流程
 
 1. 选择“发布文章”或“发布图片”。
@@ -76,4 +89,4 @@ PUBLISHER_MAX_IMAGE_DIMENSION="6000"
 
 ## 说明
 
-这个工具不需要数据库，也不会启动线上后台。所有内容仍然是 Markdown 和图片文件，后续 Astro 主题只需要读取这些文件。
+这个工具不需要数据库，也不会启动线上后台。所有内容仍然是 Markdown 和图片文件，后续 Astro 主题只需要读取这些文件。原创文章可以不填写外部来源链接；转载和编辑整理内容仍必须保留真实来源链接。
