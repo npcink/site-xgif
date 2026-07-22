@@ -2,7 +2,7 @@
 
 `xgif.cn` 的轻内容主题：文章摘要负责整理信息，图片与表情包负责表达情绪。
 
-技术栈：Astro 7 + Markdown Content Collections + GitHub + Cloudflare Pages。
+技术栈：Astro 7 + Markdown Content Collections + GitHub + Cloudflare Workers Static Assets。
 
 ## 本地使用
 
@@ -64,18 +64,25 @@ Astro 会把纯静态部署产物输出到 `dist/`。
 
 ## 部署
 
-Cloudflare Pages 连接 GitHub 仓库 `npcink/site-xgif`，使用以下配置：
+Cloudflare Worker 连接 GitHub 仓库 `npcink/site-xgif`，使用以下配置：
 
 | 配置 | 值 |
 | --- | --- |
+| Project name | `site-xgif` |
 | Production branch | `main` |
-| Root directory | `site` |
+| Root directory | `/site` |
 | Build command | `npm run build` |
-| Build output directory | `dist` |
+| Deploy command | `npx wrangler deploy` |
 
-Node.js 版本由 `site/.node-version` 固定。站点是纯静态构建，不需要 Cloudflare Workers 适配器、运行时变量或 `workflow/.env`。
+`wrangler.jsonc` 将静态资源目录固定为 `./dist`，没有 `main` Worker 脚本。部署只上传 Astro 构建产物，不执行应用运行时代码，也不需要 KV、R2、D1、构建变量或 `workflow/.env`。
 
-首次部署先验证 Cloudflare 提供的 `*.pages.dev` 地址，再从 Pages 项目的 Custom domains 添加 `www.xgif.cn`。不要把 `workflow/` 部署到线上；它只在本机写入内容并执行 Git 操作。
+Node.js 版本由 `site/.node-version` 固定，Wrangler 版本由 `package-lock.json` 固定。首次部署先验证 Cloudflare 提供的 `*.workers.dev` 地址，再从 Worker 的 Domains & Routes 添加 `www.xgif.cn`。不要把 `workflow/` 部署到线上；它只在本机写入内容并执行 Git 操作。
+
+上线前可在本地验证完整构建与 Workers 静态资源配置：
+
+```bash
+npm run check:deploy
+```
 
 内容更新只需要修改 `site/` 内的 Markdown 并推送；部署平台按仓库提交重新构建。
 

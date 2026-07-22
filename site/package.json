@@ -17,7 +17,8 @@
     "test:visual:update": "playwright test --config playwright.config.mjs --update-snapshots",
     "test:visual:linux": "sh scripts/run-visual-baseline.sh",
     "test:visual:update:linux": "sh scripts/run-visual-baseline.sh --update-snapshots",
-    "test:all": "npm run test && npm run test:visual"
+    "test:all": "npm run test && npm run test:visual",
+    "check:deploy": "npm run build && wrangler deploy --dry-run"
   },
   "dependencies": {
     "@fontsource-variable/geist": "^5.2.9",
@@ -27,10 +28,12 @@
   "devDependencies": {
     "@astrojs/check": "0.9.6",
     "@playwright/test": "^1.61.1",
-    "typescript": "5.9.3"
+    "typescript": "5.9.3",
+    "wrangler": "4.113.0"
   },
   "overrides": {
     "esbuild": "0.28.1",
+    "sharp": "0.35.3",
     "vite": "8.1.4"
   }
 }

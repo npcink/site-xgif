@@ -105,20 +105,21 @@ npm start
 
 ## 6. Git 与部署
 
-正式仓库为 GitHub `npcink/site-xgif`，默认分支为 `main`。Cloudflare Pages 连接该仓库，使用以下构建配置：
+正式仓库为 GitHub `npcink/site-xgif`，默认分支为 `main`。Cloudflare Worker 连接该仓库，使用以下构建配置：
 
 | 配置 | 值 |
 | --- | --- |
+| Project name | `site-xgif` |
 | Production branch | `main` |
-| Root directory | `site` |
+| Root directory | `/site` |
 | Build command | `npm run build` |
-| Build output directory | `dist` |
+| Deploy command | `npx wrangler deploy` |
 
-Node.js 版本由 `site/.node-version` 固定，GitHub Actions 读取同一文件。站点使用 Astro 纯静态输出，不配置 Workers 适配器，也不需要 KV、R2、D1 或线上环境变量。`workflow/` 与其中的 `.env` 只在本机使用，不能部署或复制到 Cloudflare。
+`site/wrangler.jsonc` 的 `assets.directory` 指向 `./dist`，且没有 `main` Worker 脚本；Cloudflare 只托管 Astro 静态产物，不执行应用运行时代码。Node.js 版本由 `site/.node-version` 固定，Wrangler 与传递依赖由 `site/package-lock.json` 固定，GitHub Actions 会同时验证 Astro、视觉基线与 Wrangler dry-run。
 
-Pages 首次部署应先验证 `*.pages.dev` 预览地址，再在项目的 Custom domains 中添加 `www.xgif.cn`。`www.xgif.cn` 是 canonical、robots 与 sitemap 使用的唯一正式域名；裸域 `xgif.cn` 应由 Cloudflare Redirect Rules 永久跳转到 `www` 并保留路径与查询字符串。
+首次部署应先验证 `*.workers.dev` 预览地址，再在 Worker 的 Domains & Routes 中添加 `www.xgif.cn`。`www.xgif.cn` 是 canonical、robots 与 sitemap 使用的唯一正式域名；裸域 `xgif.cn` 应由 Cloudflare Redirect Rules 永久跳转到 `www` 并保留路径与查询字符串。
 
-部署平台选择的上下文和取舍见 [`decisions/ADR-003-cloudflare-pages-deployment.md`](decisions/ADR-003-cloudflare-pages-deployment.md)。不要在 `.env`、提交信息或文档中写入 API 密钥。
+`workflow/` 与其中的 `.env` 只在本机使用，不能部署或复制到 Cloudflare。部署平台选择的最新上下文和取舍见 [`decisions/ADR-004-workers-static-assets-deployment.md`](decisions/ADR-004-workers-static-assets-deployment.md)。不要在 `.env`、提交信息或文档中写入 API 密钥。
 
 ## 7. 验证与当前边界
 
@@ -126,6 +127,7 @@ Pages 首次部署应先验证 `*.pages.dev` 预览地址，再在项目的 Cust
 
 ```bash
 cd site && npm test
+cd site && npm run check:deploy
 cd workflow && npm test
 git diff --check
 ```
@@ -141,7 +143,7 @@ git diff --check
 
 ## 8. 后续优先级
 
-1. 创建 Cloudflare Pages 项目，验证 `*.pages.dev` 部署，再绑定 `www.xgif.cn` 和裸域跳转。
+1. 创建 Cloudflare Worker，验证 `*.workers.dev` 静态资源部署，再绑定 `www.xgif.cn` 和裸域跳转。
 2. 以真实内容持续验证发布器的重复检查、图片元数据和 AI 返回质量。
 3. 主题有较大改动时补充对应的视觉基线截图和测试，而不是只依赖肉眼回归。
 4. 当内容量明显增长后，再评估静态搜索索引或构建期索引；在此之前保持 Markdown + Git 流程。
