@@ -2,11 +2,15 @@
 
 ## Status
 
-Accepted
+Superseded by ADR-004
 
 ## Date
 
 2026-07-22
+
+## Superseded
+
+Cloudflare 在更新后的新项目指引中明确推荐 Workers Static Assets，并将新功能和优化集中到 Workers。项目尚未建立 Pages 生产部署，因此改用 ADR-004，而不承担迁移成本。本文件保留最初选择 Pages 的背景，不再代表当前部署方案。
 
 ## Context
 
