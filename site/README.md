@@ -2,7 +2,7 @@
 
 `xgif.cn` 的轻内容主题：文章摘要负责整理信息，图片与表情包负责表达情绪。
 
-技术栈：Astro 7 + Markdown Content Collections + GitHub + EdgeOne Pages。
+技术栈：Astro 7 + Markdown Content Collections + GitHub + Cloudflare Pages。
 
 ## 本地使用
 
@@ -64,10 +64,18 @@ Astro 会把纯静态部署产物输出到 `dist/`。
 
 ## 部署
 
-1. 将本仓库推送到 Gitee。
-2. 部署平台将 `site/` 设为工作目录。
-3. 在该工作目录运行 `npm run build`，输出目录为 `dist`。
-4. 若平台不能设置工作目录，构建命令使用 `cd site && npm ci && npm run build`，输出目录使用 `site/dist`。
+Cloudflare Pages 连接 GitHub 仓库 `npcink/site-xgif`，使用以下配置：
+
+| 配置 | 值 |
+| --- | --- |
+| Production branch | `main` |
+| Root directory | `site` |
+| Build command | `npm run build` |
+| Build output directory | `dist` |
+
+Node.js 版本由 `site/.node-version` 固定。站点是纯静态构建，不需要 Cloudflare Workers 适配器、运行时变量或 `workflow/.env`。
+
+首次部署先验证 Cloudflare 提供的 `*.pages.dev` 地址，再从 Pages 项目的 Custom domains 添加 `www.xgif.cn`。不要把 `workflow/` 部署到线上；它只在本机写入内容并执行 Git 操作。
 
 内容更新只需要修改 `site/` 内的 Markdown 并推送；部署平台按仓库提交重新构建。
 

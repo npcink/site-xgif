@@ -11,7 +11,7 @@ XGIF 是一个轻量静态内容站，用于分享文章片段与表情包。站
 → 本地预览
 → 本地发布台生成内容文件
 → GitHub CI 验证
-→ EdgeOne 部署静态站点
+→ Cloudflare Pages 部署静态站点
 ```
 
 ## 目录边界
@@ -52,6 +52,10 @@ Astro 首页、搜索、文章与图片详情页按照 Next.js 基线对齐。�
 
 GitHub Actions 同时验证 Astro 站点与本地发布台。`v0.2.0` 标记视觉对齐基线，`v0.3.0` 标记发布台、来源契约、图片校验和授权台账已稳定可用。
 
+### 6. Cloudflare Pages 部署决策
+
+2026-07-22 确认以 Cloudflare Pages 托管 `site/` 的纯静态产物，GitHub `main` 作为生产部署来源，`www.xgif.cn` 作为唯一正式域名。此前文档中的 EdgeOne 是未落地的部署计划，现由 [`site/docs/decisions/ADR-003-cloudflare-pages-deployment.md`](../site/docs/decisions/ADR-003-cloudflare-pages-deployment.md) 取代。
+
 ## 当前开发原则
 
 1. **保持简单。** 网站的核心是分享内容，而不是建设复杂后台。没有真实重复痛点的功能不提前开发。
@@ -70,7 +74,7 @@ cd workflow && npm start
 cd workflow && npm test
 ```
 
-日常工作顺序：先用 `site/` 本地查看效果，再用 `workflow/` 发布内容；发布成功后由 GitHub CI 做最终验证，EdgeOne 从 `site/` 部署静态产物。
+日常工作顺序：先用 `site/` 本地查看效果，再用 `workflow/` 发布内容；发布成功后由 GitHub CI 做最终验证，Cloudflare Pages 从 `site/` 部署静态产物。
 
 ## 未来判断标准
 

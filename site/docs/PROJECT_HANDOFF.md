@@ -1,6 +1,6 @@
 # XGIF Project Handoff
 
-最后更新：2026-07-10
+最后更新：2026-07-22
 
 ## 1. 项目目标
 
@@ -105,16 +105,20 @@ npm start
 
 ## 6. Git 与部署
 
-部署时将 `site/` 设为工作目录，构建命令为 `npm run build`，输出目录为 `dist`。若平台不支持工作目录，则从仓库根运行 `cd site && npm ci && npm run build`，并使用 `site/dist` 作为输出目录。
+正式仓库为 GitHub `npcink/site-xgif`，默认分支为 `main`。Cloudflare Pages 连接该仓库，使用以下构建配置：
 
-当前工作区尚未配置 Git remote，因此自动 `git push` 会提示没有 push destination。这不是发布器生成内容的错误。设置远程后再启用自动推送：
+| 配置 | 值 |
+| --- | --- |
+| Production branch | `main` |
+| Root directory | `site` |
+| Build command | `npm run build` |
+| Build output directory | `dist` |
 
-```bash
-git remote add origin <repository-url>
-git push -u origin <branch>
-```
+Node.js 版本由 `site/.node-version` 固定，GitHub Actions 读取同一文件。站点使用 Astro 纯静态输出，不配置 Workers 适配器，也不需要 KV、R2、D1 或线上环境变量。`workflow/` 与其中的 `.env` 只在本机使用，不能部署或复制到 Cloudflare。
 
-远程仓库、默认分支和 EdgeOne 项目应在实际上线前统一确认。不要在 `.env`、提交信息或文档中写入 API 密钥。
+Pages 首次部署应先验证 `*.pages.dev` 预览地址，再在项目的 Custom domains 中添加 `www.xgif.cn`。`www.xgif.cn` 是 canonical、robots 与 sitemap 使用的唯一正式域名；裸域 `xgif.cn` 应由 Cloudflare Redirect Rules 永久跳转到 `www` 并保留路径与查询字符串。
+
+部署平台选择的上下文和取舍见 [`decisions/ADR-003-cloudflare-pages-deployment.md`](decisions/ADR-003-cloudflare-pages-deployment.md)。不要在 `.env`、提交信息或文档中写入 API 密钥。
 
 ## 7. 验证与当前边界
 
@@ -137,7 +141,7 @@ git diff --check
 
 ## 8. 后续优先级
 
-1. 配置并验证正式 Git remote 与 EdgeOne Pages 部署链路。
+1. 创建 Cloudflare Pages 项目，验证 `*.pages.dev` 部署，再绑定 `www.xgif.cn` 和裸域跳转。
 2. 以真实内容持续验证发布器的重复检查、图片元数据和 AI 返回质量。
 3. 主题有较大改动时补充对应的视觉基线截图和测试，而不是只依赖肉眼回归。
 4. 当内容量明显增长后，再评估静态搜索索引或构建期索引；在此之前保持 Markdown + Git 流程。
