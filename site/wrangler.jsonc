@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "site-xgif",
+  "name": "site-www-xgif",
   "compatibility_date": "2026-07-22",
   "assets": {
     "directory": "./dist"

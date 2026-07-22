@@ -17,7 +17,7 @@ XGIF 的 `site/` 是 Astro 纯静态站点，构建产物位于 `dist/`，不需
 ## Decision
 
 - 使用 Cloudflare Workers Static Assets 连接 GitHub `npcink/site-xgif`，以 `main` 为生产分支。
-- Worker 项目名为 `site-xgif`，Root directory 为 `/site`，Build command 为 `npm run build`，Deploy command 为 `npx wrangler deploy`。
+- Worker 项目名为 `site-www-xgif`，Root directory 为 `/site`，Build command 为 `npm run build`，Deploy command 为 `npx wrangler deploy`。
 - `site/wrangler.jsonc` 只配置 `assets.directory: "./dist"`；不设置 `main`，因此不部署 Worker 运行时脚本。
 - Node.js 版本由 `site/.node-version` 固定，Wrangler 作为 devDependency 锁定并由 `package-lock.json` 管理。
 - 当前 Wrangler 的 Miniflare 传递依赖固定了存在已知 libvips 告警的 Sharp 版本，因此使用 npm override 将 Sharp 固定到已验证的 `0.35.3`。上游修复后，只有在移除 override 且 `npm audit`、构建和 dry-run 仍通过时才能删除该覆盖。

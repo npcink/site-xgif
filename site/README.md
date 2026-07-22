@@ -68,7 +68,7 @@ Cloudflare Worker 连接 GitHub 仓库 `npcink/site-xgif`，使用以下配置�
 
 | 配置 | 值 |
 | --- | --- |
-| Project name | `site-xgif` |
+| Project name | `site-www-xgif` |
 | Production branch | `main` |
 | Root directory | `/site` |
 | Build command | `npm run build` |

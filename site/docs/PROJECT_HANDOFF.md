@@ -109,7 +109,7 @@ npm start
 
 | 配置 | 值 |
 | --- | --- |
-| Project name | `site-xgif` |
+| Project name | `site-www-xgif` |
 | Production branch | `main` |
 | Root directory | `/site` |
 | Build command | `npm run build` |
