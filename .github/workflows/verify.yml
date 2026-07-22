@@ -27,7 +27,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version-file: site/.node-version
           cache: npm
           cache-dependency-path: site/package-lock.json
       - run: npm ci
@@ -50,5 +50,5 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version-file: site/.node-version
       - run: npm test
