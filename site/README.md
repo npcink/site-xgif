@@ -15,7 +15,7 @@ npm run dev
 
 ## 新增文章
 
-复制 `src/content/articles/` 中任意 Markdown 文件，修改 frontmatter 和正文：
+复制 `src/content/articles/` 中任意 Markdown 文件，修改 frontmatter 和正文。原创内容可以在公开 Markdown 保存正文；外部来源内容应通过本地发布助手编辑，公开 Markdown 只保存摘要说明，完整导入正文留在 `workflow/private-sources/`：
 
 ```md
 ---
@@ -33,7 +33,7 @@ featured: false
 draft: false
 ---
 
-这里写文章正文。
+原创文章正文；外部来源文章只写“不转载全文”的公开说明。
 ```
 
 `editorNote` 会显示在文章卡片或详情页，适合解释“为什么值得看”；`internalNote` 仅供本地发布助手复核来源和导入批次。旧 `note` 字段只为兼容历史内容保留，新内容不要继续使用。
@@ -96,7 +96,9 @@ npm run check:deploy
 
 ## 详情弹窗与 URL
 
-文章和图片卡片始终保留真实详情链接，例如 `/articles/example/` 和 `/images/example/`。在支持 JavaScript 的浏览器中，站点会在当前页面上打开详情弹窗，并使用 History API 同步修改地址栏：
+文章和图片卡片始终保留真实详情链接，例如 `/articles/20260723-k7m2/` 和 `/images/20260723-p4x8/`。公开路径来自 frontmatter 的不可变 `contentId`，标题和发布日期之后可以调整，但不能重新生成 ID。完整决策见 [ADR-008](docs/decisions/ADR-008-stable-content-ids.md)。
+
+在支持 JavaScript 的浏览器中，站点会在当前页面上打开详情弹窗，并使用 History API 同步修改地址栏：
 
 - 浏览器后退会关闭弹窗并恢复原滚动位置；
 - 浏览器前进会重新打开对应详情；

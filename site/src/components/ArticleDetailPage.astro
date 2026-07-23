@@ -1,7 +1,7 @@
 ---
 import { getCollection, render, type CollectionEntry } from "astro:content";
 import ImageCard from "./ImageCard.astro";
-import { formatShortDate, publicArticleNote } from "../lib/content";
+import { contentHref, formatShortDate, publicArticleNote } from "../lib/content";
 
 interface Props {
   article: CollectionEntry<"articles">;
@@ -21,6 +21,7 @@ const sourceLabel = {
   unknown: "来源待确认",
 }[article.data.sourceKind];
 const editorNote = publicArticleNote(article.data);
+const articleHref = contentHref("articles", article);
 ---
 
 {preview && (
@@ -49,7 +50,7 @@ const editorNote = publicArticleNote(article.data);
           {sourceLabel} <span>↗</span>
         </a>
       )}
-      {!preview && <a class="dialog-full-link" href={`/articles/${article.id}/`}>在独立页面阅读全文 →</a>}
+      {!preview && <a class="dialog-full-link" href={articleHref}>在独立页面查看摘要 →</a>}
     </div>
   </header>
 

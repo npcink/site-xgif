@@ -13,6 +13,13 @@ export function formatShortDate(date: Date) {
     .replace("/", ".");
 }
 
+export function contentHref(
+  kind: "articles" | "images",
+  entry: { data: { contentId: string } },
+) {
+  return `/${kind}/${entry.data.contentId}/`;
+}
+
 const internalArticleNotePatterns = [
   /flomo\s*私人(?:笔记|收藏)?导入/i,
   /请在公开前复核/,

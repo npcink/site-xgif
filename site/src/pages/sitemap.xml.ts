@@ -1,5 +1,5 @@
 import { getCollection } from "astro:content";
-import { allTags } from "../lib/content";
+import { allTags, contentHref } from "../lib/content";
 
 const site = "https://www.xgif.cn";
 
@@ -20,8 +20,8 @@ export async function GET() {
     entry("/about/"),
     entry("/rights/"),
     entry("/privacy/"),
-    ...articles.map((article) => entry(`/articles/${article.id}/`, article.data.pubDate)),
-    ...images.map((image) => entry(`/images/${image.id}/`, image.data.pubDate)),
+    ...articles.map((article) => entry(contentHref("articles", article), article.data.pubDate)),
+    ...images.map((image) => entry(contentHref("images", image), image.data.pubDate)),
     ...tags.map((tag) => entry(`/tags/${encodeURIComponent(tag)}/`)),
   ];
 

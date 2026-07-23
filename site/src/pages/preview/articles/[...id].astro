@@ -6,7 +6,7 @@ import BaseLayout from "../../../layouts/BaseLayout.astro";
 export async function getStaticPaths() {
   if (!import.meta.env.DEV) return [];
   const entries = await getCollection("articles");
-  return entries.map((article) => ({ params: { id: article.id }, props: { article } }));
+  return entries.map((article) => ({ params: { id: article.data.contentId }, props: { article } }));
 }
 
 interface Props {

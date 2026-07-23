@@ -11,8 +11,6 @@
   const visibleCount = document.querySelector("[data-home-visible-count]");
   const empty = document.querySelector("[data-home-empty]");
   const reset = document.querySelector("[data-home-reset]");
-  const newsletterForm = document.querySelector("[data-newsletter-form]");
-  const newsletterStatus = document.querySelector("[data-newsletter-status]");
 
   if (!(input instanceof HTMLInputElement)) return;
 
@@ -73,11 +71,5 @@
     input.focus();
     apply();
   });
-  newsletterForm?.addEventListener("submit", (event) => {
-    event.preventDefault();
-    newsletterForm.reset();
-    if (newsletterStatus) newsletterStatus.textContent = "已暂存演示操作 · 未保存邮箱地址";
-  });
-
   apply();
 })();

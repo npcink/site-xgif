@@ -2,10 +2,11 @@
 import { getCollection, render, type CollectionEntry } from "astro:content";
 import ArticleCard from "../../components/ArticleCard.astro";
 import BaseLayout from "../../layouts/BaseLayout.astro";
+import { contentHref } from "../../lib/content";
 
 export async function getStaticPaths() {
   const entries = (await getCollection("images")).filter((entry) => !entry.data.draft && entry.data.public);
-  return entries.map((item) => ({ params: { id: item.id }, props: { item } }));
+  return entries.map((item) => ({ params: { id: item.data.contentId }, props: { item } }));
 }
 
 interface Props {
@@ -13,6 +14,7 @@ interface Props {
 }
 
 const { item } = Astro.props;
+const canonicalPath = contentHref("images", item);
 const { Content } = await render(item);
 const allArticles = (await getCollection("articles")).filter((entry) => !entry.data.draft);
 const relatedArticles = allArticles
@@ -30,7 +32,7 @@ const jsonLd = {
   ...(item.data.licenseUrl ? { license: item.data.licenseUrl } : {}),
   ...(item.data.sourceUrl ? { acquireLicensePage: item.data.sourceUrl } : {}),
   datePublished: item.data.pubDate.toISOString(),
-  mainEntityOfPage: new URL(Astro.url.pathname, Astro.site).href,
+  mainEntityOfPage: new URL(canonicalPath, Astro.site).href,
 };
 ---
 

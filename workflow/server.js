@@ -5,11 +5,24 @@ import { appendFile, mkdir, readdir, readFile, rename, stat, unlink, writeFile }
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { inferArticleSourceName } from "./article-source.js";
+import {
+  PUBLIC_ARTICLE_DISCLOSURE,
+  isExternalArticle,
+  isPublicArticleDisclosure,
+  prepareArticlePublication,
+  readEditableArticleBody,
+} from "./article-publication.js";
 import { auditContentLibrary } from "./content-audit.js";
+import { createContentId, isContentId } from "./content-id.js";
+import {
+  canonicalTagsPrompt,
+  normalizeContentTags,
+} from "./content-taxonomy.js";
 import { contentHash, diceSimilarity, normalizeImportText, parseFlomoZipData } from "./flomo-import.js";
 import { LocalContentBackup } from "./local-content-backup.js";
 import { LocalDataStore } from "./local-data-store.js";
 import { ensureR2Asset, getR2StorageConfig } from "./r2-storage.js";
+import { reconcileR2Assets } from "./r2-reconciliation.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..");
@@ -264,19 +277,6 @@ function inspectImageUpload(fileData) {
   };
 }
 
-function slugify(input) {
-  const normalized = String(input || "")
-    .trim()
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9\u4e00-\u9fa5]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 72);
-
-  return normalized || `item-${Date.now()}`;
-}
-
 async function pathExists(filePath) {
   try {
     await stat(filePath);
@@ -290,6 +290,13 @@ async function writeJsonAtomic(filePath, value) {
   await mkdir(path.dirname(filePath), { recursive: true });
   const temporaryPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
   await writeFile(temporaryPath, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+  await rename(temporaryPath, filePath);
+}
+
+async function writeTextAtomic(filePath, value) {
+  await mkdir(path.dirname(filePath), { recursive: true });
+  const temporaryPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+  await writeFile(temporaryPath, value, "utf8");
   await rename(temporaryPath, filePath);
 }
 
@@ -366,6 +373,18 @@ async function listMarkdownFiles(dir) {
   }
 }
 
+async function allocateContentId(pubDate) {
+  const existingIds = new Set();
+  for (const directory of [target.articles, target.imageEntries]) {
+    for (const file of await listMarkdownFiles(directory)) {
+      const parsed = parseFrontmatter(await readFile(file, "utf8"));
+      const contentId = String(parsed.data.contentId || "").trim();
+      if (isContentId(contentId)) existingIds.add(contentId);
+    }
+  }
+  return createContentId(pubDate || todayIso(), existingIds);
+}
+
 async function scanMarkdownFrontmatter(dir) {
   const files = await listMarkdownFiles(dir);
   const records = [];
@@ -421,29 +440,32 @@ function managedDirectory(type) {
   throw error;
 }
 
-function contentRoute(type, filePath, { preview = false } = {}) {
-  const directory = managedDirectory(type);
-  const relativeId = path.relative(directory, filePath).replace(/\.(md|mdx)$/i, "");
+function contentRoute(type, contentId, { preview = false } = {}) {
+  if (!["article", "image"].includes(type)) {
+    const error = new Error("未知内容类型。");
+    error.statusCode = 400;
+    throw error;
+  }
+  if (!isContentId(contentId)) {
+    const error = new Error("内容缺少有效的稳定 ID。");
+    error.statusCode = 422;
+    throw error;
+  }
   const routeType = type === "article" ? "articles" : "images";
-  const route = "/" + (preview ? "preview/" : "") + routeType + "/" + relativeId
-    .split(path.sep)
-    .map((segment) => encodeURIComponent(segment))
-    .join("/") + "/";
-
-  return route;
+  return `/${preview ? "preview/" : ""}${routeType}/${contentId}/`;
 }
 
-function publicContentUrl(type, filePath) {
-  return new URL(contentRoute(type, filePath), localSiteUrl).href;
+function publicContentUrl(type, contentId) {
+  return new URL(contentRoute(type, contentId), localSiteUrl).href;
 }
 
-function previewContentUrl(type, filePath) {
+function previewContentUrl(type, contentId) {
   if (type !== "article") return "";
-  return new URL(contentRoute(type, filePath, { preview: true }), localSiteUrl).href;
+  return new URL(contentRoute(type, contentId, { preview: true }), localSiteUrl).href;
 }
 
-function liveContentUrl(type, filePath) {
-  return new URL(contentRoute(type, filePath), publicSiteUrl).href;
+function liveContentUrl(type, contentId) {
+  return new URL(contentRoute(type, contentId), publicSiteUrl).href;
 }
 
 function resolveManagedFile(type, relativeFile) {
@@ -472,11 +494,12 @@ async function listContent(type = "all") {
         summary: String(parsed.data.summary || parsed.data.description || ""),
         source: String(parsed.data.source || ""),
         tags: normalizeList(parsed.data.tags),
+        contentId: String(parsed.data.contentId || ""),
         pubDate: String(parsed.data.pubDate || ""),
         draft: Boolean(parsed.data.draft),
         public: parsed.data.public !== false,
-        publicUrl: publicContentUrl(kind, file),
-        previewUrl: previewContentUrl(kind, file),
+        publicUrl: publicContentUrl(kind, parsed.data.contentId),
+        previewUrl: previewContentUrl(kind, parsed.data.contentId),
         bodyExcerpt: parsed.body.replace(/\s+/g, " ").slice(0, 140),
       });
     }
@@ -736,7 +759,7 @@ async function verifyLiveContent(type, filePath, parsed) {
     return workflowState("draft", "草稿", "草稿不会请求或暴露线上地址。");
   }
 
-  const url = liveContentUrl(type, filePath);
+  const url = liveContentUrl(type, parsed.data.contentId);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 3000);
   try {
@@ -890,10 +913,10 @@ async function inspectFlomoImport(fileData) {
 function normalizeImportedArticle(item, override = {}) {
   const title = clampText(override.title || item.title, 120);
   const summary = clampText(override.summary || item.summary, 320);
-  const tags = normalizeList(override.tags?.length ? override.tags : item.tags)
-    .map((tag) => clampText(tag.replace(/^#/, ""), 20))
-    .filter(Boolean)
-    .slice(0, 6);
+  const tags = normalizeContentTags(
+    override.tags?.length ? override.tags : item.tags,
+    { type: "article" },
+  );
   const internalNote = clampText(override.internalNote || item.internalNote || item.note, 240);
   const sourceUrlValue = Object.hasOwn(override, "sourceUrl") ? override.sourceUrl : item.sourceUrl;
   const sourceUrl = clampText(sourceUrlValue, 500);
@@ -910,7 +933,7 @@ function normalizeImportedArticle(item, override = {}) {
     source,
     sourceKind,
     sourceUrl,
-    tags: tags.length ? tags : ["随笔"],
+    tags,
     pubDate: item.pubDate,
     readTime: item.readTime,
     editorNote: clampText(override.editorNote, 240),
@@ -950,9 +973,10 @@ async function importFlomoDrafts(payload) {
       continue;
     }
     const article = normalizeImportedArticle(item, overrides[item.contentHash]);
-    const baseName = `${article.pubDate}-${slugify(article.title)}`;
-    const filePath = await uniquePath(target.articles, baseName);
-    await writeFile(filePath, buildArticleMarkdown(article), "utf8");
+    article.contentId = await allocateContentId(article.pubDate);
+    const filePath = path.join(target.articles, `${article.contentId}.md`);
+    const prepared = await prepareArticlePublication(article, { workflowRoot: __dirname });
+    await writeFile(filePath, buildArticleMarkdown(prepared.payload), "utf8");
     const relativeFile = path.relative(repoRoot, filePath);
     const importedAt = new Date().toISOString();
     const ledgerRecord = {
@@ -1114,7 +1138,7 @@ function parseAiJson(content) {
 
 function sanitizeArticleSuggestion(value, fallbackSource) {
   const raw = value && typeof value === "object" ? value : {};
-  const tags = normalizeList(raw.tags).map((tag) => clampText(tag, 20)).filter(Boolean).slice(0, 6);
+  const tags = normalizeContentTags(raw.tags, { type: "article" });
   const readTime = clampText(raw.readTime, 16);
 
   return {
@@ -1159,7 +1183,7 @@ async function createArticleSuggestion(payload) {
         messages: [
           {
             role: "system",
-            content: "你是中文内容编辑。只返回 JSON 对象，不要 Markdown。字段必须是 title、summary、tags、readTime、editorNote、source。summary 为 1-2 句且不超过 160 字；tags 为 2-6 个短标签；readTime 为类似‘3 分钟’；editorNote 是可以公开展示的阅读价值说明，不超过 80 字。只根据参考资料写作，不要编造未提供的事实；如果信息不足，保守概括。source 可保留已给出的来源名称。",
+            content: `你是中文内容编辑。只返回 JSON 对象，不要 Markdown。字段必须是 title、summary、tags、readTime、editorNote、source。summary 为 1-2 句且不超过 160 字；tags 只能从以下规范标签中选择 1-3 个：${canonicalTagsPrompt()}；readTime 为类似‘3 分钟’；editorNote 是可以公开展示的阅读价值说明，不超过 80 字。只根据参考资料写作，不要编造未提供的事实；如果信息不足，保守概括。source 可保留已给出的来源名称。`,
           },
           {
             role: "user",
@@ -1192,7 +1216,13 @@ async function createArticleSuggestion(payload) {
 }
 
 function buildArticleMarkdown(payload) {
-  const tags = normalizeList(payload.tags);
+  validateRequired(payload, ["contentId"]);
+  if (!isContentId(payload.contentId)) {
+    const error = new Error("文章内容 ID 格式无效。");
+    error.statusCode = 400;
+    throw error;
+  }
+  const tags = normalizeContentTags(payload.tags, { type: "article" });
   const date = payload.pubDate || todayIso();
   const sourceUrl = String(payload.sourceUrl || "").trim();
   const sourceUrlLine = sourceUrl ? `sourceUrl: ${yamlString(sourceUrl)}\n` : "";
@@ -1200,8 +1230,17 @@ function buildArticleMarkdown(payload) {
   const internalNote = String(payload.internalNote || "").trim();
   const editorNoteLine = editorNote ? `editorNote: ${yamlString(editorNote)}\n` : "";
   const internalNoteLine = internalNote ? `internalNote: ${yamlString(internalNote)}\n` : "";
+  if (
+    isExternalArticle(payload)
+    && !payload.draft
+    && !isPublicArticleDisclosure(payload.body)
+  ) {
+    const error = new Error("外部来源公开文章只能写入编辑摘要说明，完整正文必须保存在私有来源库。");
+    error.statusCode = 422;
+    throw error;
+  }
 
-  return `---\ntitle: ${yamlString(payload.title)}\nsummary: ${yamlString(payload.summary)}\nsource: ${yamlString(payload.source)}\n${sourceUrlLine}sourceKind: ${yamlString(payload.sourceKind || "original")}\ntags: ${yamlArray(tags)}\npubDate: ${date}\nreadTime: ${yamlString(payload.readTime || "1 分钟")}\n${editorNoteLine}${internalNoteLine}featured: ${Boolean(payload.featured)}\ndraft: ${Boolean(payload.draft)}\n---\n\n${markdownBody(payload.body)}`;
+  return `---\ntitle: ${yamlString(payload.title)}\ncontentId: ${yamlString(payload.contentId)}\nsummary: ${yamlString(payload.summary)}\nsource: ${yamlString(payload.source)}\n${sourceUrlLine}sourceKind: ${yamlString(payload.sourceKind || "original")}\ntags: ${yamlArray(tags)}\npubDate: ${date}\nreadTime: ${yamlString(payload.readTime || "1 分钟")}\n${editorNoteLine}${internalNoteLine}featured: ${Boolean(payload.featured)}\ndraft: ${Boolean(payload.draft)}\n---\n\n${markdownBody(payload.body)}`;
 }
 
 function validateArticleAttribution(payload) {
@@ -1315,7 +1354,7 @@ function sanitizeImageSuggestion(value) {
   return {
     title: clampText(raw.title, 80),
     description: clampText(raw.description, 240),
-    tags: normalizeList(raw.tags).map((tag) => clampText(tag, 20)).filter(Boolean).slice(0, 6),
+    tags: normalizeContentTags(raw.tags, { type: "image" }),
     category: clampText(raw.category, 40),
     mood: normalizeList(raw.mood).map((item) => clampText(item, 20)).filter(Boolean).slice(0, 4),
     scenes: normalizeList(raw.scenes).map((item) => clampText(item, 20)).filter(Boolean).slice(0, 4),
@@ -1349,7 +1388,7 @@ async function createImageSuggestion(payload) {
         messages: [
           {
             role: "system",
-            content: "你是中文表情包编辑。只返回 JSON 对象，不要 Markdown。字段为 title、description、tags、category、mood、scenes、ratio。tags 2-6 个；mood 与 scenes 各 1-4 个；ratio 只能是 wide、tall 或 square。描述要说明适合表达什么，不要识别真实人物身份。",
+            content: `你是中文表情包编辑。只返回 JSON 对象，不要 Markdown。字段为 title、description、tags、category、mood、scenes、ratio。tags 只能从以下规范标签中选择 1-3 个：${canonicalTagsPrompt()}；mood 与 scenes 各 1-4 个；ratio 只能是 wide、tall 或 square。描述要说明适合表达什么，不要识别真实人物身份。`,
           },
           {
             role: "user",
@@ -1383,12 +1422,18 @@ async function createImageSuggestion(payload) {
 }
 
 function buildLegacyImageMarkdown(payload) {
-  const tags = normalizeList(payload.tags);
+  validateRequired(payload, ["contentId"]);
+  if (!isContentId(payload.contentId)) {
+    const error = new Error("图片内容 ID 格式无效。");
+    error.statusCode = 400;
+    throw error;
+  }
+  const tags = normalizeContentTags(payload.tags, { type: "image" });
   const mood = normalizeList(payload.mood);
   const scenes = normalizeList(payload.scenes);
   const date = payload.pubDate || todayIso();
 
-  return `---\ntitle: ${yamlString(payload.title)}\ndescription: ${yamlString(payload.description)}\nimage: ${yamlString(payload.image)}\nsource: ${yamlString(payload.source || "本地上传")}\ntags: ${yamlArray(tags)}\ncategory: ${yamlString(payload.category || "表情包")}\nmood: ${yamlArray(mood)}\nscenes: ${yamlArray(scenes)}\npubDate: ${date}\npublic: ${payload.public !== false}\nratio: ${yamlString(payload.ratio || "square")}\ndraft: ${Boolean(payload.draft)}\n---\n\n${markdownBody(payload.body)}`;
+  return `---\ntitle: ${yamlString(payload.title)}\ncontentId: ${yamlString(payload.contentId)}\ndescription: ${yamlString(payload.description)}\nimage: ${yamlString(payload.image)}\nsource: ${yamlString(payload.source || "本地上传")}\ntags: ${yamlArray(tags)}\ncategory: ${yamlString(payload.category || "表情包")}\nmood: ${yamlArray(mood)}\nscenes: ${yamlArray(scenes)}\npubDate: ${date}\npublic: ${payload.public !== false}\nratio: ${yamlString(payload.ratio || "square")}\ndraft: ${Boolean(payload.draft)}\n---\n\n${markdownBody(payload.body)}`;
 }
 
 function buildImageMarkdown(payload) {
@@ -1441,7 +1486,12 @@ async function updateManagedContent(type, file, payload, { refreshIndexes = true
   let quality = null;
 
   if (type === "article") {
-    const articlePayload = validateArticleAttribution({ ...payload, excludeFile: file });
+    const articlePayload = validateArticleAttribution({
+      ...existing.data,
+      ...payload,
+      body: Object.hasOwn(payload, "body") ? payload.body : existing.body,
+      excludeFile: file,
+    });
     if (!articlePayload.draft) {
       quality = await checkArticleQuality(articlePayload);
       const errors = quality.issues.filter((item) => item.level === "error");
@@ -1451,7 +1501,8 @@ async function updateManagedContent(type, file, payload, { refreshIndexes = true
         throw error;
       }
     }
-    markdown = buildArticleMarkdown(articlePayload);
+    const prepared = await prepareArticlePublication(articlePayload, { workflowRoot: __dirname });
+    markdown = buildArticleMarkdown(prepared.payload);
   } else {
     const imagePayload = normalizeImageAttribution({
       ...existing.data,
@@ -1490,8 +1541,8 @@ async function updateManagedContent(type, file, payload, { refreshIndexes = true
     git,
     quality,
     indexWarning,
-    publicUrl: publicContentUrl(type, filePath),
-    previewUrl: previewContentUrl(type, filePath),
+    publicUrl: publicContentUrl(type, parsed.data.contentId),
+    previewUrl: previewContentUrl(type, parsed.data.contentId),
     workflow: await getFileWorkflowState(type, filePath, parsed.data),
   };
 }
@@ -2231,6 +2282,11 @@ async function handleApi(req, res) {
     return;
   }
 
+  if (pathname === "/api/r2/reconcile" && req.method === "GET") {
+    sendJson(res, 200, await reconcileR2Assets({ repoRoot }));
+    return;
+  }
+
   if (pathname === "/api/history" && req.method === "GET") {
     sendJson(res, 200, {
       items: localDataStore.listOperations({
@@ -2337,9 +2393,11 @@ async function handleApi(req, res) {
       type,
       file: path.relative(repoRoot, filePath),
       data: parsed.data,
-      body: parsed.body,
-      publicUrl: publicContentUrl(type, filePath),
-      previewUrl: previewContentUrl(type, filePath),
+      body: type === "article"
+        ? await readEditableArticleBody({ ...parsed.data, body: parsed.body }, { workflowRoot: __dirname })
+        : parsed.body,
+      publicUrl: publicContentUrl(type, parsed.data.contentId),
+      previewUrl: previewContentUrl(type, parsed.data.contentId),
       workflow: await getFileWorkflowState(type, filePath, parsed.data),
     });
     return;
@@ -2468,9 +2526,10 @@ async function handleApi(req, res) {
     const duplicates = quality?.duplicates || await scanDuplicateArticle(payload);
 
     await mkdir(target.articles, { recursive: true });
-    const baseName = `${payload.pubDate || todayIso()}-${slugify(payload.slug || payload.title)}`;
-    const filePath = await uniquePath(target.articles, baseName);
-    await writeFile(filePath, buildArticleMarkdown(payload), "utf8");
+    payload.contentId = await allocateContentId(payload.pubDate || todayIso());
+    const filePath = path.join(target.articles, `${payload.contentId}.md`);
+    const prepared = await prepareArticlePublication(payload, { workflowRoot: __dirname });
+    await writeFile(filePath, buildArticleMarkdown(prepared.payload), "utf8");
 
     const git = payload.commit
       ? await commitAndMaybePush([filePath], `Add article: ${payload.title}`, Boolean(payload.push))
@@ -2487,9 +2546,9 @@ async function handleApi(req, res) {
       duplicates,
       quality,
       indexWarning,
-      publicUrl: publicContentUrl("article", filePath),
-      previewUrl: previewContentUrl("article", filePath),
-      workflow: await getFileWorkflowState("article", filePath, payload),
+      publicUrl: publicContentUrl("article", payload.contentId),
+      previewUrl: previewContentUrl("article", payload.contentId),
+      workflow: await getFileWorkflowState("article", filePath, prepared.payload),
     });
     return;
   }
@@ -2512,7 +2571,8 @@ async function handleApi(req, res) {
 
     const date = payload.pubDate || todayIso();
     const year = date.slice(0, 4);
-    const imageBaseName = `${date}-${slugify(payload.slug || payload.title)}`;
+    payload.contentId = await allocateContentId(date);
+    const imageBaseName = payload.contentId;
     let assetPath = "";
     let r2Upload = null;
     let publicImagePath = "";
@@ -2529,23 +2589,31 @@ async function handleApi(req, res) {
 
     await mkdir(target.imageEntries, { recursive: true });
     const entryPath = await uniquePath(target.imageEntries, imageBaseName);
-    await writeFile(
-      entryPath,
-      buildImageMarkdown({
-        ...payload,
-        image: publicImagePath,
-      }),
-      "utf8",
-    );
-    const r2LedgerPath = r2Upload ? await recordR2Asset({ asset, entryPath, upload: r2Upload }) : "";
-    const ledgerPath = await recordUserProvidedAsset({
-      payload,
-      asset,
-      entryPath,
-      assetPath,
-      assetUrl: r2Upload?.publicUrl,
-      objectKey: r2Upload?.objectKey,
+    const entryMarkdown = buildImageMarkdown({
+      ...payload,
+      image: publicImagePath,
     });
+    // R2 ledger is intentionally written before the public Markdown entry.
+    // If a later local write fails, the read-only reconciliation report exposes
+    // the orphan ledger row instead of silently losing track of the remote object.
+    const r2LedgerPath = r2Upload ? await recordR2Asset({ asset, entryPath, upload: r2Upload }) : "";
+    let ledgerPath = "";
+    try {
+      ledgerPath = await recordUserProvidedAsset({
+        payload,
+        asset,
+        entryPath,
+        assetPath,
+        assetUrl: r2Upload?.publicUrl,
+        objectKey: r2Upload?.objectKey,
+      });
+      await writeTextAtomic(entryPath, entryMarkdown);
+    } catch (error) {
+      if (assetPath) await unlink(assetPath).catch(() => {});
+      throw new Error(
+        `${error.message}；发布未完成${r2Upload ? "，R2 对象已由对账台账保留，运行 npm run r2:reconcile 可定位" : ""}。`,
+      );
+    }
 
     const generatedFiles = [assetPath, entryPath, r2LedgerPath, ledgerPath].filter(Boolean);
 

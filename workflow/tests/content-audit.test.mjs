@@ -3,6 +3,7 @@ import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { PUBLIC_ARTICLE_DISCLOSURE } from "../article-publication.js";
 import { auditContentLibrary, parseContentDocument } from "../content-audit.js";
 
 async function fixture() {
@@ -17,45 +18,54 @@ async function fixture() {
 }
 
 function article({
+  contentId = "20260723-0001",
   title = "可发布文章",
   source = "煎蛋",
   sourceUrl = "https://jandan.net/t/1234567",
   sourceKind = "publication",
   draft = false,
-  body = "这是一段足够完整的测试正文，用来验证上线体检是否可以区分可发布内容、待人工确认内容和必须退回草稿的内容。正文需要超过最小长度，并且不包含未结构化链接。它还应当保留清晰的叙述结构，确保测试通过来自内容质量，而不是仅仅依靠字段齐全。",
+  body,
 } = {}) {
+  const resolvedBody = body ?? (
+    ["publication", "editorial"].includes(sourceKind) && !draft
+      ? PUBLIC_ARTICLE_DISCLOSURE
+      : "这是一段足够完整的测试正文，用来验证上线体检是否可以区分可发布内容、待人工确认内容和必须退回草稿的内容。正文需要超过最小长度，并且不包含未结构化链接。它还应当保留清晰的叙述结构，确保测试通过来自内容质量，而不是仅仅依靠字段齐全。"
+  );
   return `---
 title: ${JSON.stringify(title)}
+contentId: ${JSON.stringify(contentId)}
 summary: "这是一段长度合适、能够清楚说明文章重点的测试摘要。"
 source: ${JSON.stringify(source)}
 sourceUrl: ${JSON.stringify(sourceUrl)}
 sourceKind: ${JSON.stringify(sourceKind)}
-tags: ["测试", "内容"]
+tags: ["生活"]
 pubDate: "2026-07-23"
 readTime: "2 分钟"
 draft: ${draft}
 ---
 
-${body}
+${resolvedBody}
 `;
 }
 
 test("content audit classifies ready, review, and blocked articles", async () => {
   const dirs = await fixture();
   await Promise.all([
-    writeFile(path.join(dirs.articlesDir, "ready.md"), article(), "utf8"),
+    writeFile(path.join(dirs.articlesDir, "20260723-0001.md"), article(), "utf8"),
     writeFile(
-      path.join(dirs.articlesDir, "review.md"),
+      path.join(dirs.articlesDir, "20260723-0002.md"),
       article({
+        contentId: "20260723-0002",
         title: "需要确认来源",
         sourceUrl: "https://jandan.net/",
-        body: "这是一篇来源链接暂时只填写到网站首页的测试文章。正文内容本身完整，但上线前仍需人工找到具体原文页面，避免读者无法核对采集出处。",
+        body: PUBLIC_ARTICLE_DISCLOSURE,
       }),
       "utf8",
     ),
     writeFile(
-      path.join(dirs.articlesDir, "blocked.md"),
+      path.join(dirs.articlesDir, "20260723-0003.md"),
       article({
+        contentId: "20260723-0003",
         title: "来源待确认",
         source: "第三方",
         sourceUrl: "",
@@ -82,17 +92,18 @@ test("content audit classifies ready, review, and blocked articles", async () =>
 test("content audit blocks invalid source links and missing local image files", async () => {
   const dirs = await fixture();
   await writeFile(
-    path.join(dirs.articlesDir, "invalid-url.md"),
-    article({ title: "错误链接", sourceUrl: "jandan.net/t/123" }),
+    path.join(dirs.articlesDir, "20260723-0004.md"),
+    article({ contentId: "20260723-0004", title: "错误链接", sourceUrl: "jandan.net/t/123" }),
     "utf8",
   );
   await writeFile(
-    path.join(dirs.imagesDir, "missing-image.md"),
+    path.join(dirs.imagesDir, "20260723-0005.md"),
     `---
 title: "缺失图片"
+contentId: "20260723-0005"
 description: "图片记录存在，但对应的本地文件已经丢失。"
 image: "/images/memes/missing.webp"
-tags: ["测试"]
+tags: ["反应图"]
 pubDate: "2026-07-23"
 public: true
 sourceKind: "unknown"

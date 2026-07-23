@@ -45,6 +45,9 @@ yarn-error.log*
 /workflow/.runtime/
 /workflow/trash/
 /workflow/backups/
+/workflow/private-sources/
+/workflow/records/content-audit-latest.json
+/workflow/records/content-audit-latest.md
 
 # private local imports
 /data/*.zip

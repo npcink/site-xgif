@@ -1,16 +1,18 @@
 ---
 import type { CollectionEntry } from "astro:content";
+import { contentHref } from "../lib/content";
 
 interface Props {
   item: CollectionEntry<"images">;
 }
 
 const { item } = Astro.props;
+const href = contentHref("images", item);
 ---
 
 <a
   class:list={["image-card", item.data.ratio]}
-  href={`/images/${item.id}/`}
+  href={href}
   data-detail-link
   data-search-item
   data-search={`${item.data.title} ${item.data.description} ${item.data.source} ${item.data.tags.join(" ")} ${item.data.mood.join(" ")} ${item.data.scenes.join(" ")}`.toLowerCase()}
