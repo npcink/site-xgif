@@ -752,10 +752,15 @@ async function verifyLiveContent(type, filePath, parsed) {
       };
     }
     const html = await response.text();
-    const pageText = normalizeText(html.replace(/<script\b[\s\S]*?<\/script>/gi, " ").replace(/<style\b[\s\S]*?<\/style>/gi, " ").replace(/<[^>]+>/g, " "));
-    const title = normalizeText(parsed.data.title);
-    const summary = normalizeText(parsed.data.summary || parsed.data.description);
-    const bodyExcerpt = normalizeText(parsed.body).slice(0, 48);
+    const pageText = normalizeComparableText(
+      html
+        .replace(/<script\b[\s\S]*?<\/script>/gi, " ")
+        .replace(/<style\b[\s\S]*?<\/style>/gi, " ")
+        .replace(/<[^>]+>/g, " "),
+    );
+    const title = normalizeComparableText(parsed.data.title);
+    const summary = normalizeComparableText(parsed.data.summary || parsed.data.description);
+    const bodyExcerpt = normalizeComparableText(parsed.body).slice(0, 48);
     const matches = [title, summary, bodyExcerpt].filter(Boolean).every((value) => pageText.includes(value));
     return {
       ...(matches
@@ -1055,6 +1060,12 @@ async function findFilesByHash(dir, sha256) {
 
 function normalizeText(value) {
   return String(value || "").trim().replace(/\s+/g, "").toLowerCase();
+}
+
+function normalizeComparableText(value) {
+  return normalizeText(value)
+    .replace(/&(?:nbsp|amp|quot|#39);/giu, "")
+    .replace(/[\p{P}\p{S}]/gu, "");
 }
 
 function normalizeUrl(value) {

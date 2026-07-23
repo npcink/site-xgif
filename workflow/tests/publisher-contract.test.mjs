@@ -134,6 +134,8 @@ test("draft publishing uses explicit states, protected-branch guards, and mandat
   assert.match(app, /api\/content\/deployment/);
   assert.match(server, /async function getFileWorkflowState/);
   assert.match(server, /async function verifyLiveContent/);
+  assert.match(server, /function normalizeComparableText/);
+  assert.match(server, /\[\\p\{P\}\\p\{S\}\]/);
   assert.match(server, /线上已生效/);
   assert.match(server, /发布前质量检查未通过/);
   assert.match(server, /main 分支受保护/);
