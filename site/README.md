@@ -94,6 +94,8 @@ npm run check:deploy
 
 本地发布助手会在同步前执行内容体检；只有通过的内容才应进入生产分支。体检报告、SQLite 同步记录和本机预览都不是线上成功证据，仍需核对 GitHub 合并提交、Cloudflare 部署结果和 `https://www.xgif.cn` 的实际页面。
 
+同一个提交只使用一条生产发布路径：正常情况下等待 Cloudflare Workers Builds 自动构建和部署；不要在该构建运行期间同时执行本机 `wrangler deploy`，否则两个版本可能互相覆盖或让其中一条构建被标记失败。只有自动构建已明确失败、且需要恢复线上服务时，才从 `site/` 目录执行 `npm run build && npx wrangler deploy`，随后仍要单独修复并重新验证 Git 自动部署。
+
 ## 详情弹窗与 URL
 
 文章和图片卡片始终保留真实详情链接，例如 `/articles/20260723-k7m2/` 和 `/images/20260723-p4x8/`。公开路径来自 frontmatter 的不可变 `contentId`，标题和发布日期之后可以调整，但不能重新生成 ID。完整决策见 [ADR-008](docs/decisions/ADR-008-stable-content-ids.md)。
