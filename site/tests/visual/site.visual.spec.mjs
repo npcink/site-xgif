@@ -26,6 +26,7 @@ async function openConfusedImageDialog(page) {
   await waitForImages(page);
   await page.locator('a[href="/images/20260707-6s1n/"][data-detail-link]').click();
   await expect(page.getByRole("dialog", { name: "这就给我整不会了" })).toBeVisible();
+  await waitForImages(page);
 }
 
 async function openSearchState(page, query) {
