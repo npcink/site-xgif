@@ -4,6 +4,8 @@ import { execFile } from "node:child_process";
 import { appendFile, mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { contentHash, diceSimilarity, normalizeImportText, parseFlomoZipData } from "./flomo-import.js";
+import { ensureR2Asset, getR2StorageConfig } from "./r2-storage.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..");
@@ -42,6 +44,8 @@ const target = {
   imageEntries: path.join(siteRoot, "src", "content", "images"),
   memeAssets: path.join(siteRoot, "public", "images", "memes"),
   userProvidedLedger: path.join(__dirname, "records", "user-provided-assets.jsonl"),
+  flomoImportLedger: path.join(__dirname, "records", "flomo-imports.jsonl"),
+  r2AssetLedger: path.join(__dirname, "records", "r2-assets.jsonl"),
 };
 
 const port = Number(process.env.PORT || 8787);
@@ -50,7 +54,10 @@ const maxImageBytes = Number(process.env.PUBLISHER_MAX_IMAGE_BYTES || 8 * 1024 *
 const minImageDimension = Number(process.env.PUBLISHER_MIN_IMAGE_DIMENSION || 160);
 const maxImageDimension = Number(process.env.PUBLISHER_MAX_IMAGE_DIMENSION || 6000);
 const aiTimeoutMs = Number(process.env.XGIF_AI_TIMEOUT_MS || 45_000);
+const maxImportZipBytes = Number(process.env.PUBLISHER_MAX_IMPORT_ZIP_BYTES || 10 * 1024 * 1024);
+const maxImportUncompressedBytes = Number(process.env.PUBLISHER_MAX_IMPORT_UNCOMPRESSED_BYTES || 50 * 1024 * 1024);
 const localSiteUrl = new URL("http://localhost:4321");
+const r2Storage = getR2StorageConfig({ env: process.env, siteRoot });
 
 const mimeTypes = new Map([
   [".html", "text/html; charset=utf-8"],
@@ -306,11 +313,13 @@ async function scanMarkdownFrontmatter(dir) {
 
   for (const file of files) {
     const content = await readFile(file, "utf8");
+    const parsed = splitFrontmatter(content);
     records.push({
       file,
       title: extractFrontmatterString(content, "title"),
       sourceUrl: extractFrontmatterString(content, "sourceUrl"),
       image: extractFrontmatterString(content, "image"),
+      body: parsed.body,
     });
   }
 
@@ -438,6 +447,175 @@ async function scanDuplicateArticle({ title, sourceUrl }) {
     }));
 }
 
+async function readFlomoImportHashes() {
+  try {
+    const records = (await readFile(target.flomoImportLedger, "utf8"))
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .map((line) => {
+        try { return JSON.parse(line); } catch { return null; }
+      })
+      .filter(Boolean);
+    return new Set(records.map((record) => String(record.contentHash || "")).filter(Boolean));
+  } catch {
+    return new Set();
+  }
+}
+
+function importZipOptions() {
+  return {
+    maxZipBytes: maxImportZipBytes,
+    maxUncompressedBytes: maxImportUncompressedBytes,
+  };
+}
+
+async function inspectFlomoImport(fileData) {
+  const items = parseFlomoZipData(fileData, importZipOptions());
+  const existing = await scanMarkdownFrontmatter(target.articles);
+  const importedHashes = await readFlomoImportHashes();
+  const seen = new Set();
+
+  const inspected = items.map((item) => {
+    const exactArticle = existing.find((record) => contentHash(record.body) === item.contentHash);
+    const alreadyImported = importedHashes.has(item.contentHash);
+    const repeatedInExport = seen.has(item.contentHash);
+    seen.add(item.contentHash);
+
+    let status = "ready";
+    let duplicate = null;
+    if (exactArticle || alreadyImported || repeatedInExport) {
+      status = "exact";
+      duplicate = {
+        level: "exact",
+        reason: exactArticle ? "正文与现有文章完全相同" : alreadyImported ? "这条 memo 已导入过" : "导出包内正文重复",
+        file: exactArticle ? path.relative(repoRoot, exactArticle.file) : "",
+        title: exactArticle?.title || "",
+        similarity: 1,
+      };
+    } else if (normalizeImportText(item.body).length >= 80) {
+      let closest = null;
+      for (const record of existing) {
+        if (normalizeImportText(record.body).length < 80) continue;
+        const similarity = diceSimilarity(item.body, record.body);
+        if (!closest || similarity > closest.similarity) closest = { record, similarity };
+      }
+      if (closest?.similarity >= 0.72) {
+        status = "similar";
+        duplicate = {
+          level: "similar",
+          reason: "与现有文章内容高度相似，请人工确认",
+          file: path.relative(repoRoot, closest.record.file),
+          title: closest.record.title,
+          similarity: Number(closest.similarity.toFixed(3)),
+        };
+      }
+    }
+    if (status === "ready" && item.needsReview) status = "review";
+
+    return {
+      ...item,
+      status,
+      duplicate,
+      selectedByDefault: status === "ready",
+    };
+  });
+
+  const counts = inspected.reduce((result, item) => {
+    result[item.status] += 1;
+    return result;
+  }, { ready: 0, review: 0, similar: 0, exact: 0 });
+
+  return {
+    items: inspected,
+    stats: {
+      total: inspected.length,
+      ...counts,
+      selectedByDefault: inspected.filter((item) => item.selectedByDefault).length,
+    },
+  };
+}
+
+function normalizeImportedArticle(item, override = {}) {
+  const title = clampText(override.title || item.title, 120);
+  const summary = clampText(override.summary || item.summary, 320);
+  const tags = normalizeList(override.tags?.length ? override.tags : item.tags)
+    .map((tag) => clampText(tag.replace(/^#/, ""), 20))
+    .filter(Boolean)
+    .slice(0, 6);
+  const note = clampText(override.note || item.note, 240);
+  const payload = {
+    title,
+    summary,
+    source: "原创",
+    sourceKind: "original",
+    sourceUrl: "",
+    tags: tags.length ? tags : ["随笔"],
+    pubDate: item.pubDate,
+    readTime: item.readTime,
+    note,
+    body: item.body,
+    featured: false,
+    draft: true,
+  };
+  validateArticleAttribution(payload);
+  if (!payload.tags.length) {
+    const error = new Error("导入文章至少需要一个标签。");
+    error.statusCode = 400;
+    throw error;
+  }
+  return payload;
+}
+
+async function importFlomoDrafts(payload) {
+  const inspection = await inspectFlomoImport(payload.fileData);
+  const selectedHashes = [...new Set(normalizeList(payload.selectedHashes))];
+  if (!selectedHashes.length) {
+    const error = new Error("请至少选择一条可导入内容。");
+    error.statusCode = 400;
+    throw error;
+  }
+  const selected = new Set(selectedHashes);
+  const overrides = payload.overrides && typeof payload.overrides === "object" ? payload.overrides : {};
+  const files = [];
+  const skipped = [];
+
+  await mkdir(target.articles, { recursive: true });
+  await mkdir(path.dirname(target.flomoImportLedger), { recursive: true });
+  for (const item of inspection.items) {
+    if (!selected.has(item.contentHash)) continue;
+    if (item.status === "exact") {
+      skipped.push({ contentHash: item.contentHash, reason: item.duplicate?.reason || "精确重复" });
+      continue;
+    }
+    const article = normalizeImportedArticle(item, overrides[item.contentHash]);
+    const baseName = `${article.pubDate}-${slugify(article.title)}`;
+    const filePath = await uniquePath(target.articles, baseName);
+    await writeFile(filePath, buildArticleMarkdown(article), "utf8");
+    const relativeFile = path.relative(repoRoot, filePath);
+    const importedAt = new Date().toISOString();
+    const ledgerRecord = {
+      schemaVersion: 1,
+      recordId: `xgif-flomo-${item.contentHash.slice(0, 16)}`,
+      provider: "flomo",
+      contentHash: item.contentHash,
+      recordedAt: item.recordedAt,
+      importedAt,
+      contentFile: relativeFile,
+      status: "draft",
+    };
+    await appendFile(target.flomoImportLedger, `${JSON.stringify(ledgerRecord)}\n`, "utf8");
+    files.push({ file: relativeFile, title: article.title, contentHash: item.contentHash });
+  }
+
+  return {
+    ok: true,
+    imported: files.length,
+    skipped,
+    files,
+    ledger: path.relative(repoRoot, target.flomoImportLedger),
+  };
+}
+
 async function scanDuplicateImage({ title, sha256, excludeFile }) {
   const records = await scanMarkdownFrontmatter(target.imageEntries);
   const normalizedTitle = normalizeText(title);
@@ -453,6 +631,7 @@ async function scanDuplicateImage({ title, sha256, excludeFile }) {
     }));
 
   const hashMatches = sha256 ? await findFilesByHash(target.memeAssets, sha256) : [];
+  const r2Matches = sha256 ? await findR2AssetsByHash(sha256) : [];
 
   return [
     ...titleMatches,
@@ -462,7 +641,29 @@ async function scanDuplicateImage({ title, sha256, excludeFile }) {
       image: "",
       reason: "图片文件重复",
     })),
+    ...r2Matches.map((record) => ({
+      file: record.contentFile || record.objectKey,
+      title: "",
+      image: record.publicUrl || "",
+      reason: "图片文件重复",
+    })),
   ];
+}
+
+async function readJsonLines(filePath) {
+  try {
+    return (await readFile(filePath, "utf8"))
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .map((line) => JSON.parse(line));
+  } catch (error) {
+    if (error?.code === "ENOENT") return [];
+    throw error;
+  }
+}
+
+async function findR2AssetsByHash(sha256) {
+  return (await readJsonLines(target.r2AssetLedger)).filter((record) => record.sha256 === sha256);
 }
 
 async function findFilesByHash(dir, sha256) {
@@ -632,17 +833,35 @@ async function createArticleSuggestion(payload) {
   }
 }
 
-function buildLegacyArticleMarkdown(payload) {
+function buildArticleMarkdown(payload) {
   const tags = normalizeList(payload.tags);
   const date = payload.pubDate || todayIso();
+  const sourceUrl = String(payload.sourceUrl || "").trim();
+  const sourceUrlLine = sourceUrl ? `sourceUrl: ${yamlString(sourceUrl)}\n` : "";
 
-  return `---\ntitle: ${yamlString(payload.title)}\nsummary: ${yamlString(payload.summary)}\nsource: ${yamlString(payload.source)}\nsourceUrl: ${yamlString(payload.sourceUrl)}\ntags: ${yamlArray(tags)}\npubDate: ${date}\nreadTime: ${yamlString(payload.readTime || "1 分钟")}\nnote: ${yamlString(payload.note || "")}\nfeatured: ${Boolean(payload.featured)}\ndraft: ${Boolean(payload.draft)}\n---\n\n${markdownBody(payload.body)}`;
+  return `---\ntitle: ${yamlString(payload.title)}\nsummary: ${yamlString(payload.summary)}\nsource: ${yamlString(payload.source)}\n${sourceUrlLine}sourceKind: ${yamlString(payload.sourceKind || "original")}\ntags: ${yamlArray(tags)}\npubDate: ${date}\nreadTime: ${yamlString(payload.readTime || "1 分钟")}\nnote: ${yamlString(payload.note || "")}\nfeatured: ${Boolean(payload.featured)}\ndraft: ${Boolean(payload.draft)}\n---\n\n${markdownBody(payload.body)}`;
 }
 
-function buildArticleMarkdown(payload) {
-  const sourceUrlLine = "\nsourceUrl: " + yamlString(payload.sourceUrl) + "\n";
-  const sourceKindLine = sourceUrlLine + "sourceKind: " + yamlString(payload.sourceKind || "original") + "\n";
-  return buildLegacyArticleMarkdown(payload).replace(sourceUrlLine, sourceKindLine);
+function validateArticleAttribution(payload) {
+  validateRequired(payload, ["title", "summary", "source"]);
+  const sourceKind = String(payload.sourceKind || "original").trim();
+  if (!["original", "publication", "editorial"].includes(sourceKind)) {
+    const error = new Error("文章来源类型无效。");
+    error.statusCode = 400;
+    throw error;
+  }
+  if (sourceKind !== "original") validateRequired(payload, ["sourceUrl"]);
+  if (String(payload.sourceUrl || "").trim()) {
+    try {
+      const sourceUrl = new URL(payload.sourceUrl);
+      if (!["http:", "https:"].includes(sourceUrl.protocol)) throw new Error();
+    } catch {
+      const error = new Error("来源链接必须是有效的 http 或 https 地址。");
+      error.statusCode = 400;
+      throw error;
+    }
+  }
+  return { ...payload, sourceKind };
 }
 
 function qualityIssue(level, message) {
@@ -655,7 +874,17 @@ async function checkArticleQuality(payload) {
   if (!String(payload.title || "").trim()) issues.push(qualityIssue("error", "缺少标题。"));
   if (!String(payload.summary || "").trim()) issues.push(qualityIssue("error", "缺少摘要。"));
   if (!String(payload.source || "").trim()) issues.push(qualityIssue("error", "缺少来源名称。"));
-  try { new URL(String(payload.sourceUrl || "")); } catch { issues.push(qualityIssue("error", "来源链接不是有效网址。")); }
+  const sourceKind = String(payload.sourceKind || "original");
+  if (sourceKind !== "original" && !String(payload.sourceUrl || "").trim()) {
+    issues.push(qualityIssue("error", "外部来源文章必须填写来源链接。"));
+  } else if (String(payload.sourceUrl || "").trim()) {
+    try {
+      const sourceUrl = new URL(String(payload.sourceUrl));
+      if (!["http:", "https:"].includes(sourceUrl.protocol)) throw new Error();
+    } catch {
+      issues.push(qualityIssue("error", "来源链接不是有效网址。"));
+    }
+  }
   if (tags.length === 0) issues.push(qualityIssue("error", "至少需要一个标签。"));
   if (tags.length > 6) issues.push(qualityIssue("warning", "标签较多，建议控制在 2 到 6 个。"));
   if (String(payload.summary || "").trim().length > 320) issues.push(qualityIssue("warning", "摘要较长，列表页阅读体验可能变差。"));
@@ -835,8 +1064,7 @@ async function updateManagedContent(type, file, payload) {
   let markdown = "";
 
   if (type === "article") {
-    validateRequired(payload, ["title", "summary", "source", "sourceUrl"]);
-    markdown = buildArticleMarkdown(payload);
+    markdown = buildArticleMarkdown(validateArticleAttribution(payload));
   } else {
     const imagePayload = normalizeImageAttribution({ ...existing.data, ...payload, image: payload.image || existing.data.image });
     validateRequired(imagePayload, ["title", "description"]);
@@ -878,7 +1106,26 @@ async function commitAndMaybePush(files, message, shouldPush) {
   return { relativeFiles, commitSha, push };
 }
 
-async function recordUserProvidedAsset({ payload, asset, entryPath, assetPath }) {
+async function recordR2Asset({ asset, entryPath, upload }) {
+  const record = {
+    schemaVersion: 1,
+    storage: "cloudflare-r2",
+    bucket: r2Storage.bucket,
+    objectKey: upload.objectKey,
+    publicUrl: upload.publicUrl,
+    sha256: asset.sha256,
+    mime: asset.mime,
+    byteLength: asset.byteLength,
+    uploadedAt: new Date().toISOString(),
+    contentFile: path.relative(repoRoot, entryPath),
+  };
+
+  await mkdir(path.dirname(target.r2AssetLedger), { recursive: true });
+  await appendFile(target.r2AssetLedger, `${JSON.stringify(record)}\n`, "utf8");
+  return target.r2AssetLedger;
+}
+
+async function recordUserProvidedAsset({ payload, asset, entryPath, assetPath, assetUrl, objectKey }) {
   if (payload.sourceKind !== "user_provided") return "";
 
   const confirmedAt = String(payload.confirmedAt || payload.pubDate || todayIso());
@@ -889,7 +1136,9 @@ async function recordUserProvidedAsset({ payload, asset, entryPath, assetPath })
     provider: "用户确认",
     authorization: "允许在 xgif.cn 公开发布",
     contentFile: path.relative(repoRoot, entryPath),
-    assetFile: path.relative(repoRoot, assetPath),
+    ...(assetPath ? { assetFile: path.relative(repoRoot, assetPath) } : {}),
+    ...(assetUrl ? { assetUrl } : {}),
+    ...(objectKey ? { objectKey } : {}),
     sha256: asset.sha256,
     publicScope: payload.public !== false && !payload.draft ? "xgif.cn public" : "draft",
   };
@@ -914,10 +1163,15 @@ async function handleApi(req, res) {
         available: getAiConfig().available,
         model: getAiConfig().model || null,
       },
+      imageStorage: r2Storage.enabled
+        ? { provider: "cloudflare-r2", bucket: r2Storage.bucket, publicBaseUrl: r2Storage.publicBaseUrl }
+        : { provider: "local" },
       target: {
         articles: path.relative(repoRoot, target.articles),
         images: path.relative(repoRoot, target.imageEntries),
         memeAssets: path.relative(repoRoot, target.memeAssets),
+        flomoImportLedger: path.relative(repoRoot, target.flomoImportLedger),
+        r2AssetLedger: path.relative(repoRoot, target.r2AssetLedger),
       },
     });
     return;
@@ -976,6 +1230,18 @@ async function handleApi(req, res) {
     return;
   }
 
+  if (pathname === "/api/import/flomo/inspect" && req.method === "POST") {
+    const payload = await readJson(req);
+    sendJson(res, 200, await inspectFlomoImport(payload.fileData));
+    return;
+  }
+
+  if (pathname === "/api/import/flomo/apply" && req.method === "POST") {
+    const payload = await readJson(req);
+    sendJson(res, 200, await importFlomoDrafts(payload));
+    return;
+  }
+
   if (pathname === "/api/ai/article-suggestion" && req.method === "POST") {
     const payload = await readJson(req);
     if (![payload.title, payload.sourceUrl, payload.body].some((value) => String(value || "").trim())) {
@@ -1018,8 +1284,7 @@ async function handleApi(req, res) {
   }
 
   if (pathname === "/api/publish/article" && req.method === "POST") {
-    const payload = await readJson(req);
-    validateRequired(payload, ["title", "summary", "source", "sourceUrl"]);
+    const payload = validateArticleAttribution(await readJson(req));
     const duplicates = await scanDuplicateArticle(payload);
 
     await mkdir(target.articles, { recursive: true });
@@ -1058,13 +1323,20 @@ async function handleApi(req, res) {
     const date = payload.pubDate || todayIso();
     const year = date.slice(0, 4);
     const imageBaseName = `${date}-${slugify(payload.slug || payload.title)}`;
-    const assetDir = path.join(target.memeAssets, year);
-    await mkdir(assetDir, { recursive: true });
+    let assetPath = "";
+    let r2Upload = null;
+    let publicImagePath = "";
+    if (r2Storage.enabled) {
+      r2Upload = await ensureR2Asset({ asset, config: r2Storage, siteRoot });
+      publicImagePath = r2Upload.publicUrl;
+    } else {
+      const assetDir = path.join(target.memeAssets, year);
+      await mkdir(assetDir, { recursive: true });
+      assetPath = await uniquePath(assetDir, imageBaseName, asset.extension);
+      await writeFile(assetPath, asset.buffer);
+      publicImagePath = `/${path.relative(path.join(siteRoot, "public"), assetPath).split(path.sep).join("/")}`;
+    }
 
-    const assetPath = await uniquePath(assetDir, imageBaseName, asset.extension);
-    await writeFile(assetPath, asset.buffer);
-
-    const publicImagePath = `/${path.relative(path.join(siteRoot, "public"), assetPath).split(path.sep).join("/")}`;
     await mkdir(target.imageEntries, { recursive: true });
     const entryPath = await uniquePath(target.imageEntries, imageBaseName);
     await writeFile(
@@ -1075,17 +1347,28 @@ async function handleApi(req, res) {
       }),
       "utf8",
     );
-    const ledgerPath = await recordUserProvidedAsset({ payload, asset, entryPath, assetPath });
+    const r2LedgerPath = r2Upload ? await recordR2Asset({ asset, entryPath, upload: r2Upload }) : "";
+    const ledgerPath = await recordUserProvidedAsset({
+      payload,
+      asset,
+      entryPath,
+      assetPath,
+      assetUrl: r2Upload?.publicUrl,
+      objectKey: r2Upload?.objectKey,
+    });
+
+    const generatedFiles = [assetPath, entryPath, r2LedgerPath, ledgerPath].filter(Boolean);
 
     const git = payload.commit
-      ? await commitAndMaybePush([assetPath, entryPath, ...(ledgerPath ? [ledgerPath] : [])], `Add image: ${payload.title}`, Boolean(payload.push))
+      ? await commitAndMaybePush(generatedFiles, `Add image: ${payload.title}`, Boolean(payload.push))
       : null;
 
     sendJson(res, 200, {
       ok: true,
       file: path.relative(repoRoot, entryPath),
-      image: path.relative(repoRoot, assetPath),
+      image: assetPath ? path.relative(repoRoot, assetPath) : r2Upload.objectKey,
       publicImagePath,
+      storage: r2Upload ? "cloudflare-r2" : "local",
       sha256: asset.sha256,
       asset: {
         mime: asset.mime,
@@ -1095,6 +1378,7 @@ async function handleApi(req, res) {
         ratio: asset.ratio,
       },
       ledger: ledgerPath ? path.relative(repoRoot, ledgerPath) : "",
+      r2Ledger: r2LedgerPath ? path.relative(repoRoot, r2LedgerPath) : "",
       git,
       duplicates,
     });

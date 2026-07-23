@@ -17,15 +17,15 @@ function field(text, name) {
   return text.match(new RegExp(`^${name}:\\s*[\"']?([^\\n\"']+)`, "m"))?.[1]?.trim();
 }
 
-test("published articles do not reuse the same original source", async () => {
+test("external articles retain unique source URLs while original articles may omit one", async () => {
   const articles = await frontmatter("articles");
-  const originals = articles
-    .filter(({ text }) => field(text, "sourceKind") !== "publication" && field(text, "sourceKind") !== "editorial")
+  const external = articles
+    .filter(({ text }) => ["publication", "editorial"].includes(field(text, "sourceKind")))
     .map(({ file, text }) => ({ file, sourceUrl: field(text, "sourceUrl") }));
-  const urls = originals.map(({ sourceUrl }) => sourceUrl);
+  const urls = external.map(({ sourceUrl }) => sourceUrl);
 
-  assert.ok(urls.every(Boolean), "每篇原文必须保留 sourceUrl");
-  assert.equal(new Set(urls).size, urls.length, "同一原文只能发布一次");
+  assert.ok(urls.every(Boolean), "外部来源文章必须保留 sourceUrl");
+  assert.equal(new Set(urls).size, urls.length, "同一外部来源只能发布一次");
 });
 
 test("images include attribution and license metadata", async () => {

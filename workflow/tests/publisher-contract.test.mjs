@@ -45,3 +45,47 @@ test("publisher writes the metadata required by Astro collections", async () => 
   assert.match(server, /function recordUserProvidedAsset/);
   assert.match(server, /user-provided-assets\.jsonl/);
 });
+
+test("publisher imports flomo exports locally as deduplicated drafts", async () => {
+  const [server, importer, html, app, css, readme] = await Promise.all([
+    read("server.js"),
+    read("flomo-import.js"),
+    read("public/index.html"),
+    read("public/app.js"),
+    read("public/styles.css"),
+    read("README.md"),
+  ]);
+
+  assert.match(html, /data-tab="import"/);
+  assert.match(html, /id="flomo-file"/);
+  assert.match(server, /\/api\/import\/flomo\/inspect/);
+  assert.match(server, /\/api\/import\/flomo\/apply/);
+  assert.match(server, /flomo-imports\.jsonl/);
+  assert.match(server, /draft: true/);
+  assert.match(importer, /normalizeImportText/);
+  assert.match(importer, /inflateRawSync/);
+  assert.match(html, /AI 整理选中项/);
+  assert.match(app, /aiOrganizeSelectedImports/);
+  assert.match(css, /\.import-list/);
+  assert.match(readme, /原始 ZIP 不会保存到仓库/);
+});
+
+test("publisher keeps R2 optional and Git metadata authoritative", async () => {
+  const [server, storage, envExample, readme, records] = await Promise.all([
+    read("server.js"),
+    read("r2-storage.js"),
+    read(".env.example"),
+    read("README.md"),
+    read("records/README.md"),
+  ]);
+
+  assert.match(server, /ensureR2Asset/);
+  assert.match(server, /r2-assets\.jsonl/);
+  assert.match(server, /cloudflare-r2/);
+  assert.match(storage, /memes\/\$\{hash\}/);
+  assert.match(storage, /max-age=31536000, immutable/);
+  assert.match(storage, /--remote/);
+  assert.match(envExample, /XGIF_R2_ENABLED="false"/);
+  assert.match(readme, /已有 `site\/public\/images\/memes\/` 图片不会自动迁移/);
+  assert.match(records, /R2 只保存图片字节/);
+});

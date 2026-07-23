@@ -13,8 +13,15 @@ const libraryDetail = $("#library-detail");
 const libraryResult = $("#library-result");
 const libraryEdit = $("#library-edit");
 const libraryOpen = $("#library-open");
+const flomoFileInput = $("#flomo-file");
+const flomoReview = $("#flomo-review");
+const flomoStats = $("#flomo-stats");
+const flomoList = $("#flomo-list");
+const flomoResult = $("#flomo-result");
 let selectedImage = null;
 let activeContent = null;
+let flomoFileData = "";
+let flomoInspection = null;
 let articlePreviewMode = "card";
 let imagePreviewMode = "card";
 
@@ -110,6 +117,15 @@ function syncImageAttribution() {
   for (const field of $$('[data-external-attribution]', imageForm)) field.hidden = isUserProvided;
   for (const field of $$('[data-user-provided-field]', imageForm)) field.hidden = !isUserProvided;
   $("#user-provided-note").hidden = !isUserProvided;
+}
+
+function syncArticleAttribution() {
+  const sourceKind = $('[name="sourceKind"]', articleForm).value;
+  const source = $('[name="source"]', articleForm);
+  const sourceUrl = $('[name="sourceUrl"]', articleForm);
+  sourceUrl.required = sourceKind !== "original";
+  sourceUrl.placeholder = sourceKind === "original" ? "原创内容可留空" : "https://example.com/article";
+  if (sourceKind === "original" && !source.value.trim()) source.value = "原创";
 }
 
 function showResult(node, data) {
@@ -233,6 +249,118 @@ function imagePayload() {
   return data;
 }
 
+const importStatusLabels = {
+  ready: "可直接导入",
+  review: "需要整理",
+  similar: "疑似重复",
+  exact: "精确重复",
+};
+
+function renderFlomoStats(stats) {
+  const entries = [
+    ["总计", stats.total],
+    ["可直接导入", stats.ready],
+    ["需要整理", stats.review],
+    ["疑似重复", stats.similar],
+    ["精确重复", stats.exact],
+  ];
+  flomoStats.innerHTML = entries.map(([label, value]) => `
+    <div class="import-stat"><strong>${value}</strong><span>${label}</span></div>`).join("");
+}
+
+function renderFlomoInspection(inspection) {
+  flomoInspection = inspection;
+  renderFlomoStats(inspection.stats);
+  flomoList.innerHTML = inspection.items.map((item) => {
+    const duplicate = item.duplicate
+      ? `<p class="import-duplicate">${escapeHtml(item.duplicate.reason)}${item.duplicate.title ? `：${escapeHtml(item.duplicate.title)}` : ""}${item.duplicate.similarity < 1 ? `（相似度 ${Math.round(item.duplicate.similarity * 100)}%）` : ""}</p>`
+      : "";
+    return `
+      <article class="import-item" data-import-hash="${item.contentHash}" data-status="${item.status}">
+        <div class="import-item-heading">
+          <label class="import-item-select">
+            <input type="checkbox" data-import-select ${item.selectedByDefault ? "checked" : ""} ${item.status === "exact" ? "disabled" : ""} />
+            <span>${escapeHtml(item.title)}</span>
+          </label>
+          <span class="import-status">${importStatusLabels[item.status]}</span>
+        </div>
+        <div class="import-item-meta">${escapeHtml(item.recordedAt)} · ${item.charCount} 字 · ${escapeHtml(item.readTime)}</div>
+        ${duplicate}
+        <div class="import-fields">
+          <label>候选标题<input data-import-field="title" value="${escapeHtml(item.title)}" /></label>
+          <label>标签<input data-import-field="tags" value="${escapeHtml(item.tags.join(", "))}" /></label>
+          <label class="import-summary-field">摘要<textarea rows="2" data-import-field="summary">${escapeHtml(item.summary)}</textarea></label>
+        </div>
+        <details class="import-body"><summary>查看导入正文</summary><pre>${escapeHtml(item.body)}</pre></details>
+      </article>`;
+  }).join("");
+  flomoReview.hidden = false;
+}
+
+function selectedImportItems() {
+  if (!flomoInspection) return [];
+  const selected = new Set($$("[data-import-select]:checked", flomoList).map((input) => input.closest("[data-import-hash]").dataset.importHash));
+  return flomoInspection.items.filter((item) => selected.has(item.contentHash));
+}
+
+function collectImportOverrides() {
+  return Object.fromEntries($$("[data-import-hash]", flomoList).map((item) => {
+    const value = {};
+    for (const field of $$('[data-import-field]', item)) value[field.dataset.importField] = field.value;
+    return [item.dataset.importHash, value];
+  }));
+}
+
+async function inspectFlomoFile() {
+  const file = flomoFileInput.files[0];
+  if (!file) throw new Error("请先选择 flomo 导出的 ZIP 文件。");
+  if (!file.name.toLowerCase().endsWith(".zip")) throw new Error("只支持 flomo 导出的 ZIP 文件。");
+  const rawDataUrl = await fileToDataUrl(file);
+  flomoFileData = rawDataUrl.replace(/^data:[^;]*;/, "data:application/zip;");
+  const inspection = await api("/api/import/flomo/inspect", { fileData: flomoFileData });
+  renderFlomoInspection(inspection);
+  showResult(flomoResult, `已解析 ${inspection.stats.total} 条 memo。默认选中 ${inspection.stats.selectedByDefault} 条，其余请人工确认。`);
+}
+
+async function aiOrganizeSelectedImports() {
+  const items = selectedImportItems();
+  if (!items.length) throw new Error("请先选择需要 AI 整理的内容。");
+  if (!window.confirm(`将把选中的 ${items.length} 条正文发送给当前配置的 AI 服务，用于生成标题、摘要和标签。是否继续？`)) return;
+  const overrides = collectImportOverrides();
+  let completed = 0;
+  for (const item of items) {
+    showResult(flomoResult, `AI 正在整理 ${completed + 1} / ${items.length}…`);
+    const suggestion = (await api("/api/ai/article-suggestion", {
+      title: overrides[item.contentHash]?.title || item.title,
+      source: "原创",
+      sourceUrl: "",
+      body: item.body,
+    })).suggestion;
+    const card = $(`[data-import-hash="${item.contentHash}"]`, flomoList);
+    for (const field of ["title", "summary", "tags"]) {
+      const input = $(`[data-import-field="${field}"]`, card);
+      const value = Array.isArray(suggestion[field]) ? suggestion[field].join(", ") : suggestion[field];
+      if (input && value) input.value = value;
+    }
+    completed += 1;
+  }
+  showResult(flomoResult, `AI 已整理 ${completed} 条内容。请复核后再生成草稿。`);
+}
+
+async function applyFlomoImport() {
+  const items = selectedImportItems();
+  if (!items.length) throw new Error("请至少选择一条内容。");
+  if (!window.confirm(`将生成 ${items.length} 篇本地 Markdown 草稿，不会提交或推送。是否继续？`)) return;
+  const result = await api("/api/import/flomo/apply", {
+    fileData: flomoFileData,
+    selectedHashes: items.map((item) => item.contentHash),
+    overrides: collectImportOverrides(),
+  });
+  showResult(flomoResult, `已生成 ${result.imported} 篇草稿。${result.skipped.length ? `另有 ${result.skipped.length} 条因重复跳过。` : ""}\n${result.files.map((item) => item.file).join("\n")}`);
+  await loadLibrary();
+  renderFlomoInspection(await api("/api/import/flomo/inspect", { fileData: flomoFileData }));
+}
+
 function formatAsset(asset) {
   if (!asset) return "";
   return `文件：${asset.mime.replace("image/", "").toUpperCase()} · ${asset.width} × ${asset.height} · ${(asset.byteLength / 1024).toFixed(1)} KB · 建议 ${asset.ratio}`;
@@ -292,6 +420,7 @@ function openActiveContent() {
   const { type, file, data, body } = activeContent;
   if (type === "article") {
     setFormValues(articleForm, { ...data, tags: list(data.tags).join(", "), body });
+    syncArticleAttribution();
     articleDetails.open = true;
     setEditing(articleForm, { file });
     updateArticlePreview();
@@ -310,8 +439,8 @@ function openActiveContent() {
 for (const tab of $$(".tab")) tab.addEventListener("click", () => switchTab(tab.dataset.tab));
 
 for (const input of $$("input, textarea, select", articleForm)) {
-  input.addEventListener("input", () => { updateArticlePreview(); saveLocalDraft(articleForm); });
-  input.addEventListener("change", () => { updateArticlePreview(); saveLocalDraft(articleForm); });
+  input.addEventListener("input", () => { syncArticleAttribution(); updateArticlePreview(); saveLocalDraft(articleForm); });
+  input.addEventListener("change", () => { syncArticleAttribution(); updateArticlePreview(); saveLocalDraft(articleForm); });
 }
 
 for (const input of $$("input, textarea, select", imageForm)) {
@@ -459,6 +588,50 @@ $("#retry-push").addEventListener("click", async () => {
   } catch (error) { showError(libraryResult, error); }
 });
 
+flomoFileInput.addEventListener("change", () => {
+  flomoFileData = "";
+  flomoInspection = null;
+  flomoReview.hidden = true;
+  clearResult(flomoResult);
+});
+
+$("#flomo-inspect").addEventListener("click", async (event) => {
+  const button = event.currentTarget;
+  button.disabled = true;
+  button.textContent = "解析中…";
+  showResult(flomoResult, "正在本机解析 ZIP 并与现有文章查重…");
+  try { await inspectFlomoFile(); }
+  catch (error) { showError(flomoResult, error); }
+  finally { button.disabled = false; button.textContent = "解析并检查重复"; }
+});
+
+$("#flomo-select-ready").addEventListener("click", () => {
+  for (const item of $$("[data-import-hash]", flomoList)) {
+    const checkbox = $("[data-import-select]", item);
+    checkbox.checked = item.dataset.status === "ready";
+  }
+});
+
+$("#flomo-clear-selection").addEventListener("click", () => {
+  for (const checkbox of $$("[data-import-select]", flomoList)) checkbox.checked = false;
+});
+
+$("#flomo-ai-selected").addEventListener("click", async (event) => {
+  const button = event.currentTarget;
+  button.disabled = true;
+  try { await aiOrganizeSelectedImports(); }
+  catch (error) { showError(flomoResult, error); }
+  finally { button.disabled = false; }
+});
+
+$("#flomo-import-selected").addEventListener("click", async (event) => {
+  const button = event.currentTarget;
+  button.disabled = true;
+  try { await applyFlomoImport(); }
+  catch (error) { showError(flomoResult, error); }
+  finally { button.disabled = false; }
+});
+
 async function loadStatus() {
   try {
     const status = await api("/api/status");
@@ -470,6 +643,7 @@ async function loadStatus() {
 
 restoreLocalDraft(articleForm, $("#article-editor-state"));
 restoreLocalDraft(imageForm, $("#image-editor-state"));
+syncArticleAttribution();
 syncImageAttribution();
 updateArticlePreview();
 updateImagePreview();

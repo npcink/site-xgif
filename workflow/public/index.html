@@ -19,6 +19,7 @@
       <nav class="tabs" aria-label="发布类型">
         <button class="tab active" data-tab="article" type="button">发布文章</button>
         <button class="tab" data-tab="image" type="button">发布图片</button>
+        <button class="tab" data-tab="import" type="button">批量导入</button>
         <button class="tab" data-tab="library" type="button">内容管理</button>
       </nav>
 
@@ -39,7 +40,7 @@
             </label>
             <label>
               来源链接
-              <input name="sourceUrl" required type="url" placeholder="https://example.com/article" />
+              <input name="sourceUrl" type="url" placeholder="原创内容可留空" />
             </label>
           </div>
 
@@ -69,7 +70,7 @@
               <label>
                 链接类型
                 <select name="sourceKind">
-                  <option value="original">原文</option>
+                  <option value="original">原创内容</option>
                   <option value="publication">来源站</option>
                   <option value="editorial">编辑手记</option>
                 </select>
@@ -89,6 +90,7 @@
           </div>
 
           <datalist id="article-source-options">
+            <option value="原创"></option>
             <option value="知乎"></option>
             <option value="煎蛋"></option>
             <option value="少数派"></option>
@@ -265,6 +267,43 @@
           <article class="image-detail-preview" id="image-detail-preview" hidden></article>
           <pre class="result" id="image-result"></pre>
         </aside>
+      </section>
+
+      <section class="panel import-panel" id="import-panel">
+        <div class="import-workspace">
+          <div class="editor-heading">
+            <div>
+              <p class="eyebrow">FLOMO HTML EXPORT</p>
+              <h2>批量导入文章草稿</h2>
+            </div>
+            <span class="privacy-badge">仅在本机处理</span>
+          </div>
+          <p class="form-note">上传 flomo 官方导出的 ZIP。原始文件不会写入仓库或上传 Cloudflare；只有你确认的内容会生成 Markdown 草稿。</p>
+
+          <div class="import-upload">
+            <label class="span-2">
+              flomo 导出 ZIP
+              <input id="flomo-file" type="file" accept=".zip,application/zip,application/x-zip-compressed" />
+            </label>
+            <button class="primary" id="flomo-inspect" type="button">解析并检查重复</button>
+          </div>
+
+          <div id="flomo-review" hidden>
+            <div class="import-stats" id="flomo-stats"></div>
+            <div class="import-toolbar">
+              <div>
+                <button id="flomo-select-ready" type="button">选择可直接导入</button>
+                <button id="flomo-clear-selection" type="button">清空选择</button>
+              </div>
+              <div>
+                <button class="ai-action" id="flomo-ai-selected" type="button">AI 整理选中项</button>
+                <button class="primary" id="flomo-import-selected" type="button">生成选中草稿</button>
+              </div>
+            </div>
+            <div class="import-list" id="flomo-list"></div>
+          </div>
+          <pre class="result" id="flomo-result" hidden></pre>
+        </div>
       </section>
 
       <section class="panel library-panel" id="library-panel">
