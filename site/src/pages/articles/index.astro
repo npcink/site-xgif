@@ -26,10 +26,17 @@ const sources = Array.from(new Set(articles.map((entry) => entry.data.source)));
         {sources.map((source) => <button data-filter={source.toLowerCase()}>{source}</button>)}
       </div>
     </div>
-    <p class="filter-count"><span data-visible-count>{articles.length}</span> 篇摘要</p>
+    <p class="filter-count" aria-live="polite">
+      <span data-page-summary>显示 1–{Math.min(12, articles.length)}，共 </span><span data-visible-count>{articles.length}</span> 篇摘要
+    </p>
     <div class="article-grid" data-filter-list>
       {articles.map((article, index) => <ArticleCard article={article} index={index} />)}
     </div>
+    <nav class="archive-pagination" data-pagination data-page-size="12" aria-label="文章分页" hidden>
+      <button type="button" data-page-prev>上一页</button>
+      <div data-page-numbers></div>
+      <button type="button" data-page-next>下一页</button>
+    </nav>
     <div class="empty-state" data-empty hidden>
       <span>¯\_(ツ)_/¯</span><h2>暂时没有匹配的文章</h2><p>换个更短的关键词试试。</p>
     </div>

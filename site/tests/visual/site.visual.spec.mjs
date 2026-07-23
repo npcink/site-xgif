@@ -86,9 +86,9 @@ test("search empty state matches the approved visual baseline", async ({ page },
 });
 
 test("article detail matches the approved visual baseline", async ({ page }, testInfo) => {
-  await page.goto("/articles/how-memes-speak/", { waitUntil: "networkidle" });
+  await page.goto("/articles/2026-07-10-海边旧事与父亲的记忆/", { waitUntil: "networkidle" });
   await waitForImages(page);
-  await expect(page.getByRole("heading", { name: "一张梗图，是怎样成为群聊通用语的" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "海边旧事与父亲的记忆" })).toBeVisible();
 
   await expect(page).toHaveScreenshot(`article-detail-${testInfo.project.name}.png`, {
     animations: "disabled",

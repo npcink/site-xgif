@@ -1,10 +1,14 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { createServer } from "node:http";
 import { execFile } from "node:child_process";
-import { appendFile, mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readdir, readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { inferArticleSourceName } from "./article-source.js";
+import { auditContentLibrary } from "./content-audit.js";
 import { contentHash, diceSimilarity, normalizeImportText, parseFlomoZipData } from "./flomo-import.js";
+import { LocalContentBackup } from "./local-content-backup.js";
+import { LocalDataStore } from "./local-data-store.js";
 import { ensureR2Asset, getR2StorageConfig } from "./r2-storage.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -46,7 +50,11 @@ const target = {
   userProvidedLedger: path.join(__dirname, "records", "user-provided-assets.jsonl"),
   flomoImportLedger: path.join(__dirname, "records", "flomo-imports.jsonl"),
   r2AssetLedger: path.join(__dirname, "records", "r2-assets.jsonl"),
+  trashContent: path.join(__dirname, "trash", "content"),
+  trashLedger: path.join(__dirname, "trash", "manifest.jsonl"),
 };
+const localDataStore = new LocalDataStore({ repoRoot, workflowRoot: __dirname });
+const localContentBackup = new LocalContentBackup({ repoRoot, workflowRoot: __dirname });
 
 const port = Number(process.env.PORT || 8787);
 const maxBodyBytes = Number(process.env.PUBLISHER_MAX_BODY_BYTES || 50 * 1024 * 1024);
@@ -56,8 +64,11 @@ const maxImageDimension = Number(process.env.PUBLISHER_MAX_IMAGE_DIMENSION || 60
 const aiTimeoutMs = Number(process.env.XGIF_AI_TIMEOUT_MS || 45_000);
 const maxImportZipBytes = Number(process.env.PUBLISHER_MAX_IMPORT_ZIP_BYTES || 10 * 1024 * 1024);
 const maxImportUncompressedBytes = Number(process.env.PUBLISHER_MAX_IMPORT_UNCOMPRESSED_BYTES || 50 * 1024 * 1024);
-const localSiteUrl = new URL("http://localhost:4321");
+const localSiteUrl = new URL("http://127.0.0.1:4321");
+const publicSiteUrl = new URL("https://www.xgif.cn");
 const r2Storage = getR2StorageConfig({ env: process.env, siteRoot });
+const livePublicationCache = new Map();
+const livePublicationCacheTtlMs = 60_000;
 
 const mimeTypes = new Map([
   [".html", "text/html; charset=utf-8"],
@@ -275,6 +286,54 @@ async function pathExists(filePath) {
   }
 }
 
+async function writeJsonAtomic(filePath, value) {
+  await mkdir(path.dirname(filePath), { recursive: true });
+  const temporaryPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+  await writeFile(temporaryPath, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+  await rename(temporaryPath, filePath);
+}
+
+async function refreshLocalIndexes(action, details = {}) {
+  const warnings = [];
+  try {
+    await localDataStore.rebuildAll();
+    if (action) localDataStore.recordOperation(action, details);
+  } catch (error) {
+    warnings.push(`内容文件已经保存，但本地 SQLite 索引刷新失败：${error.message}`);
+  }
+  try {
+    await localContentBackup.snapshot(`Content change: ${action || "update"}`);
+  } catch (error) {
+    warnings.push(`内容文件已经保存，但本地私有 Git 快照失败：${error.message}`);
+  }
+  return warnings.join("\n");
+}
+
+function localDataStatus() {
+  try {
+    return localDataStore.getStatus();
+  } catch (error) {
+    return {
+      ok: false,
+      database: path.relative(repoRoot, localDataStore.databasePath),
+      error: `SQLite 索引暂不可用：${error.message}`,
+      recovery: "重启发布台会隔离损坏数据库并从 Markdown 自动重建。",
+    };
+  }
+}
+
+async function localContentBackupStatus() {
+  try {
+    return await localContentBackup.status();
+  } catch (error) {
+    return {
+      ready: false,
+      gitDir: path.relative(repoRoot, localContentBackup.gitDir),
+      error: `本机私有内容快照暂不可用：${error.message}`,
+    };
+  }
+}
+
 async function uniquePath(dir, baseName, ext = ".md") {
   let filePath = path.join(dir, `${baseName}${ext}`);
   let index = 2;
@@ -362,16 +421,29 @@ function managedDirectory(type) {
   throw error;
 }
 
-function publicContentUrl(type, filePath) {
+function contentRoute(type, filePath, { preview = false } = {}) {
   const directory = managedDirectory(type);
   const relativeId = path.relative(directory, filePath).replace(/\.(md|mdx)$/i, "");
   const routeType = type === "article" ? "articles" : "images";
-  const route = "/" + routeType + "/" + relativeId
+  const route = "/" + (preview ? "preview/" : "") + routeType + "/" + relativeId
     .split(path.sep)
     .map((segment) => encodeURIComponent(segment))
     .join("/") + "/";
 
-  return new URL(route, localSiteUrl).href;
+  return route;
+}
+
+function publicContentUrl(type, filePath) {
+  return new URL(contentRoute(type, filePath), localSiteUrl).href;
+}
+
+function previewContentUrl(type, filePath) {
+  if (type !== "article") return "";
+  return new URL(contentRoute(type, filePath, { preview: true }), localSiteUrl).href;
+}
+
+function liveContentUrl(type, filePath) {
+  return new URL(contentRoute(type, filePath), publicSiteUrl).href;
 }
 
 function resolveManagedFile(type, relativeFile) {
@@ -404,12 +476,145 @@ async function listContent(type = "all") {
         draft: Boolean(parsed.data.draft),
         public: parsed.data.public !== false,
         publicUrl: publicContentUrl(kind, file),
+        previewUrl: previewContentUrl(kind, file),
         bodyExcerpt: parsed.body.replace(/\s+/g, " ").slice(0, 140),
       });
     }
   }
 
   return items.sort((left, right) => String(right.pubDate).localeCompare(String(left.pubDate)));
+}
+
+function parseGitPathSet(output) {
+  return new Set(String(output || "").split("\0").filter(Boolean));
+}
+
+function parseGitStatusPathSet(output) {
+  return new Set(
+    String(output || "")
+      .split("\0")
+      .filter((record) => /^[ MADRCU?!]{2} /.test(record))
+      .map((record) => record.slice(3)),
+  );
+}
+
+async function getContentWorkflowStates(items) {
+  const contentDirectories = [
+    path.relative(repoRoot, target.articles),
+    path.relative(repoRoot, target.imageEntries),
+  ];
+  let dirtyPaths = new Set();
+  let trackedPaths = new Set();
+  let aheadPaths = new Set();
+  let hasUpstream = false;
+
+  try {
+    const [status, tracked] = await Promise.all([
+      runGit(["status", "--porcelain=v1", "-z", "--untracked-files=all", "--", ...contentDirectories]),
+      runGit(["ls-files", "-z", "--", ...contentDirectories]),
+    ]);
+    dirtyPaths = parseGitStatusPathSet(status.stdout);
+    trackedPaths = parseGitPathSet(tracked.stdout);
+  } catch {
+    // Individual items will fall back to a conservative pending state below.
+  }
+
+  try {
+    await runGit(["rev-parse", "--verify", "@{upstream}"]);
+    hasUpstream = true;
+    const ahead = await runGit(["diff", "--name-only", "-z", "@{upstream}..HEAD", "--", ...contentDirectories]);
+    aheadPaths = parseGitPathSet(ahead.stdout);
+  } catch {
+    hasUpstream = false;
+  }
+
+  return items.map((item) => {
+    if (item.draft || (item.type === "image" && !item.public)) {
+      return { ...item, workflow: workflowState("draft", "草稿", "只保存在本地内容库。") };
+    }
+    if (dirtyPaths.has(item.file) || !trackedPaths.has(item.file)) {
+      return { ...item, workflow: workflowState("pending_commit", "待提交", "本地内容尚未进入 Git 记录。") };
+    }
+    if (!hasUpstream || aheadPaths.has(item.file)) {
+      return { ...item, workflow: workflowState("pending_push", "待推送", "本地提交尚未进入远程分支。") };
+    }
+    return { ...item, workflow: workflowState("pending_deploy", "已同步", "远程已包含当前内容，详情中可继续核对线上页面。") };
+  });
+}
+
+async function getContentPublicationStates(items) {
+  const workflowItems = await getContentWorkflowStates(items);
+
+  return Promise.all(workflowItems.map(async (item) => {
+    if (item.workflow?.state === "draft") {
+      return {
+        ...item,
+        publication: workflowState("draft", "草稿", "只保存在本地内容库。"),
+      };
+    }
+
+    if (item.workflow?.state !== "pending_deploy") {
+      return {
+        ...item,
+        publication: workflowState("local", "本地已发布", "本地站点已经发布，尚未同步到云端当前版本。"),
+      };
+    }
+
+    const cacheKey = [
+      item.type,
+      item.file,
+      item.title,
+      item.summary,
+      item.bodyExcerpt,
+      item.pubDate,
+    ].join("\0");
+    const cached = livePublicationCache.get(cacheKey);
+    if (cached && Date.now() - cached.checkedAt < livePublicationCacheTtlMs) {
+      return { ...item, publication: cached.publication };
+    }
+
+    const filePath = resolveManagedFile(item.type, item.file);
+    const deployment = await verifyLiveContent(item.type, filePath, {
+      data: {
+        title: item.title,
+        summary: item.summary,
+        description: item.summary,
+        draft: false,
+        public: true,
+      },
+      body: item.bodyExcerpt,
+    });
+    const publication = deployment.state === "live"
+      ? workflowState("online", "云端已发布", "云端页面已经匹配当前内容。")
+      : workflowState("local", "本地已发布", deployment.description || "云端还不是当前版本。");
+    livePublicationCache.set(cacheKey, { checkedAt: Date.now(), publication });
+    return { ...item, publication };
+  }));
+}
+
+function contentStatusCounts(items) {
+  const counts = {
+    all: items.length,
+    draft: 0,
+    local: 0,
+    online: 0,
+  };
+  for (const item of items) {
+    const state = item.publication?.state || "local";
+    if (Object.hasOwn(counts, state)) counts[state] += 1;
+  }
+  return counts;
+}
+
+function sortManagedContent(items, sort) {
+  const sorted = [...items];
+  if (sort === "oldest") {
+    return sorted.sort((left, right) => String(left.pubDate).localeCompare(String(right.pubDate)));
+  }
+  if (sort === "title") {
+    return sorted.sort((left, right) => String(left.title).localeCompare(String(right.title), "zh-CN"));
+  }
+  return sorted.sort((left, right) => String(right.pubDate).localeCompare(String(left.pubDate)));
 }
 
 async function getGitStatus() {
@@ -429,12 +634,153 @@ async function getGitStatus() {
   return { branch, dirty, remote, canPush: Boolean(remote), pushError };
 }
 
-async function scanDuplicateArticle({ title, sourceUrl }) {
+async function getContentGitSafety() {
+  const items = await listContent("all");
+  const contentDirectories = [
+    path.relative(repoRoot, target.articles),
+    path.relative(repoRoot, target.imageEntries),
+  ];
+  try {
+    const [trackedResult, statusResult] = await Promise.all([
+      runGit(["ls-files", "-z", "--", ...contentDirectories]),
+      runGit(["status", "--porcelain=v1", "-z", "--untracked-files=all", "--", ...contentDirectories]),
+    ]);
+    const tracked = parseGitPathSet(trackedResult.stdout);
+    const changed = parseGitStatusPathSet(statusResult.stdout);
+    const currentVersionInGit = items.filter((item) => tracked.has(item.file) && !changed.has(item.file));
+    const pending = items.filter((item) => !tracked.has(item.file) || changed.has(item.file));
+    const draftPending = pending.filter((item) => item.draft || (item.type === "image" && !item.public));
+    return {
+      ok: true,
+      total: items.length,
+      currentVersionInGit: currentVersionInGit.length,
+      pending: pending.length,
+      draftPending: draftPending.length,
+      publicPending: Math.max(0, pending.length - draftPending.length),
+      warning: pending.length
+        ? `${pending.length} 条内容的当前版本尚未进入 Git。`
+        : "",
+    };
+  } catch (error) {
+    return { ok: false, error: `无法检查内容 Git 状态：${error.message}` };
+  }
+}
+
+async function assertGitAutomationAllowed(payload) {
+  if (!payload.commit) return;
+  const branch = (await runGit(["branch", "--show-current"])).stdout.trim();
+  if (branch === "main") {
+    const error = new Error("main 分支受保护，本地发布助手不会在该分支自动提交或推送；请先切换到内容分支。");
+    error.statusCode = 409;
+    throw error;
+  }
+}
+
+function workflowState(state, label, description) {
+  return { state, label, description };
+}
+
+async function getFileWorkflowState(type, filePath, data) {
+  if (data.draft || (type === "image" && data.public === false)) {
+    return workflowState("draft", "草稿", "只保存在本地内容库，不会进入公开站点。");
+  }
+
+  const relativeFile = path.relative(repoRoot, filePath);
+  try {
+    const status = (await runGit(["status", "--short", "--", relativeFile])).stdout.trim();
+    if (status) {
+      return workflowState("pending_commit", "已发布 · 待提交", "本地站点可以预览，Git 尚未记录这次修改。");
+    }
+
+    const fileCommit = (await runGit(["log", "-1", "--format=%H", "--", relativeFile])).stdout.trim();
+    if (!fileCommit) {
+      return workflowState("pending_commit", "已发布 · 待提交", "内容文件尚未进入 Git 历史。");
+    }
+
+    const upstream = (await runGit(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"])).stdout.trim();
+    const remoteBranches = (await runGit(["branch", "-r", "--contains", fileCommit])).stdout
+      .split(/\r?\n/)
+      .map((line) => line.replace(/^[*+\s]+/, "").trim())
+      .filter(Boolean);
+    if (!remoteBranches.includes(upstream)) {
+      return workflowState("pending_push", "已提交 · 待推送", "本地已有 Git 记录，但远程分支还没有这次修改。");
+    }
+  } catch {
+    return workflowState("pending_push", "已发布 · Git 待确认", "无法确认远程是否已经包含这篇内容。");
+  }
+
+  return workflowState("pending_deploy", "已同步 · 待验证", "远程已包含这篇内容，正在核对线上页面。");
+}
+
+async function probeUrl(url, timeoutMs = 1200) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, {
+      method: "GET",
+      cache: "no-store",
+      redirect: "follow",
+      signal: controller.signal,
+    });
+    await response.body?.cancel();
+    return { available: response.ok, statusCode: response.status };
+  } catch {
+    return { available: false, statusCode: null };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function verifyLiveContent(type, filePath, parsed) {
+  if (parsed.data.draft || (type === "image" && parsed.data.public === false)) {
+    return workflowState("draft", "草稿", "草稿不会请求或暴露线上地址。");
+  }
+
+  const url = liveContentUrl(type, filePath);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 3000);
+  try {
+    const response = await fetch(url, {
+      cache: "no-store",
+      redirect: "follow",
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      return {
+        ...workflowState("pending_deploy", "等待线上部署", `线上页面尚未返回成功状态（HTTP ${response.status}）。`),
+        url,
+      };
+    }
+    const html = await response.text();
+    const pageText = normalizeText(html.replace(/<script\b[\s\S]*?<\/script>/gi, " ").replace(/<style\b[\s\S]*?<\/style>/gi, " ").replace(/<[^>]+>/g, " "));
+    const title = normalizeText(parsed.data.title);
+    const summary = normalizeText(parsed.data.summary || parsed.data.description);
+    const bodyExcerpt = normalizeText(parsed.body).slice(0, 48);
+    const matches = [title, summary, bodyExcerpt].filter(Boolean).every((value) => pageText.includes(value));
+    return {
+      ...(matches
+        ? workflowState("live", "线上已生效", "线上页面已匹配当前标题、摘要和正文片段。")
+        : workflowState("pending_deploy", "等待线上部署", "线上地址可访问，但内容还没有匹配当前本地版本。")),
+      url,
+    };
+  } catch {
+    return {
+      ...workflowState("unknown", "线上待验证", "当前无法连接线上站点，请稍后刷新状态。"),
+      url,
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function scanDuplicateArticle({ title, sourceUrl, excludeFile }) {
   const records = await scanMarkdownFrontmatter(target.articles);
   const normalizedSourceUrl = normalizeUrl(sourceUrl);
   const normalizedTitle = normalizeText(title);
+  const excludedPath = excludeFile ? path.resolve(repoRoot, excludeFile) : "";
 
   return records
+    .filter((record) => record.file !== excludedPath)
     .filter((record) => {
       const sameUrl = normalizedSourceUrl && normalizeUrl(record.sourceUrl) === normalizedSourceUrl;
       const sameTitle = normalizedTitle && normalizeText(record.title) === normalizedTitle;
@@ -477,7 +823,8 @@ async function inspectFlomoImport(fileData) {
 
   const inspected = items.map((item) => {
     const exactArticle = existing.find((record) => contentHash(record.body) === item.contentHash);
-    const alreadyImported = importedHashes.has(item.contentHash);
+    const alreadyImported = importedHashes.has(item.contentHash)
+      || Boolean(item.legacyContentHash && importedHashes.has(item.legacyContentHash));
     const repeatedInExport = seen.has(item.contentHash);
     seen.add(item.contentHash);
 
@@ -516,7 +863,7 @@ async function inspectFlomoImport(fileData) {
       ...item,
       status,
       duplicate,
-      selectedByDefault: status === "ready",
+      selectedByDefault: status !== "exact",
     };
   });
 
@@ -542,17 +889,27 @@ function normalizeImportedArticle(item, override = {}) {
     .map((tag) => clampText(tag.replace(/^#/, ""), 20))
     .filter(Boolean)
     .slice(0, 6);
-  const note = clampText(override.note || item.note, 240);
+  const internalNote = clampText(override.internalNote || item.internalNote || item.note, 240);
+  const sourceUrlValue = Object.hasOwn(override, "sourceUrl") ? override.sourceUrl : item.sourceUrl;
+  const sourceUrl = clampText(sourceUrlValue, 500);
+  const sourceValue = Object.hasOwn(override, "source") ? override.source : item.source;
+  const source = clampText(sourceValue, 120) || (sourceUrl ? inferArticleSourceName(sourceUrl) : "来源待确认");
+  const sourceKind = sourceUrl
+    ? "publication"
+    : /^原创(?:内容)?$/u.test(source)
+      ? "original"
+      : "unknown";
   const payload = {
     title,
     summary,
-    source: "原创",
-    sourceKind: "original",
-    sourceUrl: "",
+    source,
+    sourceKind,
+    sourceUrl,
     tags: tags.length ? tags : ["随笔"],
     pubDate: item.pubDate,
     readTime: item.readTime,
-    note,
+    editorNote: clampText(override.editorNote, 240),
+    internalNote,
     body: item.body,
     featured: false,
     draft: true,
@@ -598,21 +955,28 @@ async function importFlomoDrafts(payload) {
       recordId: `xgif-flomo-${item.contentHash.slice(0, 16)}`,
       provider: "flomo",
       contentHash: item.contentHash,
+      ...(item.legacyContentHash ? { legacyContentHash: item.legacyContentHash } : {}),
       recordedAt: item.recordedAt,
       importedAt,
       contentFile: relativeFile,
       status: "draft",
+      ...(item.importTags?.length ? { importTags: item.importTags } : {}),
     };
     await appendFile(target.flomoImportLedger, `${JSON.stringify(ledgerRecord)}\n`, "utf8");
     files.push({ file: relativeFile, title: article.title, contentHash: item.contentHash });
   }
 
+  const indexWarning = await refreshLocalIndexes("import_flomo", {
+    imported: files.length,
+    skipped: skipped.length,
+  });
   return {
     ok: true,
     imported: files.length,
     skipped,
     files,
     ledger: path.relative(repoRoot, target.flomoImportLedger),
+    indexWarning,
   };
 }
 
@@ -709,23 +1073,6 @@ function normalizeUrl(value) {
   }
 }
 
-function inferSourceFromUrl(value) {
-  let hostname = "";
-  try {
-    hostname = new URL(String(value || "")).hostname.toLowerCase();
-  } catch {
-    return "第三方";
-  }
-
-  if (hostname.endsWith("zhihu.com")) return "知乎";
-  if (hostname.endsWith("jandan.net")) return "煎蛋";
-  if (hostname.endsWith("sspai.com")) return "少数派";
-  if (hostname.endsWith("weixin.qq.com")) return "微信公众号";
-  if (hostname.endsWith("36kr.com")) return "36氪";
-  if (hostname.endsWith("bilibili.com")) return "哔哩哔哩";
-  return "第三方";
-}
-
 function getAiConfig() {
   const apiKey = String(process.env.XGIF_AI_API_KEY || "").trim();
   const model = String(process.env.XGIF_AI_MODEL || "").trim();
@@ -764,7 +1111,7 @@ function sanitizeArticleSuggestion(value, fallbackSource) {
     summary: clampText(raw.summary, 320),
     tags,
     readTime: /^\d+\s*分钟$/.test(readTime) ? readTime.replace(/\s+/, " ") : "",
-    note: clampText(raw.note, 240),
+    editorNote: clampText(raw.editorNote || raw.note, 240),
     source: clampText(raw.source, 40) || fallbackSource,
   };
 }
@@ -779,7 +1126,7 @@ async function createArticleSuggestion(payload) {
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), aiTimeoutMs);
-  const fallbackSource = String(payload.source || "").trim() || inferSourceFromUrl(payload.sourceUrl);
+  const fallbackSource = String(payload.source || "").trim() || inferArticleSourceName(payload.sourceUrl);
   const input = {
     existingTitle: clampText(payload.title, 200),
     sourceName: fallbackSource,
@@ -801,7 +1148,7 @@ async function createArticleSuggestion(payload) {
         messages: [
           {
             role: "system",
-            content: "你是中文内容编辑。只返回 JSON 对象，不要 Markdown。字段必须是 title、summary、tags、readTime、note、source。summary 为 1-2 句且不超过 160 字；tags 为 2-6 个短标签；readTime 为类似‘3 分钟’；note 说明为什么值得看，不超过 80 字。只根据参考资料写作，不要编造未提供的事实；如果信息不足，保守概括。source 可保留已给出的来源名称。",
+            content: "你是中文内容编辑。只返回 JSON 对象，不要 Markdown。字段必须是 title、summary、tags、readTime、editorNote、source。summary 为 1-2 句且不超过 160 字；tags 为 2-6 个短标签；readTime 为类似‘3 分钟’；editorNote 是可以公开展示的阅读价值说明，不超过 80 字。只根据参考资料写作，不要编造未提供的事实；如果信息不足，保守概括。source 可保留已给出的来源名称。",
           },
           {
             role: "user",
@@ -838,19 +1185,28 @@ function buildArticleMarkdown(payload) {
   const date = payload.pubDate || todayIso();
   const sourceUrl = String(payload.sourceUrl || "").trim();
   const sourceUrlLine = sourceUrl ? `sourceUrl: ${yamlString(sourceUrl)}\n` : "";
+  const editorNote = String(payload.editorNote || payload.note || "").trim();
+  const internalNote = String(payload.internalNote || "").trim();
+  const editorNoteLine = editorNote ? `editorNote: ${yamlString(editorNote)}\n` : "";
+  const internalNoteLine = internalNote ? `internalNote: ${yamlString(internalNote)}\n` : "";
 
-  return `---\ntitle: ${yamlString(payload.title)}\nsummary: ${yamlString(payload.summary)}\nsource: ${yamlString(payload.source)}\n${sourceUrlLine}sourceKind: ${yamlString(payload.sourceKind || "original")}\ntags: ${yamlArray(tags)}\npubDate: ${date}\nreadTime: ${yamlString(payload.readTime || "1 分钟")}\nnote: ${yamlString(payload.note || "")}\nfeatured: ${Boolean(payload.featured)}\ndraft: ${Boolean(payload.draft)}\n---\n\n${markdownBody(payload.body)}`;
+  return `---\ntitle: ${yamlString(payload.title)}\nsummary: ${yamlString(payload.summary)}\nsource: ${yamlString(payload.source)}\n${sourceUrlLine}sourceKind: ${yamlString(payload.sourceKind || "original")}\ntags: ${yamlArray(tags)}\npubDate: ${date}\nreadTime: ${yamlString(payload.readTime || "1 分钟")}\n${editorNoteLine}${internalNoteLine}featured: ${Boolean(payload.featured)}\ndraft: ${Boolean(payload.draft)}\n---\n\n${markdownBody(payload.body)}`;
 }
 
 function validateArticleAttribution(payload) {
   validateRequired(payload, ["title", "summary", "source"]);
   const sourceKind = String(payload.sourceKind || "original").trim();
-  if (!["original", "publication", "editorial"].includes(sourceKind)) {
+  if (!["original", "publication", "editorial", "unknown"].includes(sourceKind)) {
     const error = new Error("文章来源类型无效。");
     error.statusCode = 400;
     throw error;
   }
-  if (sourceKind !== "original") validateRequired(payload, ["sourceUrl"]);
+  if (sourceKind === "unknown" && !payload.draft) {
+    const error = new Error("文章来源仍待确认，只能保存为草稿。请补充来源链接或明确标记为原创后再发布。");
+    error.statusCode = 422;
+    throw error;
+  }
+  if (["publication", "editorial"].includes(sourceKind)) validateRequired(payload, ["sourceUrl"]);
   if (String(payload.sourceUrl || "").trim()) {
     try {
       const sourceUrl = new URL(payload.sourceUrl);
@@ -875,7 +1231,9 @@ async function checkArticleQuality(payload) {
   if (!String(payload.summary || "").trim()) issues.push(qualityIssue("error", "缺少摘要。"));
   if (!String(payload.source || "").trim()) issues.push(qualityIssue("error", "缺少来源名称。"));
   const sourceKind = String(payload.sourceKind || "original");
-  if (sourceKind !== "original" && !String(payload.sourceUrl || "").trim()) {
+  if (sourceKind === "unknown") {
+    issues.push(qualityIssue("error", "文章来源仍待确认，请补充来源链接或明确标记为原创。"));
+  } else if (sourceKind !== "original" && !String(payload.sourceUrl || "").trim()) {
     issues.push(qualityIssue("error", "外部来源文章必须填写来源链接。"));
   } else if (String(payload.sourceUrl || "").trim()) {
     try {
@@ -1024,11 +1382,14 @@ function buildLegacyImageMarkdown(payload) {
 
 function buildImageMarkdown(payload) {
   const sourceLine = "\nsource: " + yamlString(payload.source || "本地上传") + "\n";
+  const sourceKind = payload.sourceKind || "original";
   const attributionLines = sourceLine
-    + "sourceKind: " + yamlString(payload.sourceKind || "original") + "\n"
-    + (payload.sourceKind === "user_provided"
+    + "sourceKind: " + yamlString(sourceKind) + "\n"
+    + (sourceKind === "user_provided"
       ? "license: " + yamlString(payload.license) + "\n"
-      : "sourceUrl: " + yamlString(payload.sourceUrl) + "\n"
+      : sourceKind === "unknown"
+        ? ""
+        : "sourceUrl: " + yamlString(payload.sourceUrl) + "\n"
         + "author: " + yamlString(payload.author) + "\n"
         + "license: " + yamlString(payload.license) + "\n"
         + "licenseUrl: " + yamlString(payload.licenseUrl) + "\n");
@@ -1046,28 +1407,57 @@ function validateRequired(payload, fields) {
 
 function normalizeImageAttribution(payload) {
   const sourceKind = String(payload.sourceKind || "original").trim();
-  if (!["original", "user_provided"].includes(sourceKind)) {
-    const error = new Error("图片来源类型只能是外部来源或用户提供素材。");
+  if (!["original", "user_provided", "unknown"].includes(sourceKind)) {
+    const error = new Error("图片来源类型只能是外部来源、用户提供素材或群聊转存 / 来源未知。");
     error.statusCode = 400;
     throw error;
   }
   if (sourceKind === "user_provided") {
     return { ...payload, sourceKind, source: "用户提供", license: "用户确认可发布" };
   }
+  if (sourceKind === "unknown") {
+    return { ...payload, sourceKind, source: "群聊转存（来源待核实）" };
+  }
   validateRequired(payload, ["source", "sourceUrl", "author", "license", "licenseUrl"]);
   return { ...payload, sourceKind };
 }
 
-async function updateManagedContent(type, file, payload) {
+async function updateManagedContent(type, file, payload, { refreshIndexes = true } = {}) {
   const filePath = resolveManagedFile(type, file);
+  await assertGitAutomationAllowed(payload);
   const existing = parseFrontmatter(await readFile(filePath, "utf8"));
   let markdown = "";
+  let quality = null;
 
   if (type === "article") {
-    markdown = buildArticleMarkdown(validateArticleAttribution(payload));
+    const articlePayload = validateArticleAttribution({ ...payload, excludeFile: file });
+    if (!articlePayload.draft) {
+      quality = await checkArticleQuality(articlePayload);
+      const errors = quality.issues.filter((item) => item.level === "error");
+      if (errors.length) {
+        const error = new Error(`发布前质量检查未通过：${errors.map((item) => item.message).join("；")}`);
+        error.statusCode = 422;
+        throw error;
+      }
+    }
+    markdown = buildArticleMarkdown(articlePayload);
   } else {
-    const imagePayload = normalizeImageAttribution({ ...existing.data, ...payload, image: payload.image || existing.data.image });
+    const imagePayload = normalizeImageAttribution({
+      ...existing.data,
+      ...payload,
+      image: payload.image || existing.data.image,
+      excludeFile: file,
+    });
     validateRequired(imagePayload, ["title", "description"]);
+    if (!imagePayload.draft && imagePayload.public !== false) {
+      quality = await checkImageQuality(imagePayload);
+      const errors = quality.issues.filter((item) => item.level === "error");
+      if (errors.length) {
+        const error = new Error(`发布前质量检查未通过：${errors.map((item) => item.message).join("；")}`);
+        error.statusCode = 422;
+        throw error;
+      }
+    }
     markdown = buildImageMarkdown(imagePayload);
   }
 
@@ -1076,7 +1466,631 @@ async function updateManagedContent(type, file, payload) {
     ? await commitAndMaybePush([filePath], `Update ${type}: ${payload.title}`, Boolean(payload.push))
     : null;
 
-  return { ok: true, file: path.relative(repoRoot, filePath), git };
+  const parsed = parseFrontmatter(markdown);
+  const indexWarning = refreshIndexes
+    ? await refreshLocalIndexes("update_content", {
+      type,
+      file: path.relative(repoRoot, filePath),
+    })
+    : "";
+  return {
+    ok: true,
+    file: path.relative(repoRoot, filePath),
+    git,
+    quality,
+    indexWarning,
+    publicUrl: publicContentUrl(type, filePath),
+    previewUrl: previewContentUrl(type, filePath),
+    workflow: await getFileWorkflowState(type, filePath, parsed.data),
+  };
+}
+
+function normalizeBatchItems(items, { maxItems = 500 } = {}) {
+  if (!Array.isArray(items) || items.length === 0) {
+    const error = new Error("请至少选择一条内容。");
+    error.statusCode = 400;
+    throw error;
+  }
+  if (items.length > maxItems) {
+    const error = new Error(`一次最多处理 ${maxItems} 条内容，请先缩小筛选范围。`);
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const seen = new Set();
+  return items.map((item) => {
+    const type = String(item?.type || "");
+    const file = String(item?.file || "");
+    const filePath = resolveManagedFile(type, file);
+    const relativeFile = path.relative(repoRoot, filePath);
+    const key = `${type}:${relativeFile}`;
+    if (seen.has(key)) {
+      const error = new Error(`选择中存在重复内容：${relativeFile}`);
+      error.statusCode = 400;
+      throw error;
+    }
+    seen.add(key);
+    return { type, file: relativeFile, filePath };
+  });
+}
+
+async function resolveBatchItems(input) {
+  if (Array.isArray(input)) return normalizeBatchItems(input);
+  if (Array.isArray(input?.items)) return normalizeBatchItems(input.items);
+
+  const selection = input?.selection;
+  if (!selection || typeof selection !== "object") {
+    const error = new Error("请至少选择一条内容。");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const type = ["all", "article", "image"].includes(selection.type) ? selection.type : "all";
+  const status = ["all", "draft", "local", "online"].includes(selection.status) ? selection.status : "all";
+  const query = normalizeText(selection.query);
+  const excludedFiles = new Set(
+    Array.isArray(selection.exclude) ? selection.exclude.map((file) => String(file || "")) : [],
+  );
+  const selectedItems = (await getContentPublicationStates(await listContent(type))).filter((item) => {
+    if (excludedFiles.has(item.file)) return false;
+    if (status !== "all" && item.publication?.state !== status) return false;
+    const text = normalizeText([item.title, item.summary, item.source, item.tags.join(" ")].join(" "));
+    return !query || text.includes(query);
+  });
+
+  return normalizeBatchItems(selectedItems);
+}
+
+async function inspectBatchSelection(input) {
+  const normalizedItems = await resolveBatchItems(input);
+  const selectedFiles = new Set(normalizedItems.map((item) => item.file));
+  const publicationItems = await getContentPublicationStates(await listContent("all"));
+  const selectedPublication = publicationItems.filter((item) => selectedFiles.has(item.file));
+  const counts = contentStatusCounts(selectedPublication);
+  return {
+    total: normalizedItems.length,
+    counts,
+    items: selectedPublication.map((item) => ({
+      type: item.type,
+      file: item.file,
+      title: item.title,
+      state: item.publication?.state || "local",
+    })),
+  };
+}
+
+async function inspectBatchDrafts(input) {
+  const normalizedItems = await resolveBatchItems(input);
+  const results = [];
+
+  for (const item of normalizedItems) {
+    try {
+      const parsed = parseFrontmatter(await readFile(item.filePath, "utf8"));
+      const isDraft = Boolean(parsed.data.draft) || (item.type === "image" && parsed.data.public === false);
+      if (!isDraft) throw new Error("只有草稿可以使用这项批量操作。");
+
+      const payload = {
+        ...parsed.data,
+        body: parsed.body,
+        draft: false,
+        public: true,
+        excludeFile: item.file,
+      };
+      const quality = item.type === "article"
+        ? await checkArticleQuality(payload)
+        : await checkImageQuality(payload);
+      results.push({
+        type: item.type,
+        file: item.file,
+        title: String(parsed.data.title || "未命名内容"),
+        ok: quality.ok,
+        issues: quality.issues,
+      });
+    } catch (error) {
+      results.push({
+        type: item.type,
+        file: item.file,
+        title: path.basename(item.file, path.extname(item.file)),
+        ok: false,
+        issues: [qualityIssue("error", error.message)],
+      });
+    }
+  }
+
+  return {
+    total: results.length,
+    ready: results.filter((item) => item.ok).length,
+    blocked: results.filter((item) => !item.ok).length,
+    warnings: results.reduce(
+      (count, item) => count + item.issues.filter((issue) => issue.level === "warning").length,
+      0,
+    ),
+    results,
+  };
+}
+
+async function publishBatchDrafts(input) {
+  const inspection = await inspectBatchDrafts(input);
+  const succeeded = [];
+  const failed = inspection.results.filter((item) => !item.ok);
+
+  for (const item of inspection.results.filter((result) => result.ok)) {
+    try {
+      const filePath = resolveManagedFile(item.type, item.file);
+      const parsed = parseFrontmatter(await readFile(filePath, "utf8"));
+      await updateManagedContent(item.type, item.file, {
+        ...parsed.data,
+        body: parsed.body,
+        draft: false,
+        public: true,
+        commit: false,
+        push: false,
+      }, { refreshIndexes: false });
+      succeeded.push(item);
+    } catch (error) {
+      failed.push({
+        ...item,
+        ok: false,
+        issues: [qualityIssue("error", error.message)],
+      });
+    }
+  }
+
+  livePublicationCache.clear();
+  const indexWarning = await refreshLocalIndexes("publish_batch", {
+    succeeded: succeeded.length,
+    failed: failed.length,
+  });
+  return { ok: true, succeeded, failed, indexWarning };
+}
+
+async function transitionBatchContent(input, targetState) {
+  if (!["draft", "local"].includes(targetState)) {
+    const error = new Error("批量状态只能修改为草稿或本地发布。");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const normalizedItems = await resolveBatchItems(input);
+  const succeeded = [];
+  const skipped = [];
+  const failed = [];
+
+  for (const item of normalizedItems) {
+    try {
+      const parsed = parseFrontmatter(await readFile(item.filePath, "utf8"));
+      const isDraft = Boolean(parsed.data.draft) || (item.type === "image" && parsed.data.public === false);
+      if ((targetState === "draft" && isDraft) || (targetState === "local" && !isDraft)) {
+        skipped.push({
+          type: item.type,
+          file: item.file,
+          title: String(parsed.data.title || "未命名内容"),
+        });
+        continue;
+      }
+
+      await updateManagedContent(item.type, item.file, {
+        ...parsed.data,
+        body: parsed.body,
+        draft: targetState === "draft",
+        public: targetState === "local",
+        commit: false,
+        push: false,
+      }, { refreshIndexes: false });
+      succeeded.push({
+        type: item.type,
+        file: item.file,
+        title: String(parsed.data.title || "未命名内容"),
+      });
+    } catch (error) {
+      failed.push({
+        type: item.type,
+        file: item.file,
+        title: path.basename(item.file, path.extname(item.file)),
+        error: error.message,
+      });
+    }
+  }
+
+  livePublicationCache.clear();
+  const indexWarning = await refreshLocalIndexes("transition_batch", {
+    targetState,
+    succeeded: succeeded.length,
+    skipped: skipped.length,
+    failed: failed.length,
+  });
+  return { ok: true, target: targetState, succeeded, skipped, failed, indexWarning };
+}
+
+function applyMetadataChanges(data, changes) {
+  const next = { ...data };
+  if (changes.tags) {
+    const mode = String(changes.tags.mode || "");
+    if (!["append", "remove", "replace"].includes(mode)) {
+      throw new Error("标签修改方式无效。");
+    }
+    const current = normalizeList(data.tags);
+    const values = normalizeList(changes.tags.values);
+    if (mode === "append") next.tags = [...new Set([...current, ...values])];
+    else if (mode === "remove") {
+      const removals = new Set(values);
+      next.tags = current.filter((tag) => !removals.has(tag));
+    } else next.tags = values;
+  }
+  if (changes.category && Object.hasOwn(changes.category, "value")) {
+    next.category = String(changes.category.value || "").trim();
+  }
+  if (changes.source && Object.hasOwn(changes.source, "value")) {
+    const source = String(changes.source.value || "").trim();
+    if (!source) throw new Error("来源名称不能为空。");
+    next.source = source;
+  }
+  if (changes.pubDate && Object.hasOwn(changes.pubDate, "value")) {
+    const pubDate = String(changes.pubDate.value || "").trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(pubDate)) throw new Error("发布日期格式无效。");
+    next.pubDate = pubDate;
+  }
+  return next;
+}
+
+async function updateBatchMetadata(input, changes) {
+  if (!changes || typeof changes !== "object" || !Object.keys(changes).length) {
+    const error = new Error("请至少选择一个需要修改的属性。");
+    error.statusCode = 400;
+    throw error;
+  }
+  const normalizedItems = await resolveBatchItems(input);
+  const succeeded = [];
+  const failed = [];
+
+  for (const item of normalizedItems) {
+    try {
+      const parsed = parseFrontmatter(await readFile(item.filePath, "utf8"));
+      const data = applyMetadataChanges(parsed.data, changes);
+      await updateManagedContent(item.type, item.file, {
+        ...data,
+        body: parsed.body,
+        commit: false,
+        push: false,
+      }, { refreshIndexes: false });
+      succeeded.push({
+        type: item.type,
+        file: item.file,
+        title: String(data.title || "未命名内容"),
+      });
+    } catch (error) {
+      failed.push({
+        type: item.type,
+        file: item.file,
+        title: path.basename(item.file, path.extname(item.file)),
+        error: error.message,
+      });
+    }
+  }
+
+  livePublicationCache.clear();
+  const indexWarning = await refreshLocalIndexes("metadata_batch", {
+    fields: Object.keys(changes),
+    succeeded: succeeded.length,
+    failed: failed.length,
+  });
+  return { ok: true, succeeded, failed, indexWarning };
+}
+
+function githubCompareUrl(remote, branch) {
+  const match = String(remote || "").match(/github\.com[/:]([^/]+)\/([^/.]+?)(?:\.git)?$/);
+  if (!match) return "";
+  return `https://github.com/${match[1]}/${match[2]}/compare/main...${encodeURIComponent(branch)}?expand=1`;
+}
+
+async function syncBatchContent(input) {
+  const normalizedItems = await resolveBatchItems(input);
+  const eligible = [];
+  const skipped = [];
+
+  for (const item of normalizedItems) {
+    const parsed = parseFrontmatter(await readFile(item.filePath, "utf8"));
+    const isDraft = Boolean(parsed.data.draft) || (item.type === "image" && parsed.data.public === false);
+    const descriptor = {
+      type: item.type,
+      file: item.file,
+      title: String(parsed.data.title || "未命名内容"),
+    };
+    if (isDraft) skipped.push({ ...descriptor, reason: "草稿不会同步到公开站点。" });
+    else eligible.push({ ...descriptor, filePath: item.filePath });
+  }
+
+  if (!eligible.length) {
+    const error = new Error("所选内容中没有可以同步的本地已发布内容。");
+    error.statusCode = 422;
+    throw error;
+  }
+
+  const audit = await auditContentLibrary({ repoRoot });
+  const auditByFile = new Map(audit.items.map((item) => [item.file, item]));
+  const needsReview = eligible
+    .map((item) => auditByFile.get(item.file))
+    .filter((item) => item && item.status !== "ready");
+  if (needsReview.length) {
+    const error = new Error(`${needsReview.length} 条内容未通过上线体检，已停止同步。`);
+    error.statusCode = 422;
+    error.detail = needsReview
+      .slice(0, 8)
+      .map((item) => `${item.title}：${[...item.blockers, ...item.warnings].join("；")}`)
+      .join("\n");
+    throw error;
+  }
+
+  const git = await getGitStatus();
+  if (!git.canPush) {
+    const error = new Error("尚未配置远程仓库，无法同步所选内容。");
+    error.statusCode = 409;
+    throw error;
+  }
+
+  let branch = git.branch;
+  if (branch === "main") {
+    const changed = parseGitStatusPathSet(
+      (await runGit([
+        "status",
+        "--porcelain=v1",
+        "-z",
+        "--untracked-files=all",
+        "--",
+        ...eligible.map((item) => item.file),
+      ])).stdout,
+    );
+    if (!changed.size) {
+      const error = new Error("所选内容没有需要提交的本地变更，线上状态可直接刷新检查。");
+      error.statusCode = 422;
+      throw error;
+    }
+    const stamp = new Date().toISOString().replace(/[-:T.Z]/g, "").slice(0, 14);
+    branch = `content-sync/${stamp}-${randomUUID().slice(0, 6)}`;
+    await runGit(["switch", "-c", branch]);
+  }
+
+  const sync = await commitAndMaybePush(
+    eligible.map((item) => item.filePath),
+    `Sync ${eligible.length} content item${eligible.length === 1 ? "" : "s"}`,
+    true,
+  );
+  const refreshedGit = await getGitStatus();
+  const result = {
+    ok: sync.push.ok,
+    branch,
+    synced: eligible.map(({ filePath, ...item }) => item),
+    skipped,
+    commitSha: sync.commitSha,
+    push: sync.push,
+    compareUrl: githubCompareUrl(refreshedGit.remote, branch),
+  };
+  localDataStore.recordOperation("sync_content", {
+    branch,
+    count: eligible.length,
+    files: eligible.map((item) => item.file),
+    commitSha: sync.commitSha,
+    pushOk: Boolean(sync.push.ok),
+    compareUrl: result.compareUrl,
+  });
+  return result;
+}
+
+async function trashBatchDrafts(input) {
+  const normalizedItems = await resolveBatchItems(input);
+  const batchId = new Date().toISOString().replace(/[:.]/g, "-");
+  const batchDirectory = path.join(target.trashContent, batchId);
+  const succeeded = [];
+  const failed = [];
+  let requiresSync = false;
+  await mkdir(batchDirectory, { recursive: true });
+
+  for (const item of normalizedItems) {
+    try {
+      const parsed = parseFrontmatter(await readFile(item.filePath, "utf8"));
+      const isDraft = Boolean(parsed.data.draft) || (item.type === "image" && parsed.data.public === false);
+      if (!isDraft) requiresSync = true;
+
+      const trashPath = await uniquePath(
+        batchDirectory,
+        `${item.type}-${path.basename(item.file, path.extname(item.file))}`,
+        path.extname(item.file),
+      );
+      const sourceContent = await readFile(item.filePath);
+      const deletedAt = new Date().toISOString();
+      const sha256 = createHash("sha256").update(sourceContent).digest("hex");
+      const id = `xgif-trash-${randomUUID()}`;
+      const metadataPath = `${trashPath}.meta.json`;
+      const sidecar = {
+        schemaVersion: 1,
+        id,
+        type: item.type,
+        file: item.file,
+        trashFile: path.relative(repoRoot, trashPath),
+        metadataFile: path.relative(repoRoot, metadataPath),
+        title: String(parsed.data.title || "未命名内容"),
+        publicationState: isDraft ? "draft" : "local",
+        deletedAt,
+        restoredAt: null,
+        status: "trashed",
+        sha256,
+        size: sourceContent.length,
+      };
+      await rename(item.filePath, trashPath);
+      try {
+        await writeJsonAtomic(metadataPath, sidecar);
+      } catch (error) {
+        await rename(trashPath, item.filePath);
+        throw new Error(`回收站元数据写入失败，草稿已留在原位置：${error.message}`);
+      }
+      const entry = { ...sidecar };
+      succeeded.push(entry);
+      try {
+        await mkdir(path.dirname(target.trashLedger), { recursive: true });
+        await appendFile(target.trashLedger, `${JSON.stringify({ action: "trash", ...entry })}\n`, "utf8");
+      } catch {
+        entry.ledgerWarning = "回收站台账写入失败，但草稿已经安全移入回收站。";
+      }
+      try {
+        localDataStore.upsertTrashEntry(sidecar);
+      } catch {
+        entry.indexWarning = "SQLite 回收站索引写入失败；旁车元数据已经保存，下次启动会自动重建。";
+      }
+    } catch (error) {
+      failed.push({
+        type: item.type,
+        file: item.file,
+        title: path.basename(item.file, path.extname(item.file)),
+        error: error.message,
+      });
+    }
+  }
+
+  livePublicationCache.clear();
+  const indexWarning = await refreshLocalIndexes("trash_batch", {
+    succeeded: succeeded.length,
+    failed: failed.length,
+  });
+  return { ok: true, succeeded, failed, requiresSync, indexWarning };
+}
+
+async function restoreBatchDrafts(items) {
+  if (!Array.isArray(items) || items.length === 0 || items.length > 500) {
+    const error = new Error("没有可以恢复的内容。");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const succeeded = [];
+  const failed = [];
+  for (const item of items) {
+    try {
+      const originalPath = resolveManagedFile(String(item?.type || ""), String(item?.file || ""));
+      const trashPath = path.resolve(repoRoot, String(item?.trashFile || ""));
+      if (!trashPath.startsWith(`${target.trashContent}${path.sep}`) || !/\.mdx?$/.test(trashPath)) {
+        throw new Error("回收站文件无效。");
+      }
+      if (await pathExists(originalPath)) throw new Error("原位置已经存在同名内容。");
+      const metadataPath = `${trashPath}.meta.json`;
+      let sidecar = null;
+      try {
+        sidecar = JSON.parse(await readFile(metadataPath, "utf8"));
+      } catch {
+        sidecar = {
+          schemaVersion: 1,
+          id: String(item?.id || `xgif-trash-legacy-${createHash("sha256").update(String(item?.trashFile || "")).digest("hex").slice(0, 16)}`),
+          type: item.type,
+          file: item.file,
+          trashFile: path.relative(repoRoot, trashPath),
+          metadataFile: path.relative(repoRoot, metadataPath),
+          title: String(item?.title || "未命名内容"),
+          deletedAt: String(item?.deletedAt || new Date().toISOString()),
+          sha256: String(item?.sha256 || ""),
+          size: Number(item?.size || 0),
+        };
+      }
+      await mkdir(path.dirname(originalPath), { recursive: true });
+      await rename(trashPath, originalPath);
+      const restoredAt = new Date().toISOString();
+      const restoredSidecar = {
+        ...sidecar,
+        restoredAt,
+        status: "restored",
+      };
+      const entry = {
+        id: restoredSidecar.id,
+        type: item.type,
+        file: path.relative(repoRoot, originalPath),
+        trashFile: path.relative(repoRoot, trashPath),
+        metadataFile: path.relative(repoRoot, metadataPath),
+        restoredAt,
+      };
+      succeeded.push(entry);
+      try {
+        await writeJsonAtomic(metadataPath, restoredSidecar);
+      } catch {
+        entry.sidecarWarning = "草稿已经恢复，但回收站旁车状态更新失败。";
+      }
+      try {
+        await appendFile(target.trashLedger, `${JSON.stringify({ action: "restore", ...entry })}\n`, "utf8");
+      } catch {
+        entry.ledgerWarning = "回收站台账写入失败，但草稿已经恢复。";
+      }
+      try {
+        localDataStore.markTrashRestored(restoredSidecar.id, restoredAt);
+      } catch {
+        entry.indexWarning = "草稿已经恢复，但 SQLite 索引更新失败；下次启动会自动重建。";
+      }
+    } catch (error) {
+      failed.push({
+        type: String(item?.type || ""),
+        file: String(item?.file || ""),
+        error: error.message,
+      });
+    }
+  }
+
+  const indexWarning = await refreshLocalIndexes("restore_batch", {
+    succeeded: succeeded.length,
+    failed: failed.length,
+  });
+  return { ok: true, succeeded, failed, indexWarning };
+}
+
+async function purgeTrashItems(items, confirmation) {
+  if (confirmation !== "permanent-delete") {
+    const error = new Error("永久删除需要明确确认。");
+    error.statusCode = 400;
+    throw error;
+  }
+  if (!Array.isArray(items) || items.length === 0 || items.length > 500) {
+    const error = new Error("没有可以永久删除的回收站内容。");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const succeeded = [];
+  const failed = [];
+  for (const item of items) {
+    try {
+      const trashPath = path.resolve(repoRoot, String(item?.trashFile || ""));
+      const metadataPath = path.resolve(repoRoot, String(item?.metadataFile || `${trashPath}.meta.json`));
+      if (!trashPath.startsWith(`${target.trashContent}${path.sep}`) || !/\.mdx?$/.test(trashPath)) {
+        throw new Error("回收站文件无效。");
+      }
+      if (!metadataPath.startsWith(`${target.trashContent}${path.sep}`) || metadataPath !== `${trashPath}.meta.json`) {
+        throw new Error("回收站旁车文件无效。");
+      }
+      await unlink(trashPath);
+      let metadataWarning = "";
+      await unlink(metadataPath).catch((error) => {
+        if (error?.code !== "ENOENT") metadataWarning = `旁车清理失败：${error.message}`;
+      });
+      const entry = {
+        id: String(item?.id || ""),
+        type: String(item?.type || ""),
+        file: String(item?.file || ""),
+        trashFile: path.relative(repoRoot, trashPath),
+        deletedPermanentlyAt: new Date().toISOString(),
+        ...(metadataWarning ? { metadataWarning } : {}),
+      };
+      succeeded.push(entry);
+      await appendFile(target.trashLedger, `${JSON.stringify({ action: "purge", ...entry })}\n`, "utf8").catch(() => {});
+    } catch (error) {
+      failed.push({
+        id: String(item?.id || ""),
+        type: String(item?.type || ""),
+        file: String(item?.file || ""),
+        error: error.message,
+      });
+    }
+  }
+
+  const indexWarning = await refreshLocalIndexes("purge_trash", {
+    succeeded: succeeded.length,
+    failed: failed.length,
+  });
+  return { ok: true, succeeded, failed, indexWarning };
 }
 
 async function commitAndMaybePush(files, message, shouldPush) {
@@ -1096,7 +2110,12 @@ async function commitAndMaybePush(files, message, shouldPush) {
   const push = { attempted: Boolean(shouldPush), ok: false, error: "" };
   if (shouldPush) {
     try {
-      await runGit(["push"]);
+      const branch = (await runGit(["branch", "--show-current"])).stdout.trim();
+      const hasUpstream = await runGit(["rev-parse", "--verify", "@{upstream}"])
+        .then(() => true)
+        .catch(() => false);
+      if (hasUpstream) await runGit(["push"]);
+      else await runGit(["push", "-u", "origin", branch]);
       push.ok = true;
     } catch (error) {
       push.error = String(error.stderr || error.stdout || error.message || "推送失败。").trim();
@@ -1153,12 +2172,25 @@ async function handleApi(req, res) {
   const pathname = requestUrl.pathname;
 
   if (pathname === "/api/status" && req.method === "GET") {
-    const git = await getGitStatus();
+    const [git, sitePreview, contentSafety, localContentHistory, publicationItems] = await Promise.all([
+      getGitStatus(),
+      probeUrl(localSiteUrl),
+      getContentGitSafety(),
+      localContentBackupStatus(),
+      listContent("all").then((items) => getContentPublicationStates(items)),
+    ]);
     sendJson(res, 200, {
       repoRoot,
       branch: git.branch,
       hasUncommittedChanges: git.dirty,
       git,
+      contentSafety,
+      publicationCounts: contentStatusCounts(publicationItems),
+      localContentHistory,
+      services: {
+        publisher: { available: true, url: `http://127.0.0.1:${port}` },
+        sitePreview: { ...sitePreview, url: localSiteUrl.href },
+      },
       ai: {
         available: getAiConfig().available,
         model: getAiConfig().model || null,
@@ -1166,6 +2198,7 @@ async function handleApi(req, res) {
       imageStorage: r2Storage.enabled
         ? { provider: "cloudflare-r2", bucket: r2Storage.bucket, publicBaseUrl: r2Storage.publicBaseUrl }
         : { provider: "local" },
+      localData: localDataStatus(),
       target: {
         articles: path.relative(repoRoot, target.articles),
         images: path.relative(repoRoot, target.imageEntries),
@@ -1173,6 +2206,49 @@ async function handleApi(req, res) {
         flomoImportLedger: path.relative(repoRoot, target.flomoImportLedger),
         r2AssetLedger: path.relative(repoRoot, target.r2AssetLedger),
       },
+    });
+    return;
+  }
+
+  if (pathname === "/api/storage/status" && req.method === "GET") {
+    sendJson(res, 200, localDataStatus());
+    return;
+  }
+
+  if (pathname === "/api/content/audit" && req.method === "GET") {
+    sendJson(res, 200, await auditContentLibrary({ repoRoot }));
+    return;
+  }
+
+  if (pathname === "/api/history" && req.method === "GET") {
+    sendJson(res, 200, {
+      items: localDataStore.listOperations({
+        action: requestUrl.searchParams.get("action") || "",
+        limit: requestUrl.searchParams.get("limit") || 20,
+      }),
+    });
+    return;
+  }
+
+  if (pathname === "/api/storage/backup" && req.method === "POST") {
+    const [backupPath, contentHistory] = await Promise.all([
+      localDataStore.createBackup(),
+      localContentBackup.snapshot("Manual safety backup"),
+    ]);
+    sendJson(res, 200, {
+      ok: true,
+      backup: path.relative(repoRoot, backupPath),
+      contentHistory,
+      status: localDataStore.getStatus(),
+    });
+    return;
+  }
+
+  if (pathname === "/api/trash" && req.method === "GET") {
+    await localDataStore.rebuildTrashIndex();
+    sendJson(res, 200, {
+      items: localDataStore.listTrashItems(),
+      status: localDataStore.getStatus(),
     });
     return;
   }
@@ -1198,15 +2274,47 @@ async function handleApi(req, res) {
   }
 
   if (pathname === "/api/content" && req.method === "GET") {
+    let indexWarning = "";
+    try {
+      await localDataStore.rebuildContentIndex();
+    } catch (error) {
+      indexWarning = `SQLite 索引刷新失败，当前列表直接读取 Markdown：${error.message}`;
+    }
     const type = requestUrl.searchParams.get("type") || "all";
     const query = normalizeText(requestUrl.searchParams.get("query"));
     const status = requestUrl.searchParams.get("status") || "all";
-    const items = (await listContent(type)).filter((item) => {
+    const sort = requestUrl.searchParams.get("sort") || "newest";
+    const requestedPage = Math.max(1, Number.parseInt(requestUrl.searchParams.get("page") || "1", 10) || 1);
+    const requestedPageSize = Number.parseInt(requestUrl.searchParams.get("pageSize") || "15", 10) || 15;
+    const pageSize = [15, 30, 50].includes(requestedPageSize) ? requestedPageSize : 15;
+    const searchableItems = (await getContentPublicationStates(await listContent(type))).filter((item) => {
       const text = normalizeText([item.title, item.summary, item.source, item.tags.join(" ")].join(" "));
-      const statusMatches = status === "all" || (status === "draft" ? item.draft : !item.draft && item.public);
-      return statusMatches && (!query || text.includes(query));
+      return !query || text.includes(query);
     });
-    sendJson(res, 200, { items });
+    const counts = contentStatusCounts(searchableItems);
+    const filteredItems = searchableItems.filter((item) => {
+      if (status === "all") return true;
+      return item.publication?.state === status;
+    });
+    const sortedItems = sortManagedContent(filteredItems, sort);
+    const total = sortedItems.length;
+    const pages = Math.max(1, Math.ceil(total / pageSize));
+    const page = Math.min(requestedPage, pages);
+    const start = (page - 1) * pageSize;
+    const items = sortedItems.slice(start, start + pageSize);
+    sendJson(res, 200, {
+      items,
+      counts,
+      indexWarning,
+      pagination: {
+        page,
+        pageSize,
+        pages,
+        total,
+        from: total ? start + 1 : 0,
+        to: Math.min(start + pageSize, total),
+      },
+    });
     return;
   }
 
@@ -1220,7 +2328,17 @@ async function handleApi(req, res) {
       data: parsed.data,
       body: parsed.body,
       publicUrl: publicContentUrl(type, filePath),
+      previewUrl: previewContentUrl(type, filePath),
+      workflow: await getFileWorkflowState(type, filePath, parsed.data),
     });
+    return;
+  }
+
+  if (pathname === "/api/content/deployment" && req.method === "GET") {
+    const type = requestUrl.searchParams.get("type");
+    const filePath = resolveManagedFile(type, requestUrl.searchParams.get("file"));
+    const parsed = parseFrontmatter(await readFile(filePath, "utf8"));
+    sendJson(res, 200, await verifyLiveContent(type, filePath, parsed));
     return;
   }
 
@@ -1228,6 +2346,49 @@ async function handleApi(req, res) {
     const payload = await readJson(req);
     sendJson(res, 200, await updateManagedContent(payload.type, payload.file, payload.data || {}));
     return;
+  }
+
+  if (pathname === "/api/content/batch" && req.method === "POST") {
+    const payload = await readJson(req);
+    if (payload.action === "inspect-selection") {
+      sendJson(res, 200, await inspectBatchSelection(payload));
+      return;
+    }
+    if (payload.action === "inspect-publish") {
+      sendJson(res, 200, await inspectBatchDrafts(payload));
+      return;
+    }
+    if (payload.action === "publish") {
+      sendJson(res, 200, await publishBatchDrafts(payload));
+      return;
+    }
+    if (payload.action === "transition") {
+      sendJson(res, 200, await transitionBatchContent(payload, payload.target));
+      return;
+    }
+    if (payload.action === "metadata") {
+      sendJson(res, 200, await updateBatchMetadata(payload, payload.changes));
+      return;
+    }
+    if (payload.action === "sync") {
+      sendJson(res, 200, await syncBatchContent(payload));
+      return;
+    }
+    if (payload.action === "trash") {
+      sendJson(res, 200, await trashBatchDrafts(payload));
+      return;
+    }
+    if (payload.action === "restore") {
+      sendJson(res, 200, await restoreBatchDrafts(payload.items));
+      return;
+    }
+    if (payload.action === "purge") {
+      sendJson(res, 200, await purgeTrashItems(payload.items, payload.confirmation));
+      return;
+    }
+    const error = new Error("未知的批量操作。");
+    error.statusCode = 400;
+    throw error;
   }
 
   if (pathname === "/api/import/flomo/inspect" && req.method === "POST") {
@@ -1285,7 +2446,15 @@ async function handleApi(req, res) {
 
   if (pathname === "/api/publish/article" && req.method === "POST") {
     const payload = validateArticleAttribution(await readJson(req));
-    const duplicates = await scanDuplicateArticle(payload);
+    await assertGitAutomationAllowed(payload);
+    const quality = payload.draft ? null : await checkArticleQuality(payload);
+    const errors = quality?.issues.filter((item) => item.level === "error") || [];
+    if (errors.length) {
+      const error = new Error(`发布前质量检查未通过：${errors.map((item) => item.message).join("；")}`);
+      error.statusCode = 422;
+      throw error;
+    }
+    const duplicates = quality?.duplicates || await scanDuplicateArticle(payload);
 
     await mkdir(target.articles, { recursive: true });
     const baseName = `${payload.pubDate || todayIso()}-${slugify(payload.slug || payload.title)}`;
@@ -1295,18 +2464,28 @@ async function handleApi(req, res) {
     const git = payload.commit
       ? await commitAndMaybePush([filePath], `Add article: ${payload.title}`, Boolean(payload.push))
       : null;
+    const indexWarning = await refreshLocalIndexes("create_article", {
+      file: path.relative(repoRoot, filePath),
+      draft: Boolean(payload.draft),
+    });
 
     sendJson(res, 200, {
       ok: true,
       file: path.relative(repoRoot, filePath),
       git,
       duplicates,
+      quality,
+      indexWarning,
+      publicUrl: publicContentUrl("article", filePath),
+      previewUrl: previewContentUrl("article", filePath),
+      workflow: await getFileWorkflowState("article", filePath, payload),
     });
     return;
   }
 
   if (pathname === "/api/publish/image" && req.method === "POST") {
     let payload = await readJson(req);
+    await assertGitAutomationAllowed(payload);
     validateRequired(payload, [
       "title",
       "description",
@@ -1362,6 +2541,11 @@ async function handleApi(req, res) {
     const git = payload.commit
       ? await commitAndMaybePush(generatedFiles, `Add image: ${payload.title}`, Boolean(payload.push))
       : null;
+    const indexWarning = await refreshLocalIndexes("create_image", {
+      file: path.relative(repoRoot, entryPath),
+      draft: Boolean(payload.draft),
+      storage: r2Upload ? "cloudflare-r2" : "local",
+    });
 
     sendJson(res, 200, {
       ok: true,
@@ -1381,6 +2565,7 @@ async function handleApi(req, res) {
       r2Ledger: r2LedgerPath ? path.relative(repoRoot, r2LedgerPath) : "",
       git,
       duplicates,
+      indexWarning,
     });
     return;
   }
@@ -1408,6 +2593,23 @@ async function serveStatic(req, res) {
   }
 }
 
+const storageStatus = await localDataStore.initialize();
+let contentBackupStatus;
+try {
+  contentBackupStatus = await localContentBackup.snapshot("Publisher startup safety snapshot");
+} catch (error) {
+  contentBackupStatus = {
+    ready: false,
+    gitDir: path.relative(repoRoot, localContentBackup.gitDir),
+    files: 0,
+    error: error.message,
+  };
+  console.warn(`本机私有内容快照创建失败：${error.message}`);
+}
+if (storageStatus.recovery?.recovered) {
+  console.warn(`SQLite 已自动重建；损坏文件已隔离到 ${storageStatus.recovery.quarantinePath || "本地隔离区"}`);
+}
+
 const server = createServer(async (req, res) => {
   try {
     if (req.url?.startsWith("/api/")) {
@@ -1427,4 +2629,16 @@ const server = createServer(async (req, res) => {
 server.listen(port, "127.0.0.1", () => {
   console.log(`XGIF local publisher: http://127.0.0.1:${port}`);
   console.log(`Repository: ${repoRoot}`);
+  console.log(`Local index: ${storageStatus.database} (${storageStatus.content} contents)`);
+  console.log(`Private content history: ${contentBackupStatus.gitDir} (${contentBackupStatus.files} files)`);
 });
+
+function shutdown() {
+  server.close(() => {
+    localDataStore.close();
+    process.exit(0);
+  });
+}
+
+process.once("SIGINT", shutdown);
+process.once("SIGTERM", shutdown);

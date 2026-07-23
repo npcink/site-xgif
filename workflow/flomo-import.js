@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
 import { inflateRawSync } from "node:zlib";
+import { extractArticleSource } from "./article-source.js";
+import { splitTerminalImportTags } from "./import-tags.js";
 
 const zipLocalHeader = 0x04034b50;
 const zipCentralHeader = 0x02014b50;
@@ -103,18 +105,6 @@ function extractMemoField(segment, className, nextClassName = "") {
   return segment.slice(contentStart, close >= 0 ? close : segment.length);
 }
 
-function terminalTags(lines) {
-  const bodyLines = [...lines];
-  const tags = [];
-  while (bodyLines.length) {
-    const line = bodyLines.at(-1);
-    if (!/^(?:#[^\s#]+\s*)+$/.test(line)) break;
-    tags.unshift(...[...line.matchAll(/#([^\s#]+)/g)].map((match) => match[1]));
-    bodyLines.pop();
-  }
-  return { bodyLines, tags: [...new Set(tags)] };
-}
-
 export function normalizeImportText(value) {
   return String(value || "")
     .normalize("NFKC")
@@ -175,8 +165,20 @@ export function parseFlomoHtml(html) {
   return segments.map((segment, index) => {
     const timeText = htmlFragmentToMarkdown(extractMemoField(segment, "time"));
     const rawBody = htmlFragmentToMarkdown(extractMemoField(segment, "content", "files"));
-    const { bodyLines, tags } = terminalTags(rawBody.split(/\n/).map((line) => line.trim()).filter(Boolean));
-    const body = bodyLines.join("\n\n").trim();
+    const initialTags = splitTerminalImportTags(rawBody.split(/\n/).map((line) => line.trim()).filter(Boolean));
+    const {
+      bodyLines: sourcedBodyLines,
+      source,
+      sourceUrl,
+      sourceKind,
+      needsSourceReview,
+      sourceReviewReason,
+    } = extractArticleSource(initialTags.bodyLines);
+    const trailingTags = splitTerminalImportTags(sourcedBodyLines);
+    const tags = [...new Set([...initialTags.tags, ...trailingTags.tags])];
+    const importTags = [...new Set([...initialTags.importTags, ...trailingTags.importTags])];
+    const legacyBody = initialTags.bodyLines.join("\n\n").trim();
+    const body = trailingTags.bodyLines.join("\n\n").trim();
     if (!body) throw importError(`第 ${index + 1} 条 memo 没有可导入的正文。`);
     const pubDateMatch = timeText.match(/^\d{4}-\d{2}-\d{2}/);
     const pubDate = pubDateMatch?.[0] || new Date().toISOString().slice(0, 10);
@@ -187,17 +189,24 @@ export function parseFlomoHtml(html) {
     return {
       id: `${hash}-${index + 1}`,
       contentHash: hash,
+      legacyContentHash: legacyBody === body ? "" : contentHash(legacyBody),
       pubDate,
       recordedAt: timeText,
       title: suggestion.title,
       summary: suggestedSummary(body),
+      source,
+      sourceUrl,
+      sourceKind,
       tags,
+      importTags,
       readTime: `${Math.max(1, Math.ceil(charCount / 500))} 分钟`,
-      note: "从 flomo 私人笔记导入，请在公开前复核。",
+      note: sourceUrl ? "从 flomo 私人收藏导入，请在公开前复核来源和内容。" : "从 flomo 私人笔记导入，来源待确认，请在公开前复核。",
       body,
       charCount,
       needsTitle: suggestion.needsTitle,
-      needsReview: suggestion.needsTitle || charCount < 120,
+      needsSourceReview,
+      sourceReviewReason,
+      needsReview: suggestion.needsTitle || charCount < 120 || needsSourceReview,
     };
   });
 }

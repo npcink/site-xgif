@@ -1,8 +1,7 @@
 ---
-import { getCollection, render, type CollectionEntry } from "astro:content";
-import ImageCard from "../../components/ImageCard.astro";
+import { getCollection, type CollectionEntry } from "astro:content";
+import ArticleDetailPage from "../../components/ArticleDetailPage.astro";
 import BaseLayout from "../../layouts/BaseLayout.astro";
-import { formatShortDate } from "../../lib/content";
 
 export async function getStaticPaths() {
   const entries = (await getCollection("articles")).filter((entry) => !entry.data.draft);
@@ -14,16 +13,6 @@ interface Props {
 }
 
 const { article } = Astro.props;
-const { Content } = await render(article);
-const allImages = (await getCollection("images")).filter((entry) => !entry.data.draft && entry.data.public);
-const relatedImages = allImages
-  .filter((entry) => entry.data.tags.some((tag) => article.data.tags.includes(tag)))
-  .slice(0, 3);
-const sourceLabel = {
-  original: "原创内容",
-  publication: "访问来源站",
-  editorial: "查看编辑手记",
-}[article.data.sourceKind];
 const jsonLd = {
   "@context": "https://schema.org",
   "@type": "Article",
@@ -37,49 +26,5 @@ const jsonLd = {
 ---
 
 <BaseLayout title={`${article.data.title} — xgif.cn`} description={article.data.summary} pageType="article" {jsonLd}>
-  <article class="detail-page article-detail" data-detail-content data-detail-kind="article">
-    <header class="detail-header">
-      <a class="back-link" href="/articles/">← 返回文章摘要</a>
-      <div class="detail-meta">
-        <span>{article.data.source}</span>
-        <time datetime={article.data.pubDate.toISOString()}>{formatShortDate(article.data.pubDate)}</time>
-        <span>{article.data.readTime}</span>
-      </div>
-      <h1>{article.data.title}</h1>
-      <p class="detail-summary">{article.data.summary}</p>
-      <div class="card-tags">
-        {article.data.tags.map((tag) => <a href={`/tags/${encodeURIComponent(tag)}/`}>#{tag}</a>)}
-      </div>
-      <div class="dialog-article-actions">
-        {article.data.sourceUrl && (
-          <a class="primary-button" href={article.data.sourceUrl} target="_blank" rel="noreferrer">
-            {sourceLabel} <span>↗</span>
-          </a>
-        )}
-        <a class="dialog-full-link" href={`/articles/${article.id}/`}>在独立页面阅读全文 →</a>
-      </div>
-    </header>
-
-    <div class="detail-grid">
-      <aside>
-        <span class="section-kicker">EDITOR&apos;S NOTE</span>
-        <p>{article.data.note ?? "保留来源，快速看懂重点。"}</p>
-        {article.data.sourceUrl && (
-          <a class="primary-button" href={article.data.sourceUrl} target="_blank" rel="noreferrer">
-            {sourceLabel} <span>↗</span>
-          </a>
-        )}
-      </aside>
-      <div class="prose"><Content /></div>
-    </div>
-  </article>
-
-  {relatedImages.length > 0 && (
-    <section class="related-section">
-      <div class="content-title"><h2>相关图片 / 表情包</h2><a href="/images/">更多图片 →</a></div>
-      <div class="masonry-grid compact-grid">
-        {relatedImages.map((item) => <ImageCard item={item} />)}
-      </div>
-    </section>
-  )}
+  <ArticleDetailPage {article} />
 </BaseLayout>

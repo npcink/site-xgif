@@ -19,6 +19,7 @@ const relatedArticles = allArticles
   .filter((entry) => entry.data.tags.some((tag) => item.data.tags.includes(tag)))
   .slice(0, 2);
 const isUserProvided = item.data.sourceKind === "user_provided";
+const isUnknownSource = item.data.sourceKind === "unknown";
 const jsonLd = {
   "@context": "https://schema.org",
   "@type": "ImageObject",
@@ -54,7 +55,11 @@ const jsonLd = {
         </div>
         <div class="prose image-note"><Content /></div>
         <p class="image-source">
-          {isUserProvided ? "图片来源：用户提供 · 已确认可公开发布" : `图片来源备注：${item.data.source}`}
+          {isUserProvided
+            ? "图片来源：用户提供 · 已确认可公开发布"
+            : isUnknownSource
+              ? <><span>图片来源：群聊转存 · 原作者与授权信息待核实</span> · <a href="/rights/">权利人投诉与下架</a></>
+              : `图片来源备注：${item.data.source}`}
         </p>
       </div>
     </div>

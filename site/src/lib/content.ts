@@ -13,6 +13,19 @@ export function formatShortDate(date: Date) {
     .replace("/", ".");
 }
 
+const internalArticleNotePatterns = [
+  /flomo\s*私人(?:笔记|收藏)?导入/i,
+  /请在公开前复核/,
+  /来源待确认/,
+  /内部导入/,
+];
+
+export function publicArticleNote(article: { editorNote?: string; note?: string }) {
+  const normalized = (article.editorNote || article.note)?.trim();
+  if (!normalized) return "";
+  return internalArticleNotePatterns.some((pattern) => pattern.test(normalized)) ? "" : normalized;
+}
+
 export function allTags(
   articles: CollectionEntry<"articles">[],
   images: CollectionEntry<"images">[],

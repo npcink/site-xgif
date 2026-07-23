@@ -42,6 +42,9 @@ yarn-error.log*
 /.wrangler/
 /outputs/
 /work/
+/workflow/.runtime/
+/workflow/trash/
+/workflow/backups/
 
 # private local imports
 /data/*.zip

@@ -6,8 +6,8 @@ const httpUrl = z.url().refine((value) => /^https?:\/\//.test(value), {
   message: "必须使用 http 或 https 地址",
 });
 
-const sourceKind = z.enum(["original", "publication", "editorial"]);
-const imageSourceKind = z.enum(["original", "user_provided"]);
+const sourceKind = z.enum(["original", "publication", "editorial", "unknown"]);
+const imageSourceKind = z.enum(["original", "user_provided", "unknown"]);
 
 const imagePath = z.string().refine((value) => value.startsWith("/") || /^https?:\/\//.test(value), {
   message: "图片必须使用 public 目录路径或 http/https 地址",
@@ -24,12 +24,17 @@ const articles = defineCollection({
     tags: z.array(z.string()).min(1),
     pubDate: z.coerce.date(),
     readTime: z.string(),
+    editorNote: z.string().optional(),
+    internalNote: z.string().optional(),
     note: z.string().optional(),
     featured: z.boolean().default(false),
     draft: z.boolean().default(false),
   }).superRefine((data, context) => {
-    if (data.sourceKind !== "original" && !data.sourceUrl) {
+    if (["publication", "editorial"].includes(data.sourceKind) && !data.sourceUrl) {
       context.addIssue({ code: "custom", path: ["sourceUrl"], message: "外部来源文章必须保留来源链接" });
+    }
+    if (data.sourceKind === "unknown" && !data.draft) {
+      context.addIssue({ code: "custom", path: ["sourceKind"], message: "来源待确认的文章只能保存为草稿" });
     }
   }),
 });
@@ -55,7 +60,7 @@ const images = defineCollection({
     ratio: z.enum(["wide", "tall", "square"]).default("square"),
     draft: z.boolean().default(false),
   }).superRefine((data, context) => {
-    if (data.sourceKind === "user_provided") return;
+    if (data.sourceKind === "user_provided" || data.sourceKind === "unknown") return;
     for (const [name, value] of Object.entries({
       sourceUrl: data.sourceUrl,
       author: data.author,

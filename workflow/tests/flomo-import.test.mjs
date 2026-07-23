@@ -46,7 +46,7 @@ function storedZip(entries) {
 }
 
 const exportHtml = `<!doctype html><html><body><div class="memos">
-  <div class="memo"><div class="time">2026-07-20 10:20:30</div><div class="content"><p>一个足够短的标题</p><p>正文第一段&amp;补充。</p><p>#随笔</p></div><div class="files"></div></div>
+  <div class="memo"><div class="time">2026-07-20 10:20:30</div><div class="content"><p>一个足够短的标题</p><p>正文第一段&amp;补充。</p><p>https://jandan.net/t/6179471</p><p>#随笔</p></div><div class="files"></div></div>
   <div class="memo"><div class="time">2026-07-21 11:22:33</div><div class="content"><p>这是一个非常长而且不应该直接被当成标题的正文开头，因为它需要经过人工整理之后才能公开发布。</p><p>#待整理 #观察</p></div><div class="files"></div></div>
 </div></body></html>`;
 
@@ -58,9 +58,67 @@ test("flomo HTML parser preserves dates and bodies while separating terminal tag
   assert.deepEqual(items[0].tags, ["随笔"]);
   assert.match(items[0].body, /正文第一段&补充/);
   assert.doesNotMatch(items[0].body, /#随笔/);
+  assert.doesNotMatch(items[0].body, /jandan\.net/);
+  assert.equal(items[0].source, "煎蛋");
+  assert.equal(items[0].sourceUrl, "https://jandan.net/t/6179471");
+  assert.equal(items[0].sourceKind, "publication");
+  assert.match(items[0].legacyContentHash, /^[a-f0-9]{64}$/);
   assert.equal(items[0].title, "一个足够短的标题");
   assert.equal(items[1].needsTitle, true);
   assert.deepEqual(items[1].tags, ["待整理", "观察"]);
+});
+
+test("flomo parser leaves genuinely ambiguous links in the body for review", () => {
+  const html = `<!doctype html><html><body><div class="memo"><div class="time">2026-07-22 08:00:00</div><div class="content">
+    <p>正文开头。</p><p>https://example.com/context</p><p>正文补充。</p><p>https://example.com/source</p>
+  </div><div class="files"></div></div></body></html>`;
+  const [item] = parseFlomoHtml(html);
+
+  assert.equal(item.sourceUrl, "");
+  assert.equal(item.sourceKind, "unknown");
+  assert.equal(item.source, "来源待确认");
+  assert.equal(item.needsSourceReview, true);
+  assert.equal(item.needsReview, true);
+  assert.match(item.body, /https:\/\/example\.com\/context/);
+  assert.match(item.body, /https:\/\/example\.com\/source/);
+});
+
+test("flomo parser recognizes a source URL at the beginning of an article", () => {
+  const html = `<!doctype html><html><body><div class="memo"><div class="time">2026-07-22 08:00:00</div><div class="content">
+    <p>链接：https://www.zhihu.com/question/1/answer/2</p><p>来源：知乎</p><p>正文内容。</p>
+  </div><div class="files"></div></div></body></html>`;
+  const [item] = parseFlomoHtml(html);
+
+  assert.equal(item.sourceUrl, "https://www.zhihu.com/question/1/answer/2");
+  assert.equal(item.source, "知乎");
+  assert.equal(item.sourceKind, "publication");
+  assert.equal(item.needsSourceReview, false);
+  assert.doesNotMatch(item.body, /question\/1/);
+});
+
+test("flomo parser removes list-style grouping tags from public content", () => {
+  const html = `<!doctype html><html><body><div class="memo"><div class="time">2026-07-22 08:00:00</div><div class="content">
+    <p>正文内容。</p><p>https://jandan.net/t/6086683</p><p>- #故事汇</p>
+  </div><div class="files"></div></div></body></html>`;
+  const [item] = parseFlomoHtml(html);
+
+  assert.equal(item.sourceUrl, "https://jandan.net/t/6086683");
+  assert.deepEqual(item.importTags, ["故事汇"]);
+  assert.deepEqual(item.tags, []);
+  assert.doesNotMatch(item.body, /故事汇|6086683/);
+});
+
+test("flomo parser rechecks terminal grouping tags after removing a later source link", () => {
+  const html = `<!doctype html><html><body><div class="memo"><div class="time">2026-01-24 15:16:48</div><div class="content">
+    <p>正文内容。</p><p>#sq</p><p>https://jandan.net/t/6086683</p>
+  </div><div class="files"></div></div></body></html>`;
+  const [item] = parseFlomoHtml(html);
+
+  assert.equal(item.sourceUrl, "https://jandan.net/t/6086683");
+  assert.deepEqual(item.importTags, ["sq"]);
+  assert.deepEqual(item.tags, []);
+  assert.doesNotMatch(item.body, /#sq|6086683/);
+  assert.match(item.legacyContentHash, /^[a-f0-9]{64}$/);
 });
 
 test("flomo ZIP parser reads the exported HTML without extracting files", () => {

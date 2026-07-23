@@ -1,0 +1,26 @@
+---
+import { getCollection, type CollectionEntry } from "astro:content";
+import ArticleDetailPage from "../../../components/ArticleDetailPage.astro";
+import BaseLayout from "../../../layouts/BaseLayout.astro";
+
+export async function getStaticPaths() {
+  if (!import.meta.env.DEV) return [];
+  const entries = await getCollection("articles");
+  return entries.map((article) => ({ params: { id: article.id }, props: { article } }));
+}
+
+interface Props {
+  article: CollectionEntry<"articles">;
+}
+
+const { article } = Astro.props;
+---
+
+<BaseLayout
+  title={`本地预览：${article.data.title} — xgif.cn`}
+  description={article.data.summary}
+  pageType="article"
+  noindex
+>
+  <ArticleDetailPage {article} preview />
+</BaseLayout>
