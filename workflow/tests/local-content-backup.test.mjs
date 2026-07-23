@@ -17,11 +17,13 @@ test("private Git snapshots include only content allowlist paths", async () => {
     mkdir(path.join(repoRoot, "site", "src", "content", "images"), { recursive: true }),
     mkdir(path.join(repoRoot, "site", "public", "images", "memes"), { recursive: true }),
     mkdir(path.join(workflowRoot, "records"), { recursive: true }),
+    mkdir(path.join(workflowRoot, "private-sources", "articles"), { recursive: true }),
     mkdir(path.join(workflowRoot, ".runtime"), { recursive: true }),
   ]);
   await Promise.all([
     writeFile(path.join(repoRoot, "site", "src", "content", "articles", "draft.md"), "draft one", "utf8"),
     writeFile(path.join(workflowRoot, "records", "items.jsonl"), "{}\n", "utf8"),
+    writeFile(path.join(workflowRoot, "private-sources", "articles", "draft.md"), "private source\n", "utf8"),
     writeFile(path.join(workflowRoot, ".env"), "SECRET=do-not-back-up\n", "utf8"),
     writeFile(path.join(workflowRoot, ".runtime", "xgif.sqlite3"), "database", "utf8"),
   ]);
@@ -29,6 +31,12 @@ test("private Git snapshots include only content allowlist paths", async () => {
   const backup = new LocalContentBackup({ repoRoot, workflowRoot });
   const first = await backup.snapshot("first snapshot");
   assert.equal(first.changed, true);
+  assert.deepEqual(first.offsite, {
+    configured: false,
+    ok: false,
+    remote: "",
+    error: "",
+  });
   await writeFile(path.join(repoRoot, "site", "src", "content", "articles", "draft.md"), "draft two", "utf8");
   const second = await backup.snapshot("second snapshot");
   assert.equal(second.changed, true);
@@ -46,5 +54,6 @@ test("private Git snapshots include only content allowlist paths", async () => {
   ]);
   assert.match(stdout, /site\/src\/content\/articles\/draft\.md/);
   assert.match(stdout, /workflow\/records\/items\.jsonl/);
+  assert.match(stdout, /workflow\/private-sources\/articles\/draft\.md/);
   assert.doesNotMatch(stdout, /\.env|xgif\.sqlite3/);
 });

@@ -7,8 +7,8 @@ const readBuiltArticle = (id) =>
 
 test("public pages hide private import reminders but retain reader-facing editorial notes", async () => {
   const [imported, editorial] = await Promise.all([
-    readBuiltArticle("2026-07-22-今天写文的时候忽然想起一件事"),
-    readBuiltArticle("2026-07-10-海边旧事与父亲的记忆"),
+    readBuiltArticle("20260722-99j9"),
+    readBuiltArticle("20260710-vfks"),
   ]);
 
   assert.doesNotMatch(imported, /flomo\s*私人/);

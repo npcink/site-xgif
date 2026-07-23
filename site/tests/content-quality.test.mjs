@@ -3,6 +3,12 @@ import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 
+const publicDisclosure = [
+  "> 本页只提供编辑摘要，不转载来源站全文。",
+  "",
+  "请通过页面中的“查看原始来源”链接阅读完整内容。",
+].join("\n");
+
 const contentRoot = new URL("../src/content/", import.meta.url);
 
 async function frontmatter(directory) {
@@ -50,5 +56,32 @@ test("images include attribution and license metadata", async () => {
     for (const name of required) {
       assert.ok(field(image.text, name), `${path.basename(image.file)} 缺少 ${name}`);
     }
+  }
+});
+
+test("all content uses unique stable IDs that match the Markdown filename", async () => {
+  const entries = [
+    ...(await frontmatter("articles")).map((entry) => ({ ...entry, type: "articles" })),
+    ...(await frontmatter("images")).map((entry) => ({ ...entry, type: "images" })),
+  ];
+  const ids = entries.map(({ file, text }) => {
+    const contentId = field(text, "contentId");
+    assert.match(contentId || "", /^\d{8}-[a-z0-9]{4}$/, `${file} 缺少有效 contentId`);
+    assert.equal(path.basename(file, path.extname(file)), contentId, `${file} 文件名必须与 contentId 一致`);
+    return contentId;
+  });
+
+  assert.equal(new Set(ids).size, ids.length, "文章和图片的 contentId 必须全局唯一");
+});
+
+test("published external articles expose only the standard public disclosure body", async () => {
+  const articles = await frontmatter("articles");
+  for (const article of articles) {
+    const body = article.text.match(/^---\r?\n[\s\S]*?\r?\n---\r?\n?([\s\S]*)$/u)?.[1] || "";
+    if (
+      field(article.text, "draft") === "true"
+      || !["publication", "editorial"].includes(field(article.text, "sourceKind"))
+    ) continue;
+    assert.equal(body.trim(), publicDisclosure, `${article.file} 不应公开外部来源全文`);
   }
 });

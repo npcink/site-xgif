@@ -76,7 +76,7 @@ npm run content:audit
 
 ## 本地数据安全
 
-文章正文和图片元数据仍以 `site/src/content/**/*.md` 为权威源，SQLite 只保存可重建的内容索引、回收站索引、本地操作历史和同步记录。数据库位于 `workflow/.runtime/xgif.sqlite3`，不会进入 Git；数据库迁移、重建代码和内容文件才进入 Git。
+原创文章正文和图片元数据仍以 `site/src/content/**/*.md` 为权威源；外部来源文章的完整导入正文以 `workflow/private-sources/articles/<contentId>.md` 为本地私有权威源，公开 Markdown 只保存编辑摘要和来源入口。SQLite 只保存可重建的内容索引、回收站索引、本地操作历史和同步记录。数据库位于 `workflow/.runtime/xgif.sqlite3`，不会进入 Git；数据库迁移、重建代码和公开内容文件才进入公开 Git。
 
 发布台启动时会检查数据库完整性。发现损坏时会先把原数据库隔离为 `.corrupt-*`，然后扫描 Markdown 与回收站旁车自动重建。常用维护命令：
 
@@ -88,9 +88,9 @@ npm run data:verify-recovery # 用当前真实内容和临时数据库演练损�
 npm run test:recovery # 在临时目录模拟数据库损坏和恢复，不触碰真实内容
 ```
 
-备份保存在 `workflow/backups/`，不会进入公开仓库。其中 `content-history.git` 是独立的本机私有 Git 仓库，只白名单保存 Markdown、内容台账、回收站和本地图片；`.env`、SQLite、日志和程序文件不会进入。发布台启动和每次内容变更后都会自动创建快照，手动“创建本地安全备份”会同时更新内容快照并备份 SQLite。
+备份保存在 `workflow/backups/`，不会进入公开仓库。其中 `content-history.git` 是独立的本机私有 Git 仓库，只白名单保存 Markdown、私有来源正文、内容台账、回收站和本地图片；`.env`、SQLite、日志和程序文件不会进入。发布台启动和每次内容变更后都会自动创建快照，手动“创建本地安全备份”会同时更新内容快照并备份 SQLite。
 
-本机私有 Git 可以防止误删和误改，但仍和原文件处在同一台电脑。要防止整台电脑或磁盘丢失，尚未公开的草稿还需要进入异机私有远程仓库或加密外部备份；不要把私密草稿自动推送到公开仓库。
+本机私有 Git 可以防止误删和误改，但仍和原文件处在同一台电脑。当前内容历史仓库已单独配置私有 GitHub 远端 `npcink/site-xgif-private-content`；每次安全快照都会尝试推送 `history` 分支，失败只会在备份结果中提示，不会阻断本地内容保存。不要把这个远端改成公开仓库，也不要把私密草稿推送到站点公开仓库。
 
 管理端右上角会显示“内容 Git：已记录当前版本数/内容总数”。未跟踪文件或提交后又修改的文件不会计为已记录；这能防止把“文件在本机”误认为“已经进入 Git”。当前 `origin` 是公开仓库，因此发布台不会自动把草稿当作远程备份推送，私有草稿备份需要另行配置私有远程或加密备份目标。
 
@@ -116,7 +116,7 @@ npm run data:rebuild --prefix workflow
 
 第一条命令只显示可安全修复项；第二条只应用有明确证据的链接和来源名称，并把没有来源证据的 flomo“原创”改为“来源待确认”；第三条从 Markdown 刷新本地 SQLite 索引。
 
-导入结果始终是 `draft: true` 的 Markdown 草稿，不会自动提交或推送。若点击“AI 整理选中项”，只有当前勾选的正文和来源元数据会发送给 `.env` 中配置的 AI 服务。每次成功导入会在 `records/flomo-imports.jsonl` 追加正文哈希、时间和目标文件；台账不保存正文。
+导入结果始终是 `draft: true` 的 Markdown 草稿，不会自动提交或推送。若点击“AI 整理选中项”，只有当前勾选的正文和来源元数据会发送给 `.env` 中配置的 AI 服务。外部来源草稿发布时，完整正文会转入本机 `private-sources/articles/`，公开 Markdown 只保留“不转载来源站全文”的说明；再次退回草稿时，管理端会恢复私有正文供编辑。每次成功导入会在 `records/flomo-imports.jsonl` 追加正文哈希、时间和目标文件；台账不保存正文。完整边界见 [`ADR-009`](../site/docs/decisions/ADR-009-public-summary-private-source-boundary.md)。
 
 文章备注分成两个字段：`editorNote` 是可以显示给读者的“公开编辑手记”，`internalNote` 是只在本地内容管理中显示的复核提醒。AI 只会建议公开编辑手记；flomo 导入批次、来源待核验等内部信息必须写入 `internalNote`，不能进入公开页面。
 
@@ -134,6 +134,8 @@ PUBLISHER_MAX_IMPORT_UNCOMPRESSED_BYTES="52428800"
 3. 选择互斥的“立即发布”或“保存为草稿”。精选、发布日期和 Git 操作统一放在“高级设置”中。
 4. 查看右侧预览，然后点击“检查并发布”。主按钮会自动执行重复检查与质量检查；完全相同的图片文件会被拦截，同标题内容仅提示确认，避免误伤裁剪或改图。
 5. 只想检查而暂不保存时，可点击“仅检查”。服务端在真正写入前仍会执行相同校验，不能绕过页面直接重复发布。
+
+发布台会自动为新内容生成 `YYYYMMDD-4位小写字母数字` 的稳定 ID，并同时用作 Markdown 文件名与公开 URL。不要手工修改已经生成的 `contentId`；标题和发布日期可以继续调整，不会改变公开地址。旧内容的一次性迁移命令是 `npm run content:ids:migrate`。
 
 发布已有文章草稿时：
 
@@ -163,7 +165,15 @@ XGIF_R2_BUCKET="xgif-memes-prod"
 XGIF_R2_PUBLIC_BASE_URL="https://img.xgif.cn"
 ```
 
-启用后，发布器会先校验图片并计算 SHA-256，再通过仓库锁定的 Wrangler 上传至 `memes/<sha256>.<ext>`，写入 `Cache-Control: public, max-age=31536000, immutable`，并验证自定义域名可以读取对象。只有上传和验证成功后才会生成 Markdown；失败时不会写入指向坏地址的内容文件。对象哈希会记录在 `records/r2-assets.jsonl` 并参与后续查重。
+启用后，发布器会先校验图片并计算 SHA-256，再通过仓库锁定的 Wrangler 上传至 `memes/<sha256>.<ext>`，写入 `Cache-Control: public, max-age=31536000, immutable`，并验证自定义域名可以读取对象。上传验证后会先写入 R2 台账，再原子写入 Markdown；如果后续本地写入失败，台账会留下可检测的孤立记录，不会静默遗失远端对象。
+
+只读对账不会删除任何对象：
+
+```bash
+npm run r2:reconcile
+```
+
+报告会比较图片 Markdown 与 `records/r2-assets.jsonl`，列出“内容引用无台账”和“台账无内容引用”两类可恢复状态。任何清理都需要人工确认，不会由发布器自动执行。
 
 线上保护固定为：`/memes/` 一年 Edge TTL、外站非空 Referer 拦截、查询串拦截，以及排除已验证机器人的单 IP `200 次/10 秒` 限速。空 Referer 仍允许，以兼容直接访问和消息应用预览；因此这套规则用于降低盗链与刷流量成本，不是私有访问控制。R2 图片 URL 不支持查询参数。
 
@@ -199,8 +209,8 @@ PUBLISHER_MAX_IMAGE_DIMENSION="6000"
 
 从微信群、QQ 群等渠道保存且无法确认作者或授权的图片，选择“群聊转存 / 来源未知”即可直接发布；`source`、`sourceUrl`、`author`、`license`、`licenseUrl` 不需要填写，也不会由 AI 虚构。生成的 Markdown 使用 `sourceKind: "unknown"` 并明确标记“群聊转存（来源待核实）”。
 
-这类图片的公开详情页会链接到 `/rights/`，权利人可通过 `hello@xgif.cn` 提交内容链接与权利说明，申请更正或下架。“来源待核实”和投诉入口用于如实披露与后续处理，不代表已经取得原作者授权。
+这类图片的公开详情页会链接到 `/rights/`，权利人可通过 `1355471563@qq.com` 提交内容链接与权利说明，申请更正或下架。“来源待核实”和投诉入口用于如实披露与后续处理，不代表已经取得原作者授权。
 
 ## 说明
 
-公开站点不需要数据库，也不会启动线上后台。本地发布台使用可删除重建的 SQLite 管理索引，但所有内容仍然是 Markdown 和图片文件，Astro 只读取这些文件。原创文章可以不填写外部来源链接；转载和编辑整理内容仍必须保留真实来源链接。完整边界见 [`ADR-007`](../site/docs/decisions/ADR-007-local-sqlite-index.md)。
+公开站点不需要数据库，也不会启动线上后台。本地发布台使用可删除重建的 SQLite 管理索引，Astro 只读取公开 Markdown 和图片文件。原创文章可以不填写外部来源链接；转载和编辑整理内容仍必须保留真实来源链接，但完整来源正文只留在本机私有来源库。数据边界见 [`ADR-007`](../site/docs/decisions/ADR-007-local-sqlite-index.md) 与 [`ADR-009`](../site/docs/decisions/ADR-009-public-summary-private-source-boundary.md)。

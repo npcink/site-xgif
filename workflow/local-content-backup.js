@@ -30,6 +30,7 @@ export class LocalContentBackup {
       "site/src/content/images",
       "site/public/images/memes",
       "workflow/records",
+      "workflow/private-sources",
       "workflow/trash",
     ],
   }) {
@@ -55,14 +56,44 @@ export class LocalContentBackup {
     await run("git", this.gitArgs(["add", "-A", "-f", "--", ...this.paths]), this.repoRoot);
     const staged = await run("git", this.gitArgs(["diff", "--cached", "--name-only"]), this.repoRoot);
     if (!staged.stdout.trim()) {
-      return { ok: true, changed: false, ...(await this.status()) };
+      return {
+        ok: true,
+        changed: false,
+        ...(await this.status()),
+        offsite: await this.pushOffsite(),
+      };
     }
     await run("git", [
       "-c", "user.name=XGIF Local Backup",
       "-c", "user.email=local-backup@xgif.invalid",
       ...this.gitArgs(["commit", "-m", message]),
     ], this.repoRoot);
-    return { ok: true, changed: true, ...(await this.status()) };
+    return {
+      ok: true,
+      changed: true,
+      ...(await this.status()),
+      offsite: await this.pushOffsite(),
+    };
+  }
+
+  async pushOffsite() {
+    let remote = "";
+    try {
+      remote = (await run("git", this.gitArgs(["remote", "get-url", "--push", "origin"]), this.repoRoot)).stdout.trim();
+    } catch {
+      return { configured: false, ok: false, remote: "", error: "" };
+    }
+    try {
+      await run("git", this.gitArgs(["push", "origin", "history"]), this.repoRoot);
+      return { configured: true, ok: true, remote, error: "" };
+    } catch (error) {
+      return {
+        configured: true,
+        ok: false,
+        remote,
+        error: String(error.stderr || error.stdout || error.message || "私有远程推送失败。").trim(),
+      };
+    }
   }
 
   async status() {

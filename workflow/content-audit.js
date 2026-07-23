@@ -1,6 +1,12 @@
 import { createHash } from "node:crypto";
 import { access, readdir, readFile } from "node:fs/promises";
 import path from "node:path";
+import {
+  isExternalArticle,
+  isPublicArticleDisclosure,
+} from "./article-publication.js";
+import { isContentId } from "./content-id.js";
+import { CANONICAL_TAGS } from "./content-taxonomy.js";
 
 const internalNotePatterns = [
   /flomo\s*私人(?:笔记|收藏)?导入/iu,
@@ -82,6 +88,7 @@ function createItem(type, file, parsed, repoRoot) {
     source: String(data.source || ""),
     sourceUrl: String(data.sourceUrl || ""),
     sourceKind: String(data.sourceKind || "original"),
+    contentId: String(data.contentId || ""),
     draft: Boolean(data.draft) || (type === "image" && data.public === false),
     data,
     body,
@@ -94,12 +101,19 @@ function createItem(type, file, parsed, repoRoot) {
 
 function auditArticle(item) {
   const { data, body, file, sourceKind, sourceUrl } = item;
+  const externalPublic = isExternalArticle(data) && !item.draft;
   if (!String(data.title || "").trim()) item.blockers.push("缺少标题。");
   if (!String(data.summary || "").trim()) item.blockers.push("缺少摘要。");
   if (!body.trim()) item.blockers.push("缺少正文。");
   if (!Array.isArray(data.tags) || data.tags.length === 0) item.blockers.push("缺少标签。");
+  if (Array.isArray(data.tags) && data.tags.some((tag) => !CANONICAL_TAGS.includes(tag))) {
+    item.blockers.push("包含未纳入规范词表的标签。");
+  }
   if (["publication", "editorial"].includes(sourceKind) && !sourceUrl) {
     item.blockers.push("外部来源文章缺少来源链接。");
+  }
+  if (externalPublic && !isPublicArticleDisclosure(body)) {
+    item.blockers.push("外部来源公开文章仍含来源正文，必须迁移到私有来源库。");
   }
   if (sourceUrl && !isValidHttpUrl(sourceUrl)) {
     item.blockers.push("来源链接不是有效的 HTTP(S) 地址。");
@@ -119,7 +133,9 @@ function auditArticle(item) {
   const summaryLength = String(data.summary || "").replace(/\s+/gu, "").length;
   if (summaryLength > 0 && summaryLength < 24) item.warnings.push("摘要过短，可能不足以说明内容重点。");
   if (summaryLength > 180) item.warnings.push("摘要过长，建议压缩到 180 字以内。");
-  if (normalizedBody(body).length < 80) item.warnings.push("正文较短，需要确认是否为完整内容。");
+  if (!externalPublic && normalizedBody(body).length < 80) {
+    item.warnings.push("正文较短，需要确认是否为完整内容。");
+  }
   const urls = bodyUrls(body).filter((url) => url !== sourceUrl);
   if (urls.length) item.warnings.push(`正文仍含 ${urls.length} 个未结构化链接，需要人工判断用途。`);
 
@@ -137,6 +153,9 @@ async function auditImage(item, repoRoot) {
   if (!String(data.description || "").trim()) item.blockers.push("缺少描述。");
   if (!String(data.image || "").trim()) item.blockers.push("缺少图片地址。");
   if (!Array.isArray(data.tags) || data.tags.length === 0) item.blockers.push("缺少标签。");
+  if (Array.isArray(data.tags) && data.tags.some((tag) => !CANONICAL_TAGS.includes(tag))) {
+    item.blockers.push("包含未纳入规范词表的标签。");
+  }
   if (String(data.image || "").startsWith("/")) {
     const asset = path.join(repoRoot, "site", "public", String(data.image).replace(/^\/+/u, ""));
     try {
@@ -151,6 +170,7 @@ async function auditImage(item, repoRoot) {
 }
 
 function finalize(items) {
+  const contentIdGroups = new Map();
   const sourceGroups = new Map();
   const contentGroups = new Map();
   for (const item of items.filter((entry) => entry.type === "article")) {
@@ -159,9 +179,27 @@ function finalize(items) {
       group.push(item);
       sourceGroups.set(item.sourceUrl, group);
     }
-    const group = contentGroups.get(item.contentHash) || [];
+    if (!isPublicArticleDisclosure(item.body)) {
+      const group = contentGroups.get(item.contentHash) || [];
+      group.push(item);
+      contentGroups.set(item.contentHash, group);
+    }
+  }
+  for (const item of items) {
+    if (!isContentId(item.contentId)) {
+      item.blockers.push("缺少有效的稳定内容 ID。");
+      continue;
+    }
+    if (path.basename(item.file, path.extname(item.file)) !== item.contentId) {
+      item.blockers.push("内容文件名必须与稳定内容 ID 一致。");
+    }
+    const group = contentIdGroups.get(item.contentId) || [];
     group.push(item);
-    contentGroups.set(item.contentHash, group);
+    contentIdGroups.set(item.contentId, group);
+  }
+  for (const group of contentIdGroups.values()) {
+    if (group.length <= 1) continue;
+    for (const item of group) item.blockers.push("稳定内容 ID 与另一条内容重复。");
   }
   for (const group of sourceGroups.values()) {
     if (group.length <= 1) continue;

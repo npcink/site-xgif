@@ -226,10 +226,6 @@ button { color: inherit; }
 .newsletter-mark { width: 96px; height: 96px; border: 1px solid var(--ink); border-radius: 50%; display: grid; place-items: center; text-align: center; line-height: 1.2; font-weight: 900; transform: rotate(-8deg); }
 .newsletter h2 { font-size: clamp(32px, 3.5vw, 50px); letter-spacing: -.055em; margin: 13px 0 9px; }
 .newsletter > div > p:last-child { margin: 0; color: #5b5137; line-height: 1.6; font-size: 13px; }
-.newsletter form { display: grid; grid-template-columns: 1fr auto; border-bottom: 1px solid var(--ink); position: relative; padding-bottom: 8px; }
-.newsletter input { border: 0; background: transparent; outline: none; min-width: 0; }
-.newsletter form button { border: 0; background: transparent; font-weight: 800; cursor: pointer; }
-.newsletter form small { position: absolute; top: calc(100% + 10px); left: 0; color: #6e6242; font-size: 9px; }
 .newsletter-placeholder { display: flex; flex-direction: column; align-items: flex-start; gap: 14px; }
 .newsletter-placeholder span { color: #6e6242; font-size: 11px; }
 .newsletter-placeholder a { font-weight: 800; border-bottom: 1px solid var(--ink); padding-bottom: 7px; }
@@ -493,7 +489,7 @@ body.detail-dialog-open { overflow: hidden; }
   .tag-library { grid-template-columns: 1fr; }
   .tag-intro { border-right: 0; border-bottom: 1px solid rgba(255,255,255,.35); }
   .newsletter { grid-template-columns: 90px 1fr; }
-  .newsletter form { grid-column: 1 / -1; margin-top: 20px; }
+  .newsletter-placeholder { grid-column: 1 / -1; margin-top: 20px; }
   .detail-dialog-body .detail-grid,
   .detail-dialog-body .image-detail-grid { grid-template-columns: 1fr; gap: 38px; }
   .detail-dialog-body .image-detail-grid { height: auto; min-height: 0; }
@@ -530,7 +526,7 @@ body.detail-dialog-open { overflow: hidden; }
   .tag-cloud a, .tag-cloud a:nth-last-child(-n+2) { border-bottom: 1px solid rgba(255,255,255,.25); }
   .newsletter { padding: 60px 22px 70px; grid-template-columns: 1fr; gap: 28px; }
   .newsletter-mark { width: 78px; height: 78px; }
-  .newsletter form { grid-column: auto; }
+  .newsletter-placeholder { grid-column: auto; }
   footer { padding: 55px 22px 24px; }
   .footer-links { justify-content: flex-start; margin: 34px 0 48px; }
   .footer-bottom { flex-direction: column; gap: 8px; }

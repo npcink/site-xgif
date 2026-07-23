@@ -3,7 +3,7 @@ import { getCollection } from "astro:content";
 import ArticleCard from "../components/ArticleCard.astro";
 import ImageCard from "../components/ImageCard.astro";
 import BaseLayout from "../layouts/BaseLayout.astro";
-import { allTags, sortByDate } from "../lib/content";
+import { allTags, contentHref, sortByDate } from "../lib/content";
 
 const articles = sortByDate((await getCollection("articles")).filter((entry) => !entry.data.draft));
 const images = sortByDate(
@@ -44,7 +44,7 @@ const popularTags = ["AI", "互联网", "打工", "无语", "反转", "群聊", 
       <div class="feature-copy">
         <span class="mini-label">READ · {featured.data.readTime.toUpperCase()}</span>
         <h2>{featured.data.title}</h2>
-        <a href={`/articles/${featured.id}/`} data-detail-link>读摘要 <span>→</span></a>
+        <a href={contentHref("articles", featured)} data-detail-link>读摘要 <span>→</span></a>
       </div>
     </div>
   </section>
@@ -123,17 +123,16 @@ const popularTags = ["AI", "互联网", "打工", "无语", "反转", "群聊", 
   </section>
 
   <section class="newsletter">
-    <div class="newsletter-mark">每周<br />一封</div>
+    <div class="newsletter-mark">持续<br />更新</div>
     <div>
-      <p class="section-kicker">WEEKLY DIGEST</p>
-      <h2>别追热点，让好内容来找你。</h2>
-      <p>每周一次，只有文章摘要、图片和一点编辑判断。无广告轰炸。</p>
+      <p class="section-kicker">EDITORIAL UPDATE</p>
+      <h2>不用订阅，也能随时回来继续看。</h2>
+      <p>当前站点不收集邮箱。新内容会直接进入文章摘要和图片索引。</p>
     </div>
-    <form data-newsletter-form>
-      <input type="email" autocomplete="email" placeholder="你的邮箱" aria-label="邮箱地址" required />
-      <button type="submit">暂存订阅 <span>→</span></button>
-      <small data-newsletter-status aria-live="polite">演示入口 · 第一阶段暂不收集数据</small>
-    </form>
+    <div class="newsletter-placeholder">
+      <span>无需注册 · 不采集联系方式</span>
+      <a href="/articles/">浏览全部文章摘要 <span>→</span></a>
+    </div>
   </section>
   <script is:inline src="/scripts/home-discovery.js"></script>
 </BaseLayout>

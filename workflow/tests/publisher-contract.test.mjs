@@ -17,6 +17,8 @@ test("publisher exposes local public URLs and keeps empty result panels hidden",
 
   assert.match(server, /function publicContentUrl/);
   assert.match(server, /function previewContentUrl/);
+  assert.match(server, /allocateContentId/);
+  assert.match(server, /contentId: \$\{yamlString\(payload\.contentId\)\}/);
   assert.match(server, /publicUrl: publicContentUrl/);
   assert.match(server, /previewUrl: previewContentUrl/);
   assert.match(server, /http:\/\/127\.0\.0\.1:4321/);

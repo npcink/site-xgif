@@ -1,5 +1,17 @@
 import { expect, test } from "@playwright/test";
 
+test.beforeEach(async ({ page }) => {
+  await page.route("https://img.xgif.cn/**", async (route) => {
+    const response = await route.fetch({
+      headers: {
+        ...route.request().headers(),
+        referer: "https://www.xgif.cn/",
+      },
+    });
+    await route.fulfill({ response });
+  });
+});
+
 async function waitForImages(page) {
   await page.waitForFunction(() => Array.from(document.images)
     .filter((image) => {
@@ -12,8 +24,9 @@ async function waitForImages(page) {
 async function openConfusedImageDialog(page) {
   await page.goto("/images/", { waitUntil: "networkidle" });
   await waitForImages(page);
-  await page.locator('a[href="/images/confused/"][data-detail-link]').click();
+  await page.locator('a[href="/images/20260707-6s1n/"][data-detail-link]').click();
   await expect(page.getByRole("dialog", { name: "这就给我整不会了" })).toBeVisible();
+  await waitForImages(page);
 }
 
 async function openSearchState(page, query) {
@@ -86,7 +99,7 @@ test("search empty state matches the approved visual baseline", async ({ page },
 });
 
 test("article detail matches the approved visual baseline", async ({ page }, testInfo) => {
-  await page.goto("/articles/2026-07-10-海边旧事与父亲的记忆/", { waitUntil: "networkidle" });
+  await page.goto("/articles/20260710-vfks/", { waitUntil: "networkidle" });
   await waitForImages(page);
   await expect(page.getByRole("heading", { name: "海边旧事与父亲的记忆" })).toBeVisible();
 

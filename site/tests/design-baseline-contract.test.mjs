@@ -48,19 +48,27 @@ test("home and discovery routes preserve the editorial visual hierarchy", async 
   assert.match(home, /data-home-discovery/);
   assert.match(home, /data-home-view="articles"/);
   assert.match(home, /data-home-view="images"/);
-  assert.match(home, /data-newsletter-form/);
+  assert.match(home, /class="newsletter-placeholder"/);
   assert.match(homeDiscovery, /data-home-section/);
-  assert.match(homeDiscovery, /newsletterForm\.reset\(\)/);
-  assert.match(homeDiscovery, /未保存邮箱地址/);
+  assert.doesNotMatch(home, /data-newsletter-form/);
+  assert.doesNotMatch(homeDiscovery, /newsletterForm/);
 });
 
-test("visual baseline keeps the original desktop search and newsletter layout contracts", async () => {
+test("visual baseline keeps the desktop search and honest update layout contracts", async () => {
   const styles = await read("src/styles/global.css");
 
   assert.match(styles, /\.search-panel \{[^}]*max-width: 1200px;[^}]*display: flex;[^}]*border: 1px solid var\(--ink\)/);
   assert.match(styles, /\.view-tabs \{ display: flex; border-left: 1px solid var\(--ink\); \}/);
   assert.match(styles, /\.newsletter \{[^}]*grid-template-columns: 110px 1fr minmax\(320px, \.7fr\)/);
-  assert.match(styles, /\.newsletter form \{[^}]*grid-template-columns: 1fr auto;[^}]*border-bottom: 1px solid var\(--ink\)/);
+  assert.match(styles, /\.newsletter-placeholder \{[^}]*display: flex;/);
+});
+
+test("production assets define a defensive Cloudflare header policy", async () => {
+  const headers = await read("public/_headers");
+  assert.match(headers, /Content-Security-Policy:/);
+  assert.match(headers, /frame-ancestors 'none'/);
+  assert.match(headers, /Strict-Transport-Security:/);
+  assert.match(headers, /X-Content-Type-Options: nosniff/);
 });
 
 test("mobile hero preserves the archived first-screen rhythm", async () => {
@@ -125,7 +133,7 @@ test("article and tag routes retain their direct-reading and discovery hierarchy
   assert.match(tagDetail, /class="masonry-grid"/);
 });
 
-test("article dialogs remain quick previews while direct pages retain full reading content", async () => {
+test("article dialogs remain quick previews while direct pages retain source-backed summaries", async () => {
   const [articlePage, previewPage, styles] = await Promise.all([
     read("src/components/ArticleDetailPage.astro"),
     read("src/pages/preview/articles/[...id].astro"),

@@ -56,7 +56,7 @@ test("unknown-source images expose a direct rights and takedown route", async ()
   assert.match(page, /sourceKind === "unknown"/);
   assert.match(page, /权利人投诉与下架/);
   assert.match(page, /href="\/rights\/"/);
-  assert.match(rights, /hello@xgif\.cn/);
+  assert.match(rights, /1355471563@qq\.com/);
   assert.match(rights, /微信群或 QQ 群转存/);
 });
 
@@ -76,8 +76,8 @@ test("dialog controller owns history navigation and failure fallback", async () 
 test("sitemap exposes public content and legal pages", async () => {
   const sitemap = await readOutput("sitemap.xml");
 
-  assert.match(sitemap, /https:\/\/www\.xgif\.cn\/articles\/[^<]+\//);
-  assert.match(sitemap, /https:\/\/www\.xgif\.cn\/images\/[^<]+\//);
+  assert.match(sitemap, /https:\/\/www\.xgif\.cn\/articles\/\d{8}-[a-z0-9]{4}\//);
+  assert.match(sitemap, /https:\/\/www\.xgif\.cn\/images\/\d{8}-[a-z0-9]{4}\//);
   assert.match(sitemap, /https:\/\/www\.xgif\.cn\/rights\//);
 });
 
