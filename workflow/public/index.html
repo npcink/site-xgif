@@ -12,7 +12,21 @@
         <p class="eyebrow">XGIF Local Publisher</p>
         <h1>本地发布助手</h1>
       </div>
-      <div class="status" id="status">读取状态中...</div>
+      <div class="topbar-tools">
+        <div class="service-status" aria-live="polite">
+          <span class="service-pill" id="publisher-service">管理端检查中</span>
+          <span class="service-pill" id="site-preview-service">站点预览检查中</span>
+          <span class="service-pill" id="content-sync-summary">正在检查内容</span>
+          <button type="button" id="open-pending-content">查看待同步</button>
+          <button type="button" id="open-sync-history">同步记录</button>
+          <button type="button" id="refresh-services">刷新状态</button>
+          <button type="button" id="open-site-preview" disabled>打开站点预览</button>
+        </div>
+        <details class="status-details">
+          <summary>系统详情</summary>
+          <div class="status" id="status">读取状态中...</div>
+        </details>
+      </div>
     </header>
 
     <main class="shell">
@@ -30,22 +44,43 @@
               <p class="eyebrow">文章信息</p>
               <h2>整理并发布</h2>
             </div>
-            <button class="ai-action" type="button" data-ai-fill="article">AI 一键填写</button>
+            <button class="ai-action" type="button" data-ai-fill="article">AI 整理文章资料</button>
           </div>
           <p class="editor-state" id="article-editor-state"></p>
-          <div class="form-grid article-reference">
-            <label>
-              来源名称
-              <input name="source" required list="article-source-options" placeholder="选择或输入来源名称" />
-            </label>
-            <label>
-              来源链接
-              <input name="sourceUrl" type="url" placeholder="原创内容可留空" />
-            </label>
+          <section class="workflow-step">
+            <div class="step-heading">
+              <span>1</span>
+              <div><strong>提供原始内容</strong><small>粘贴来源和正文，AI 会生成发布资料</small></div>
+            </div>
+            <div class="form-grid article-reference">
+              <label>
+                来源名称
+                <input name="source" required list="article-source-options" placeholder="选择或输入来源名称" />
+              </label>
+              <label>
+                来源链接
+                <input name="sourceUrl" type="url" placeholder="原创内容可留空" />
+              </label>
+            </div>
+            <div class="form-grid article-body-grid">
+              <label class="span-2">
+                正文
+                <textarea name="body" rows="8" placeholder="粘贴正文、摘录或自己的补充说明"></textarea>
+              </label>
+            </div>
+          </section>
+
+          <div class="ai-review-card" id="article-ai-review" aria-live="polite">
+            <div>
+              <p>AI 整理结果</p>
+              <strong id="article-ai-title">等待整理文章资料</strong>
+              <small id="article-ai-summary">整理后在这里快速复核标题、摘要和标签。</small>
+            </div>
+            <button type="button" data-open-details="article">编辑详细资料</button>
           </div>
 
-          <details class="article-details" id="article-details">
-            <summary>发布信息</summary>
+          <details class="editor-details" id="article-details">
+            <summary><span>文章详细资料</span><small>标题、摘要、标签与发布信息</small></summary>
             <div class="form-grid article-details-grid">
               <label>
                 标题
@@ -70,29 +105,30 @@
               <label>
                 链接类型
                 <select name="sourceKind">
+                  <option value="unknown">来源待确认（仅草稿）</option>
                   <option value="original">原创内容</option>
                   <option value="publication">来源站</option>
                   <option value="editorial">编辑手记</option>
                 </select>
               </label>
               <label class="span-2">
-                编辑笔记
-                <input name="note" placeholder="可选：为什么值得看" />
+                公开编辑手记
+                <input name="editorNote" placeholder="可选：为什么值得看，会展示在公开页面" />
+              </label>
+              <label class="span-2">
+                内部复核备注
+                <input name="internalNote" placeholder="仅本地后台可见，不会进入公开页面" />
               </label>
             </div>
           </details>
 
-          <div class="form-grid article-body-grid">
-            <label class="span-2">
-              正文
-              <textarea name="body" rows="8" placeholder="写摘要正文、摘录或自己的补充说明"></textarea>
-            </label>
-          </div>
-
           <datalist id="article-source-options">
             <option value="原创"></option>
+            <option value="来源待确认"></option>
             <option value="知乎"></option>
             <option value="煎蛋"></option>
+            <option value="虎扑"></option>
+            <option value="NGA 玩家社区"></option>
             <option value="少数派"></option>
             <option value="微信公众号"></option>
             <option value="36氪"></option>
@@ -100,40 +136,74 @@
             <option value="第三方"></option>
           </datalist>
 
-          <div class="checks">
-            <label>
-              <input name="featured" type="checkbox" />
-              <span class="check-copy"><strong>设为精选</strong><small>在网站首页或精选列表中优先展示</small></span>
-            </label>
-            <label>
-              <input name="draft" type="checkbox" />
-              <span class="check-copy"><strong>保存为草稿</strong><small>生成文件，但不在网站中公开展示</small></span>
-            </label>
-            <label>
-              <input name="commit" type="checkbox" checked />
-              <span class="check-copy"><strong>保存到本地 Git</strong><small>记录这次生成的文件，方便回退和管理版本</small></span>
-            </label>
-            <label>
-              <input name="push" type="checkbox" checked />
-              <span class="check-copy"><strong>推送到远程仓库</strong><small>将本地提交上传到已配置的 GitHub 仓库</small></span>
-            </label>
-          </div>
+          <fieldset class="publish-mode">
+            <legend>发布方式</legend>
+            <div class="publish-mode-grid">
+              <label>
+                <input type="radio" name="publishMode" value="publish" checked />
+                <span class="check-copy"><strong>立即发布</strong><small>检查通过后进入网站公开内容</small></span>
+              </label>
+              <label>
+                <input type="radio" name="publishMode" value="draft" />
+                <span class="check-copy"><strong>保存为草稿</strong><small>保留内容，稍后复核后再发布</small></span>
+              </label>
+            </div>
+            <input name="draft" type="checkbox" hidden />
+          </fieldset>
 
-          <div class="actions">
-            <button type="button" data-check="article">检查重复</button>
-            <button type="button" data-quality="article">质量检查</button>
-            <button class="primary" type="submit">发布文章</button>
+          <fieldset class="publish-options" id="article-publish-options" hidden>
+            <legend>发布草稿时使用哪个日期？</legend>
+            <label>
+              <input type="radio" name="publishDateMode" value="keep" checked />
+              <span class="check-copy"><strong>保留原始日期</strong><small id="article-original-date">沿用草稿中的收藏日期</small></span>
+            </label>
+            <label>
+              <input type="radio" name="publishDateMode" value="today" />
+              <span class="check-copy"><strong>使用今天</strong><small id="article-today-date">按正式发布当天排序</small></span>
+            </label>
+          </fieldset>
+
+          <details class="advanced-settings" id="article-advanced-settings">
+            <summary><span>高级设置</span><small id="article-advanced-summary">精选与版本控制</small></summary>
+            <div class="advanced-settings-content">
+              <label class="setting-toggle">
+                <input name="featured" type="checkbox" />
+                <span class="check-copy"><strong>设为精选</strong><small>在网站首页或精选列表中优先展示</small></span>
+              </label>
+              <div class="git-settings">
+                <label>
+                  <input name="commit" type="checkbox" checked />
+                  <span class="check-copy"><strong>保存到本地 Git</strong><small>记录生成文件，方便回退和管理版本</small></span>
+                </label>
+                <label>
+                  <input name="push" type="checkbox" checked />
+                  <span class="check-copy"><strong>推送到远程仓库</strong><small>将本地提交上传到 GitHub 仓库</small></span>
+                </label>
+              </div>
+            </div>
+          </details>
+
+          <div class="editor-actions">
+            <p>发布时会自动执行重复检查与质量检查</p>
+            <div class="actions">
+              <button type="button" data-quality="article">仅检查</button>
+              <button class="primary" type="submit">检查并发布文章</button>
+            </div>
           </div>
         </form>
 
         <aside class="preview">
           <div class="preview-heading">
             <p class="eyebrow">预览</p>
-            <div class="preview-tabs" aria-label="文章预览类型">
-              <button class="preview-tab active" data-preview="card" type="button">列表卡片</button>
-              <button class="preview-tab" data-preview="page" type="button">文章页</button>
+            <div class="preview-controls">
+              <div class="preview-tabs" aria-label="文章预览类型">
+                <button class="preview-tab active" data-preview="card" type="button">列表卡片</button>
+                <button class="preview-tab" data-preview="page" type="button">文章页</button>
+              </div>
+              <button type="button" id="article-real-preview" disabled>真实预览</button>
             </div>
           </div>
+          <p class="preview-note" id="article-preview-note">保存草稿后，可用真实站点模板在新页面预览。</p>
           <article class="article-card" id="article-preview"></article>
           <article class="article-page-preview" id="article-page-preview"></article>
           <pre class="result" id="article-result"></pre>
@@ -147,56 +217,81 @@
               <p class="eyebrow">图片信息</p>
               <h2>整理并发布</h2>
             </div>
-            <button class="ai-action" type="button" data-ai-fill="image">AI 整理图片</button>
+            <button class="ai-action" type="button" data-ai-fill="image" disabled>AI 整理图片资料</button>
           </div>
           <p class="editor-state" id="image-editor-state"></p>
-          <div class="form-grid">
-            <label>
-              标题
-              <input name="title" required placeholder="这就很离谱" />
-            </label>
-            <label>
-              发布日期
-              <input name="pubDate" type="date" />
-            </label>
-            <label class="span-2">
-              图片 / GIF
-              <input name="file" type="file" accept="image/*,.gif" />
-            </label>
-            <label class="span-2">
-              描述
-              <textarea name="description" required rows="3" placeholder="适合什么场景，用来表达什么"></textarea>
-            </label>
-            <label>
-              标签
-              <input name="tags" required placeholder="吐槽, 无语, 群聊" />
-            </label>
-            <label>
-              分类
-              <input name="category" placeholder="表情包" />
-            </label>
-            <label>
-              情绪
-              <input name="mood" placeholder="无语, 震惊" />
-            </label>
-            <label>
-              场景
-              <input name="scenes" placeholder="回复, 吐槽" />
-            </label>
+          <section class="workflow-step">
+            <div class="step-heading">
+              <span>1</span>
+              <div><strong>选择图片</strong><small>读取完成后使用 AI 生成标题、描述和标签</small></div>
+            </div>
+            <div class="form-grid">
+              <label class="span-2">
+                图片 / GIF
+                <input name="file" type="file" accept="image/*,.gif" />
+              </label>
+            </div>
+          </section>
+
+          <div class="ai-review-card" id="image-ai-review" aria-live="polite">
+            <div>
+              <p>AI 整理结果</p>
+              <strong id="image-ai-title">等待选择图片并整理</strong>
+              <small id="image-ai-summary">整理后在这里快速复核描述、标签和使用场景。</small>
+            </div>
+            <button type="button" data-open-details="image">编辑详细资料</button>
+          </div>
+
+          <details class="editor-details" id="image-details">
+            <summary><span>图片详细资料</span><small>标题、描述、标签与使用场景</small></summary>
+            <div class="form-grid article-details-grid">
+              <label>
+                标题
+                <input name="title" required placeholder="这就很离谱" />
+              </label>
+              <label>
+                分类
+                <input name="category" placeholder="表情包" />
+              </label>
+              <label class="span-2">
+                描述
+                <textarea name="description" required rows="3" placeholder="适合什么场景，用来表达什么"></textarea>
+              </label>
+              <label>
+                标签
+                <input name="tags" required placeholder="吐槽, 无语, 群聊" />
+              </label>
+              <label>
+                情绪
+                <input name="mood" placeholder="无语, 震惊" />
+              </label>
+              <label class="span-2">
+                场景
+                <input name="scenes" placeholder="回复, 吐槽" />
+              </label>
+            </div>
+          </details>
+
+          <section class="source-setting">
             <label>
               来源类型
               <select name="sourceKind">
+                <option value="unknown">群聊转存 / 来源未知</option>
                 <option value="original">外部来源</option>
                 <option value="user_provided">用户提供素材</option>
               </select>
             </label>
+            <p class="form-note" id="unknown-source-note">作者与授权信息可以留空；公开页会标记为“来源待核实”，并提供投诉与下架入口。</p>
+          </section>
+
+          <div class="form-grid attribution-fields">
             <label data-user-provided-field hidden>
               公开发布确认日期
               <input name="confirmedAt" type="date" />
             </label>
             <label data-external-attribution>
               来源
-              <input name="source" placeholder="本地上传 / 来源备注" />
+              <input name="source" placeholder="来源备注" />
             </label>
             <label data-external-attribution>
               图片来源链接
@@ -214,44 +309,65 @@
               授权链接
               <input name="licenseUrl" type="url" placeholder="https://example.com/license" />
             </label>
-            <p class="form-note span-2" id="user-provided-note" hidden>将如实标记为“用户提供”，并记录确认日期与“用户确认可发布”；不会虚构作者、外部来源或授权链接。</p>
-            <label>
-              图片比例
-              <select name="ratio">
-                <option value="square">方图</option>
-                <option value="wide">宽图</option>
-                <option value="tall">长图</option>
-              </select>
-            </label>
-            <label class="span-2">
-              正文说明
-              <textarea name="body" rows="5" placeholder="可选：补充使用说明"></textarea>
-            </label>
+            <p class="form-note span-2" id="user-provided-note" hidden>将如实标记为“用户提供”，并记录“用户确认可发布”；不会虚构作者或授权链接。</p>
           </div>
 
-          <div class="checks">
-            <label>
-              <input name="public" type="checkbox" checked />
-              <span class="check-copy"><strong>公开展示</strong><small>图片会出现在网站的公开内容中</small></span>
-            </label>
-            <label>
-              <input name="draft" type="checkbox" />
-              <span class="check-copy"><strong>保存为草稿</strong><small>生成文件，但不在网站中公开展示</small></span>
-            </label>
-            <label>
-              <input name="commit" type="checkbox" checked />
-              <span class="check-copy"><strong>保存到本地 Git</strong><small>记录这次生成的文件，方便回退和管理版本</small></span>
-            </label>
-            <label>
-              <input name="push" type="checkbox" checked />
-              <span class="check-copy"><strong>推送到远程仓库</strong><small>将本地提交上传到已配置的 GitHub 仓库</small></span>
-            </label>
-          </div>
+          <fieldset class="publish-mode">
+            <legend>发布方式</legend>
+            <div class="publish-mode-grid">
+              <label>
+                <input type="radio" name="publishMode" value="publish" checked />
+                <span class="check-copy"><strong>立即发布</strong><small>检查通过后进入网站公开图片库</small></span>
+              </label>
+              <label>
+                <input type="radio" name="publishMode" value="draft" />
+                <span class="check-copy"><strong>保存为草稿</strong><small>保留图片和资料，暂不公开展示</small></span>
+              </label>
+            </div>
+            <input name="public" type="checkbox" checked hidden />
+            <input name="draft" type="checkbox" hidden />
+          </fieldset>
 
-          <div class="actions">
-            <button type="button" data-check="image">检查重复</button>
-            <button type="button" data-quality="image">质量检查</button>
-            <button class="primary" type="submit">发布图片</button>
+          <details class="advanced-settings" id="image-advanced-settings">
+            <summary><span>高级设置</span><small id="image-advanced-summary">日期、比例、正文与版本控制</small></summary>
+            <div class="advanced-settings-content">
+              <div class="form-grid">
+                <label>
+                  发布日期
+                  <input name="pubDate" type="date" />
+                </label>
+                <label>
+                  图片比例
+                  <select name="ratio">
+                    <option value="square">方图</option>
+                    <option value="wide">宽图</option>
+                    <option value="tall">长图</option>
+                  </select>
+                </label>
+                <label class="span-2">
+                  正文说明
+                  <textarea name="body" rows="4" placeholder="可选：补充使用说明"></textarea>
+                </label>
+              </div>
+              <div class="git-settings">
+                <label>
+                  <input name="commit" type="checkbox" checked />
+                  <span class="check-copy"><strong>保存到本地 Git</strong><small>记录生成文件，方便回退和管理版本</small></span>
+                </label>
+                <label>
+                  <input name="push" type="checkbox" checked />
+                  <span class="check-copy"><strong>推送到远程仓库</strong><small>将本地提交上传到 GitHub 仓库</small></span>
+                </label>
+              </div>
+            </div>
+          </details>
+
+          <div class="editor-actions">
+            <p>发布时会自动执行重复检查与质量检查</p>
+            <div class="actions">
+              <button type="button" data-quality="image">仅检查</button>
+              <button class="primary" type="submit">检查并发布图片</button>
+            </div>
           </div>
         </form>
 
@@ -291,11 +407,15 @@
           <div id="flomo-review" hidden>
             <div class="import-stats" id="flomo-stats"></div>
             <div class="import-toolbar">
-              <div>
-                <button id="flomo-select-ready" type="button">选择可直接导入</button>
-                <button id="flomo-clear-selection" type="button">清空选择</button>
+              <div class="import-selection-controls">
+                <p class="import-selection-summary" id="flomo-selection-summary" aria-live="polite"></p>
+                <button id="flomo-toggle-selection" type="button">取消全选</button>
+                <label class="import-filter-toggle">
+                  <input id="flomo-only-unselected" type="checkbox" />
+                  <span>仅看未选</span>
+                </label>
               </div>
-              <div>
+              <div class="import-toolbar-actions">
                 <button class="ai-action" id="flomo-ai-selected" type="button">AI 整理选中项</button>
                 <button class="primary" id="flomo-import-selected" type="button">生成选中草稿</button>
               </div>
@@ -303,39 +423,191 @@
             <div class="import-list" id="flomo-list"></div>
           </div>
           <pre class="result" id="flomo-result" hidden></pre>
+          <div class="import-complete-actions" id="flomo-complete-actions" hidden>
+            <button class="primary" id="flomo-review-drafts" type="button">前往内容管理查看草稿</button>
+          </div>
         </div>
       </section>
 
       <section class="panel library-panel" id="library-panel">
         <div class="library-main">
-          <div class="library-toolbar">
-            <input id="library-query" type="search" placeholder="搜索标题、标签、来源" />
-            <select id="library-type">
-              <option value="all">全部内容</option>
-              <option value="article">文章</option>
-              <option value="image">图片</option>
-            </select>
-            <select id="library-status">
-              <option value="all">全部状态</option>
-              <option value="published">已发布</option>
-              <option value="draft">草稿</option>
-            </select>
-            <button type="button" id="library-refresh">刷新列表</button>
+          <div class="library-status-tabs" aria-label="按发布状态筛选">
+            <button class="active" type="button" data-library-status="all" aria-pressed="true">全部 <span id="library-count-all">0</span></button>
+            <button type="button" data-library-status="draft" aria-pressed="false">草稿 <span id="library-count-draft">0</span></button>
+            <button type="button" data-library-status="local" aria-pressed="false">待同步 <span id="library-count-local">0</span></button>
+            <button type="button" data-library-status="online" aria-pressed="false">云端 <span id="library-count-online">0</span></button>
           </div>
-          <div class="content-list" id="content-list"></div>
+          <div class="library-toolbar">
+            <label class="library-search">
+              <span class="sr-only">搜索内容</span>
+              <input id="library-query" type="search" placeholder="搜索标题、标签、来源" />
+            </label>
+            <label>
+              <span class="sr-only">内容类型</span>
+              <select id="library-type" aria-label="内容类型">
+                <option value="all">全部内容</option>
+                <option value="article">文章</option>
+                <option value="image">图片</option>
+              </select>
+            </label>
+            <label>
+              <span class="sr-only">排序方式</span>
+              <select id="library-sort" aria-label="排序方式">
+                <option value="newest">最新日期</option>
+                <option value="oldest">最早日期</option>
+                <option value="title">按标题</option>
+              </select>
+            </label>
+            <label>
+              <span class="sr-only">每页数量</span>
+              <select id="library-page-size" aria-label="每页数量">
+                <option value="15">每页 15 条</option>
+                <option value="30">每页 30 条</option>
+                <option value="50">每页 50 条</option>
+              </select>
+            </label>
+            <button type="button" id="library-audit">内容体检</button>
+            <button type="button" id="library-refresh">刷新列表</button>
+            <button type="button" id="library-open-trash">回收站 <span id="library-trash-count">0</span></button>
+            <div class="library-view-toggle" aria-label="列表显示方式">
+              <button class="active" type="button" data-library-view="compact" aria-pressed="true">紧凑</button>
+              <button type="button" data-library-view="excerpt" aria-pressed="false">摘要</button>
+            </div>
+          </div>
+          <div class="library-selection-bar">
+            <div class="library-selection-copy">
+              <p id="library-selection-summary" aria-live="polite">未选择内容</p>
+              <button class="text-action" type="button" id="library-select-filtered" hidden></button>
+            </div>
+            <div class="library-bulk-actions">
+              <button class="primary" type="button" id="library-bulk-publish" disabled>发布到本地</button>
+              <button type="button" id="library-bulk-sync" disabled>同步所选</button>
+              <details class="library-more-actions">
+                <summary>更多操作</summary>
+                <div>
+                  <button type="button" id="library-bulk-draft" disabled>退回草稿</button>
+                  <button type="button" id="library-bulk-edit" disabled>编辑属性</button>
+                  <button class="danger" type="button" id="library-bulk-trash" disabled>移至回收站</button>
+                </div>
+              </details>
+              <button type="button" id="library-undo-trash" hidden>撤销删除</button>
+              <button type="button" id="library-clear-selection" disabled>清除选择</button>
+            </div>
+            <p id="library-page-summary">正在读取内容…</p>
+          </div>
+          <div class="content-list" id="content-list" data-view="compact"></div>
+          <nav class="library-pagination" id="library-pagination" aria-label="内容分页" hidden>
+            <button type="button" id="library-page-prev">上一页</button>
+            <div id="library-page-numbers"></div>
+            <button type="button" id="library-page-next">下一页</button>
+          </nav>
         </div>
-        <aside class="library-inspector">
+        <aside class="library-inspector" id="library-inspector" hidden>
           <p class="eyebrow">内容详情</p>
           <div id="library-detail" class="library-empty">从左侧选择一条内容。</div>
-          <div class="library-actions">
-            <button type="button" id="library-edit" disabled>打开编辑</button>
-            <button type="button" id="library-open" disabled>在网站打开</button>
-            <button class="primary" type="button" id="retry-push">重试远程推送</button>
+          <div class="library-actions" id="library-actions" hidden>
+            <button type="button" id="library-edit">打开编辑</button>
+            <button type="button" id="library-transition" hidden>复核并发布</button>
+            <button type="button" id="library-preview" hidden>真实预览</button>
+            <button type="button" id="library-open" hidden>在网站打开</button>
+            <button type="button" id="retry-push" hidden>重试远程推送</button>
           </div>
           <pre class="result" id="library-result" hidden></pre>
         </aside>
       </section>
     </main>
+
+    <dialog class="trash-dialog content-audit-dialog" id="content-audit-dialog">
+      <div class="trash-dialog-heading">
+        <div>
+          <p class="eyebrow">上线质量门槛</p>
+          <h2>内容体检</h2>
+          <p id="content-audit-summary">正在检查内容…</p>
+        </div>
+        <button type="button" id="content-audit-close">关闭</button>
+      </div>
+      <div class="content-audit-list" id="content-audit-list"></div>
+    </dialog>
+
+    <dialog class="trash-dialog sync-history-dialog" id="sync-history-dialog">
+      <div class="trash-dialog-heading">
+        <div>
+          <p class="eyebrow">Git 与云端</p>
+          <h2>同步记录</h2>
+          <p>记录每次批量同步的分支、提交和文件数量。</p>
+        </div>
+        <button type="button" id="sync-history-close">关闭</button>
+      </div>
+      <div class="sync-history-list" id="sync-history-list"></div>
+    </dialog>
+
+    <dialog class="trash-dialog batch-edit-dialog" id="batch-edit-dialog">
+      <form id="batch-edit-form">
+        <div class="trash-dialog-heading">
+          <div>
+            <p class="eyebrow">批量编辑</p>
+            <h2>修改所选内容属性</h2>
+            <p>只修改已勾选的字段。发布状态和云端同步仍使用列表中的独立操作。</p>
+          </div>
+          <button type="button" id="batch-edit-close" aria-label="关闭批量编辑">关闭</button>
+        </div>
+        <div class="batch-edit-fields">
+          <div class="batch-edit-field">
+            <label class="batch-edit-enable">
+              <input type="checkbox" name="applyTags" />
+              <span>修改标签</span>
+            </label>
+            <div class="batch-edit-inputs">
+              <select name="tagsMode" aria-label="标签修改方式">
+                <option value="append">追加标签</option>
+                <option value="remove">删除标签</option>
+                <option value="replace">替换全部标签</option>
+              </select>
+              <input name="tags" placeholder="多个标签用逗号分隔" />
+            </div>
+          </div>
+          <label class="batch-edit-field">
+            <span class="batch-edit-enable"><input type="checkbox" name="applyCategory" />修改分类</span>
+            <input name="category" placeholder="留空表示清空分类" />
+          </label>
+          <label class="batch-edit-field">
+            <span class="batch-edit-enable"><input type="checkbox" name="applySource" />修改来源名称</span>
+            <input name="source" placeholder="例如：煎蛋" />
+          </label>
+          <label class="batch-edit-field">
+            <span class="batch-edit-enable"><input type="checkbox" name="applyPubDate" />修改发布日期</span>
+            <input type="date" name="pubDate" />
+          </label>
+        </div>
+        <div class="trash-dialog-actions">
+          <span id="batch-edit-summary" role="status"></span>
+          <button type="button" id="batch-edit-cancel">取消</button>
+          <button class="primary" type="submit">应用修改</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog class="trash-dialog" id="trash-dialog">
+      <div class="trash-dialog-heading">
+        <div>
+          <p class="eyebrow">本地数据恢复</p>
+          <h2>回收站</h2>
+          <p>文章正文仍是 Markdown。这里的记录可由旁车元数据重新建立，不依赖浏览器或 SQLite。</p>
+        </div>
+        <button type="button" id="trash-dialog-close" aria-label="关闭回收站">关闭</button>
+      </div>
+      <div class="trash-selection-bar">
+        <label><input type="checkbox" id="trash-select-all" />选择全部</label>
+        <span id="trash-selection-summary" aria-live="polite">未选择内容</span>
+        <button type="button" id="trash-restore-selected" disabled>恢复所选</button>
+        <button class="danger" type="button" id="trash-purge-selected" disabled>永久删除所选</button>
+      </div>
+      <div class="trash-list" id="trash-list"></div>
+      <div class="trash-dialog-actions">
+        <button type="button" id="storage-backup">创建本地安全备份</button>
+        <span id="storage-backup-result" role="status"></span>
+      </div>
+    </dialog>
 
     <script src="/app.js" type="module"></script>
   </body>

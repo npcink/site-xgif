@@ -1,8 +1,26 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import test from "node:test";
 
 const readOutput = (path) => readFile(new URL(`../dist/${path}`, import.meta.url), "utf8");
+
+async function detailOutputs(kind) {
+  const root = new URL(`../dist/${kind}/`, import.meta.url);
+  const entries = await readdir(root, { withFileTypes: true });
+  const outputs = await Promise.all(
+    entries
+      .filter((entry) => entry.isDirectory())
+      .map(async (entry) => {
+        try {
+          return await readOutput(`${kind}/${entry.name}/index.html`);
+        } catch (error) {
+          if (error?.code === "ENOENT") return null;
+          throw error;
+        }
+      }),
+  );
+  return outputs.filter(Boolean);
+}
 
 test("home renders progressive detail links and a shared dialog", async () => {
   const home = await readOutput("index.html");
@@ -13,15 +31,33 @@ test("home renders progressive detail links and a shared dialog", async () => {
 });
 
 test("article and image routes expose extractable detail content", async () => {
-  const [article, image] = await Promise.all([
-    readOutput("articles/ai-uses-computer/index.html"),
-    readOutput("images/still-working/index.html"),
+  const [articles, images] = await Promise.all([
+    detailOutputs("articles"),
+    detailOutputs("images"),
   ]);
+  const article = articles[0];
+  const image = images[0];
 
+  assert.ok(article, "构建结果至少应包含一篇公开文章");
+  assert.ok(image, "构建结果至少应包含一张公开图片");
   assert.match(article, /data-detail-content/);
   assert.match(article, /data-detail-kind="article"/);
   assert.match(image, /data-detail-content/);
   assert.match(image, /data-detail-kind="image"/);
+});
+
+test("unknown-source images expose a direct rights and takedown route", async () => {
+  const page = await readFile(
+    new URL("../src/pages/images/[...id].astro", import.meta.url),
+    "utf8",
+  );
+  const rights = await readFile(new URL("../src/pages/rights.astro", import.meta.url), "utf8");
+
+  assert.match(page, /sourceKind === "unknown"/);
+  assert.match(page, /权利人投诉与下架/);
+  assert.match(page, /href="\/rights\/"/);
+  assert.match(rights, /hello@xgif\.cn/);
+  assert.match(rights, /微信群或 QQ 群转存/);
 });
 
 test("dialog controller owns history navigation and failure fallback", async () => {
@@ -40,18 +76,26 @@ test("dialog controller owns history navigation and failure fallback", async () 
 test("sitemap exposes public content and legal pages", async () => {
   const sitemap = await readOutput("sitemap.xml");
 
-  assert.match(sitemap, /https:\/\/www\.xgif\.cn\/articles\/ai-uses-computer\//);
-  assert.match(sitemap, /https:\/\/www\.xgif\.cn\/images\/still-working\//);
+  assert.match(sitemap, /https:\/\/www\.xgif\.cn\/articles\/[^<]+\//);
+  assert.match(sitemap, /https:\/\/www\.xgif\.cn\/images\/[^<]+\//);
   assert.match(sitemap, /https:\/\/www\.xgif\.cn\/rights\//);
 });
 
 test("article details publish structured data and honest source labels", async () => {
-  const [article, editorial] = await Promise.all([
-    readOutput("articles/ai-uses-computer/index.html"),
-    readOutput("articles/how-memes-speak/index.html"),
+  const [articles, component] = await Promise.all([
+    detailOutputs("articles"),
+    readFile(new URL("../src/components/ArticleDetailPage.astro", import.meta.url), "utf8"),
   ]);
 
-  assert.match(article, /application\/ld\+json/);
-  assert.match(article, /访问来源站/);
-  assert.match(editorial, /查看编辑手记/);
+  assert.ok(articles.some((article) => /application\/ld\+json/.test(article)));
+  assert.ok(articles.some((article) => /访问来源站/.test(article)));
+  assert.match(component, /publication:\s*"访问来源站"/);
+  assert.match(component, /editorial:\s*"查看编辑手记"/);
+});
+
+test("production build excludes local draft preview routes", async () => {
+  await assert.rejects(
+    () => readOutput("preview/articles/ai-uses-computer/index.html"),
+    /ENOENT/,
+  );
 });

@@ -27,16 +27,20 @@ sourceKind: "original" # original | publication | editorial
 tags: ["AI", "产品"]
 pubDate: 2026-07-10
 readTime: "3 分钟"
-note: "可选的一句话点评"
+editorNote: "可选的公开编辑手记"
+internalNote: "可选的内部复核备注，不会显示在公开页面"
 featured: false
+draft: false
 ---
 
-这里写补充说明或编辑笔记。
+这里写文章正文。
 ```
+
+`editorNote` 会显示在文章卡片或详情页，适合解释“为什么值得看”；`internalNote` 仅供本地发布助手复核来源和导入批次。旧 `note` 字段只为兼容历史内容保留，新内容不要继续使用。
 
 ## 新增图片 / GIF
 
-复制 `src/content/images/` 中任意 Markdown 文件。`image` 可以是放在 `public/` 下的本地路径，也可以是远程图片 URL；远程图片必须记录作者、来源页面与授权信息。
+复制 `src/content/images/` 中任意 Markdown 文件。`image` 可以是放在 `public/` 下的本地路径，也可以是远程图片 URL；能够确认来源的外部图片必须记录作者、来源页面与授权信息。
 
 ```md
 source: "Unsplash · 示例作者"
@@ -45,6 +49,8 @@ author: "示例作者"
 license: "Unsplash License"
 licenseUrl: "https://unsplash.com/license"
 ```
+
+微信群、QQ 群等渠道转存且无法确认作者与授权的表情包使用 `sourceKind: "unknown"`，`source` 固定写为“群聊转存（来源待核实）”，不得虚构作者、来源链接或授权。公开详情页会显示来源待核实状态，并链接到 `/rights/` 的投诉与下架说明。
 
 `sourceKind` 的含义：`original` 是原始文章链接；`publication` 是媒体或专题来源页；`editorial` 是本站编辑手记。不要把媒体首页标成原文。
 
@@ -85,6 +91,8 @@ npm run check:deploy
 ```
 
 内容更新只需要修改 `site/` 内的 Markdown 并推送；部署平台按仓库提交重新构建。
+
+本地发布助手会在同步前执行内容体检；只有通过的内容才应进入生产分支。体检报告、SQLite 同步记录和本机预览都不是线上成功证据，仍需核对 GitHub 合并提交、Cloudflare 部署结果和 `https://www.xgif.cn` 的实际页面。
 
 ## 详情弹窗与 URL
 

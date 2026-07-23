@@ -45,6 +45,7 @@ Astro 首页、搜索、文章与图片详情页按照 Next.js 基线对齐。�
 - 列表卡片与图片详情两种发布前预览；
 - 外部来源图片必须保留来源、作者与授权信息；
 - 明确授权的素材可以标记为 `user_provided`，公开页如实显示“用户提供”，不虚构第三方来源。
+- 群聊转存且无法确认作者与授权的图片使用 `unknown`，允许直接发布但必须显示“来源待核实”，并提供版权投诉与下架入口。
 
 用户提供素材的最小授权记录保存在 `workflow/records/user-provided-assets.jsonl`。它不进入 Astro 公开页面，仅记录确认日期、资源哈希、文件路径与公开范围；不得记录真实姓名、联系方式或未验证来源链接。
 
@@ -64,6 +65,10 @@ Cloudflare Worker 只上传 `site/dist` 静态资源，不包含 Worker 运行�
 
 新发布的表情包可以由本地发布台按 SHA-256 上传至 R2，并通过 `img.xgif.cn` 公开读取。图片字节进入 R2，内容、来源、授权和对象位置台账仍进入 Git；旧图片不迁移，不新增 D1、Vectorize、Worker 上传 API 或线上后台。详见 [`site/docs/decisions/ADR-005-r2-image-storage.md`](../site/docs/decisions/ADR-005-r2-image-storage.md)。
 
+### 9. 本地 SQLite 可重建索引
+
+发布台使用本地 SQLite 保存内容索引、回收站索引和操作历史，但 Markdown、R2 与 Git 仍是权威数据。数据库不进入 Git，损坏时先隔离再从内容文件和回收站旁车自动重建；数据库备份使用 SQLite Backup API。未发布内容同时进入白名单限定的本机私有 Git 历史，避免被公开仓库意外暴露。详见 [`site/docs/decisions/ADR-007-local-sqlite-index.md`](../site/docs/decisions/ADR-007-local-sqlite-index.md)。
+
 ## 当前开发原则
 
 1. **保持简单。** 网站的核心是分享内容，而不是建设复杂后台。没有真实重复痛点的功能不提前开发。
@@ -72,6 +77,7 @@ Cloudflare Worker 只上传 `site/dist` 静态资源，不包含 Worker 运行�
 4. **发布应可追溯。** 所有公开内容通过 Git 提交，用户提供素材同时保留最小授权记录；R2 图片保留内容寻址位置台账。
 5. **自动化保持轻量。** 本地预览与 GitHub CI 已足够；只有 CI 或实际发布反复暴露同一种问题，才增加新的检查。
 6. **按痛点扩展。** 例如“替换已发布图片”“台账批量校验”等能力，只有在实际多次发生且影响发布时再实现。
+7. **数据库可以丢，内容不能丢。** SQLite 只能保存可重建索引；正文、图片元数据、来源和授权信息必须留在 Markdown、R2 与 Git。
 
 ## 当前运行方式
 

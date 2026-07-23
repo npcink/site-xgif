@@ -1,0 +1,77 @@
+---
+import { getCollection, render, type CollectionEntry } from "astro:content";
+import ImageCard from "./ImageCard.astro";
+import { formatShortDate, publicArticleNote } from "../lib/content";
+
+interface Props {
+  article: CollectionEntry<"articles">;
+  preview?: boolean;
+}
+
+const { article, preview = false } = Astro.props;
+const { Content } = await render(article);
+const allImages = (await getCollection("images")).filter((entry) => !entry.data.draft && entry.data.public);
+const relatedImages = allImages
+  .filter((entry) => entry.data.tags.some((tag) => article.data.tags.includes(tag)))
+  .slice(0, 3);
+const sourceLabel = {
+  original: "原创内容",
+  publication: "访问来源站",
+  editorial: "查看编辑手记",
+  unknown: "来源待确认",
+}[article.data.sourceKind];
+const editorNote = publicArticleNote(article.data);
+---
+
+{preview && (
+  <aside class="local-preview-notice" role="status">
+    <strong>本地草稿预览</strong>
+    <span>使用真实站点模板渲染，只在本机开发服务中生成，不会进入生产构建。</span>
+  </aside>
+)}
+
+<article class="detail-page article-detail" data-detail-content data-detail-kind="article">
+  <header class="detail-header">
+    <a class="back-link" href="/articles/">← 返回文章摘要</a>
+    <div class="detail-meta">
+      <span>{article.data.source}</span>
+      <time datetime={article.data.pubDate.toISOString()}>{formatShortDate(article.data.pubDate)}</time>
+      <span>{article.data.readTime}</span>
+    </div>
+    <h1>{article.data.title}</h1>
+    <p class="detail-summary">{article.data.summary}</p>
+    <div class="card-tags">
+      {article.data.tags.map((tag) => <a href={`/tags/${encodeURIComponent(tag)}/`}>#{tag}</a>)}
+    </div>
+    <div class="dialog-article-actions">
+      {article.data.sourceUrl && (
+        <a class="primary-button" href={article.data.sourceUrl} target="_blank" rel="noreferrer">
+          {sourceLabel} <span>↗</span>
+        </a>
+      )}
+      {!preview && <a class="dialog-full-link" href={`/articles/${article.id}/`}>在独立页面阅读全文 →</a>}
+    </div>
+  </header>
+
+  <div class="detail-grid">
+    <aside>
+      <span class="section-kicker">{editorNote ? "EDITOR'S NOTE" : "SOURCE / 来源"}</span>
+      <p>{editorNote || "保留来源名称与原文链接，方便继续核对。"}</p>
+      {article.data.sourceUrl && (
+        <a class="primary-button" href={article.data.sourceUrl} target="_blank" rel="noreferrer">
+          {sourceLabel} <span>↗</span>
+        </a>
+      )}
+    </aside>
+    <div class="prose"><Content /></div>
+  </div>
+</article>
+
+{relatedImages.length > 0 && (
+  <section class="related-section">
+    <div class="content-title"><h2>相关图片 / 表情包</h2><a href="/images/">更多图片 →</a></div>
+    <div class="masonry-grid compact-grid">
+      {relatedImages.map((item) => <ImageCard item={item} />)}
+    </div>
+  </section>
+)}

@@ -161,6 +161,11 @@ button { color: inherit; }
 .view-tabs button:first-child { border-left: 0; }
 .view-tabs button.active { background: var(--ink); color: var(--paper); }
 .result-note { max-width: 1200px; margin: 0 auto 28px; color: var(--muted); font-size: 13px; }
+.archive-pagination { align-items: center; border-top: 1px solid var(--ink); display: flex; gap: 8px; justify-content: center; margin-top: 28px; padding-top: 22px; }
+.archive-pagination > div { display: flex; gap: 6px; }
+.archive-pagination button { background: transparent; border: 1px solid var(--line); min-height: 40px; min-width: 40px; padding: 0 12px; }
+.archive-pagination button.active { background: var(--ink); border-color: var(--ink); color: var(--paper); }
+.archive-pagination button:disabled { cursor: not-allowed; opacity: .45; }
 .content-section { max-width: 1200px; margin: 78px auto 0; }
 .content-title { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 1px solid var(--ink); padding-bottom: 16px; margin-bottom: 22px; }
 .content-title h2, .content-title h3 { font-size: 30px; letter-spacing: -.04em; margin: 0; }
@@ -330,6 +335,8 @@ body.detail-dialog-open { overflow: hidden; }
 .detail-dialog-body .image-detail-copy dl { display: none; }
 .detail-dialog-body .image-detail-copy .image-note { display: none; }
 .image-source { margin: auto 0 0; padding-top: 35px; color: var(--muted); font-family: var(--font-geist-mono); font-size: 10px; }
+.image-source a { color: var(--ink); font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
+.image-source a:hover { color: var(--coral); }
 
 /* The archive card ratio must not force a minimum width inside the dialog grid. */
 .detail-dialog[data-detail-kind="image"] .image-detail figure.ratio-wide,
@@ -384,6 +391,17 @@ body.detail-dialog-open { overflow: hidden; }
 .filter-chips button.active, .filter-chips button:hover { background: var(--ink); color: var(--paper); }
 .filter-count { font-family: var(--font-geist-mono); font-size: 10px; color: var(--muted); margin: 0 0 30px; }
 
+.local-preview-notice {
+  align-items: center;
+  background: var(--yellow);
+  border-bottom: 1px solid var(--ink);
+  display: flex;
+  gap: 14px;
+  justify-content: center;
+  padding: 12px 20px;
+}
+.local-preview-notice strong { font-family: var(--font-geist-mono); font-size: 12px; text-transform: uppercase; }
+.local-preview-notice span { font-size: 13px; }
 .detail-page { max-width: 1320px; margin: 0 auto; padding: 54px 6vw 110px; }
 .back-link { display: inline-flex; font-size: 12px; font-weight: 750; border-bottom: 1px solid; padding-bottom: 4px; }
 .detail-header { padding: 46px 0 58px; max-width: 1080px; }
@@ -486,6 +504,7 @@ body.detail-dialog-open { overflow: hidden; }
 }
 
 @media (max-width: 600px) {
+  .local-preview-notice { align-items: flex-start; flex-direction: column; gap: 4px; }
   .site-header { height: 66px; padding: 0 20px; gap: 13px; }
   .brand { font-size: 26px; }
   .header-search { font-size: 0; }
@@ -539,7 +558,8 @@ body.detail-dialog-open { overflow: hidden; }
   .archive-content { padding: 48px 16px 85px; }
   .detail-page { padding: 36px 20px 80px; }
   .detail-header { padding: 35px 0 42px; }
-  .detail-header h1, .image-detail-copy h1 { font-size: 46px; }
+  .detail-header h1, .image-detail-copy h1 { font-size: clamp(36px, 11.5vw, 46px); overflow-wrap: anywhere; text-wrap: balance; }
+  .card-tags a, .card-tags button { align-items: center; display: inline-flex; min-height: 40px; }
   .detail-grid, .image-detail-grid { grid-template-columns: 1fr; gap: 45px; }
   .detail-grid aside, .image-detail-copy { position: static; }
   .detail-grid aside { order: 2; }
