@@ -10,6 +10,7 @@
 
 - 当前交接与运行手册：[`site/docs/PROJECT_HANDOFF.md`](site/docs/PROJECT_HANDOFF.md)
 - 阶段开发复盘与经验：[`site/docs/DEVELOPMENT_RETROSPECTIVE_2026-07-24.md`](site/docs/DEVELOPMENT_RETROSPECTIVE_2026-07-24.md)
+- 本地发布助手产品复盘：[`workflow/docs/LOCAL_PUBLISHER_RETROSPECTIVE_2026-07-24.md`](workflow/docs/LOCAL_PUBLISHER_RETROSPECTIVE_2026-07-24.md)
 - 历史与长期原则：[`workflow/PROJECT_HISTORY.md`](workflow/PROJECT_HISTORY.md)
 - 架构决策：[`site/docs/decisions/`](site/docs/decisions/)
 
