@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>XGIF 本地发布助手</title>
-    <link rel="stylesheet" href="/styles.css?v=20260724-pc-console" />
+    <link rel="stylesheet" href="/styles.css?v=20260724-console" />
   </head>
   <body>
     <div class="app-frame" id="app-frame">
@@ -32,16 +32,18 @@
           <section class="workspace-nav-section">
             <p>管理</p>
             <div>
-              <button type="button" data-nav-action="content-audit">内容体检与标签</button>
-              <button type="button" data-nav-action="trash">回收站</button>
-              <button type="button" data-nav-action="sync-history">同步记录</button>
+              <button class="tab" type="button" data-tab="audit">内容体检与标签</button>
+              <button type="button" data-nav-action="trash">
+                <span>回收站</span>
+                <span class="nav-count" id="sidebar-trash-count" aria-label="0 条内容">0</span>
+              </button>
             </div>
           </section>
 
           <section class="workspace-nav-section">
             <p>系统</p>
             <div>
-              <button type="button" data-nav-action="system-status">系统状态与恢复</button>
+              <button class="tab" type="button" data-tab="system">系统状态与恢复</button>
               <button type="button" data-nav-action="site-preview" id="workspace-open-site-preview" disabled>打开站点预览</button>
             </div>
           </section>
@@ -561,8 +563,6 @@
         <div class="library-main">
           <header class="library-heading">
             <div>
-              <p class="eyebrow">CONTENT LIBRARY</p>
-              <h2>内容库</h2>
               <p id="library-task-summary">正在读取内容状态…</p>
             </div>
             <button type="button" id="library-batch-toggle" aria-pressed="false">批量管理</button>
@@ -683,16 +683,70 @@
         </aside>
       </section>
 
+      <section class="panel audit-panel" id="audit-panel">
+        <header class="workspace-section-heading">
+          <div>
+            <p id="content-audit-summary" aria-live="polite">正在检查内容…</p>
+          </div>
+          <button type="button" id="content-audit-refresh">重新体检</button>
+        </header>
+        <div class="audit-workspace">
+          <section class="tag-governance" aria-labelledby="tag-governance-title">
+            <div class="tag-governance-heading">
+              <div>
+                <p class="eyebrow">标签治理</p>
+                <h2 id="tag-governance-title">使用情况与安全合并</h2>
+                <p id="tag-governance-summary">正在读取标签使用情况…</p>
+              </div>
+              <button type="button" id="tag-governance-refresh">刷新标签</button>
+            </div>
+            <div class="tag-governance-controls">
+              <label>
+                来源标签
+                <select id="tag-merge-source" aria-label="需要合并的来源标签"></select>
+              </label>
+              <span aria-hidden="true">→</span>
+              <label>
+                规范标签
+                <select id="tag-merge-target" aria-label="合并后的规范标签"></select>
+              </label>
+              <button type="button" id="tag-merge-preview">预览影响</button>
+            </div>
+            <div class="tag-merge-plan" id="tag-merge-plan" hidden></div>
+            <div class="tag-governance-list" id="tag-governance-list"></div>
+          </section>
+          <section class="audit-results" aria-labelledby="audit-results-title">
+            <div class="audit-results-heading">
+              <div>
+                <p class="eyebrow">发布门槛</p>
+                <h2 id="audit-results-title">检查结果</h2>
+              </div>
+              <p>优先处理“建议退回草稿”和“需要人工确认”，通过项默认收起。</p>
+            </div>
+            <div class="content-audit-list" id="content-audit-list"></div>
+          </section>
+        </div>
+      </section>
+
       <section class="panel system-panel" id="system-panel">
         <header class="system-page-heading">
           <div>
-            <p class="eyebrow">系统与恢复</p>
-            <h2>运行状态</h2>
-            <p>检查本地服务、Git、云端核对与可恢复性。技术细节集中在这里，不遮挡内容工作区。</p>
+            <p>查看运行状态、同步历史和可恢复性。技术信息集中在这里，不遮挡内容工作区。</p>
           </div>
-          <button type="button" id="refresh-services">刷新状态</button>
         </header>
-        <div class="system-status-panel">
+        <nav class="system-section-tabs" aria-label="系统页面">
+          <button class="active" type="button" data-system-view="status" aria-current="page">运行状态</button>
+          <button type="button" data-system-view="sync">同步记录</button>
+          <button type="button" data-system-view="recovery">恢复与备份</button>
+        </nav>
+        <section class="system-status-panel system-section active" data-system-section="status">
+          <div class="system-section-heading">
+            <div>
+              <h2>运行状态</h2>
+              <p>检查本地服务、AI、Git 和部署预览。</p>
+            </div>
+            <button type="button" id="refresh-services">刷新状态</button>
+          </div>
           <div class="service-status">
             <span class="service-pill" id="publisher-service">管理端检查中</span>
             <span class="service-pill" id="site-preview-service">站点预览检查中</span>
@@ -731,10 +785,29 @@
           </section>
           <div class="system-actions">
             <button type="button" id="open-pending-content">查看待同步</button>
-            <button type="button" id="open-sync-history">同步记录</button>
-            <button type="button" id="system-create-backup">创建安全备份</button>
-            <button type="button" id="system-run-recovery">运行恢复演练</button>
             <button type="button" id="open-site-preview" disabled>打开站点预览</button>
+          </div>
+        </section>
+        <section class="system-status-panel system-section" data-system-section="sync" hidden>
+          <div class="system-section-heading">
+            <div>
+              <h2>同步记录</h2>
+              <p>记录每次批量同步的分支、提交、文件数量与远程比较入口。</p>
+            </div>
+            <button type="button" id="sync-history-refresh">刷新记录</button>
+          </div>
+          <div class="sync-history-list" id="sync-history-list"></div>
+        </section>
+        <section class="system-status-panel system-section" data-system-section="recovery" hidden>
+          <div class="system-section-heading">
+            <div>
+              <h2>恢复与备份</h2>
+              <p>创建本机安全备份，并用临时数据库验证恢复流程。</p>
+            </div>
+            <div class="system-actions">
+              <button type="button" id="system-create-backup">创建安全备份</button>
+              <button type="button" id="system-run-recovery">运行恢复演练</button>
+            </div>
           </div>
           <section class="recovery-dashboard" aria-labelledby="recovery-dashboard-title">
             <div class="recovery-dashboard-heading">
@@ -748,61 +821,13 @@
           </section>
           <details class="system-technical-details">
             <summary>技术信息</summary>
-            <div class="status" id="status">读取状态中...</div>
-          </details>
-        </div>
+              <div class="status" id="status">读取状态中...</div>
+            </details>
+        </section>
       </section>
         </main>
       </div>
     </div>
-
-    <dialog class="trash-dialog content-audit-dialog" id="content-audit-dialog">
-      <div class="trash-dialog-heading">
-        <div>
-          <p class="eyebrow">上线质量门槛</p>
-          <h2>内容体检</h2>
-          <p id="content-audit-summary">正在检查内容…</p>
-        </div>
-        <button type="button" id="content-audit-close">关闭</button>
-      </div>
-      <section class="tag-governance" aria-labelledby="tag-governance-title">
-        <div class="tag-governance-heading">
-          <div>
-            <p class="eyebrow">标签治理</p>
-            <h3 id="tag-governance-title">使用情况与安全合并</h3>
-            <p id="tag-governance-summary">正在读取标签使用情况…</p>
-          </div>
-          <button type="button" id="tag-governance-refresh">刷新标签</button>
-        </div>
-        <div class="tag-governance-controls">
-          <label>
-            来源标签
-            <select id="tag-merge-source" aria-label="需要合并的来源标签"></select>
-          </label>
-          <span aria-hidden="true">→</span>
-          <label>
-            规范标签
-            <select id="tag-merge-target" aria-label="合并后的规范标签"></select>
-          </label>
-          <button type="button" id="tag-merge-preview">预览影响</button>
-        </div>
-        <div class="tag-merge-plan" id="tag-merge-plan" hidden></div>
-        <div class="tag-governance-list" id="tag-governance-list"></div>
-      </section>
-      <div class="content-audit-list" id="content-audit-list"></div>
-    </dialog>
-
-    <dialog class="trash-dialog sync-history-dialog" id="sync-history-dialog">
-      <div class="trash-dialog-heading">
-        <div>
-          <p class="eyebrow">Git 与云端</p>
-          <h2>同步记录</h2>
-          <p>记录每次批量同步的分支、提交和文件数量。</p>
-        </div>
-        <button type="button" id="sync-history-close">关闭</button>
-      </div>
-      <div class="sync-history-list" id="sync-history-list"></div>
-    </dialog>
 
     <dialog class="trash-dialog version-history-dialog" id="version-history-dialog">
       <div class="trash-dialog-heading">
@@ -904,6 +929,6 @@
       <div class="asset-library-list" id="asset-library-list"></div>
     </dialog>
 
-    <script src="/app.js?v=20260724-pc-console" type="module"></script>
+    <script src="/app.js?v=20260724-console" type="module"></script>
   </body>
 </html>

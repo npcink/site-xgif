@@ -11,11 +11,61 @@ test("new article starts clean and explains disabled AI actions", async ({ page 
 
 test("system status is a dedicated workspace instead of a floating popover", async ({ page }) => {
   await page.goto("/");
-  await page.locator('[data-nav-action="system-status"]').click();
+  await page.locator('[data-tab="system"]').click();
   await expect(page.locator("#system-panel")).toHaveClass(/active/);
   await expect(page.locator("#workspace-page-title")).toHaveText("系统状态与恢复");
   await expect(page.locator(".status-details")).toHaveCount(0);
   await expect(page.locator(".network-disclosure")).toBeVisible();
+});
+
+test("workspace page titles are not repeated inside their content", async ({ page }) => {
+  await page.goto("/#library");
+  await expect(page.getByRole("heading", { name: "内容库", exact: true })).toHaveCount(1);
+
+  await page.locator('[data-tab="audit"]').click();
+  await expect(page.getByRole("heading", { name: "内容体检与标签", exact: true })).toHaveCount(1);
+
+  await page.locator('[data-tab="system"]').click();
+  await expect(page.getByRole("heading", { name: "系统状态与恢复", exact: true })).toHaveCount(1);
+});
+
+test("content audit is a restorable workspace and not a dialog", async ({ page }) => {
+  await page.goto("/");
+  await page.locator('[data-tab="audit"]').click();
+  await expect(page).toHaveURL(/#audit$/);
+  await expect(page.locator("#audit-panel")).toHaveClass(/active/);
+  await expect(page.locator("#content-audit-summary")).not.toHaveText("正在检查内容…");
+  await expect(page.locator("#content-audit-dialog")).toHaveCount(0);
+  await page.reload();
+  await expect(page.locator("#audit-panel")).toHaveClass(/active/);
+  await expect(page.locator('[data-tab="audit"]')).toHaveAttribute("aria-current", "page");
+});
+
+test("sync history belongs to the system workspace and browser back restores the previous page", async ({ page }) => {
+  await page.goto("/#library");
+  await page.locator('[data-tab="system"]').click();
+  await page.locator('[data-system-view="sync"]').click();
+  await expect(page).toHaveURL(/#system\/sync$/);
+  await expect(page.locator('[data-system-section="sync"]')).toBeVisible();
+  await expect(page.locator("#sync-history-dialog")).toHaveCount(0);
+  await page.goBack();
+  await expect(page).toHaveURL(/#system$/);
+  await expect(page.locator('[data-system-section="status"]')).toBeVisible();
+  await page.goBack();
+  await expect(page).toHaveURL(/#library$/);
+  await expect(page.locator("#library-panel")).toHaveClass(/active/);
+});
+
+test("recycle bin remains a focused dialog and returns focus to its sidebar entry", async ({ page }) => {
+  await page.goto("/#library");
+  const recycleEntry = page.locator('[data-nav-action="trash"]');
+  await recycleEntry.click();
+  await expect(page.locator("#trash-dialog")).toBeVisible();
+  await expect(page.locator("#sidebar-trash-count")).not.toHaveText("");
+  await page.keyboard.press("Escape");
+  await expect(page.locator("#trash-dialog")).toBeHidden();
+  await expect(recycleEntry).toBeFocused();
+  await expect(page).toHaveURL(/#library$/);
 });
 
 test("content library exposes separate Git and deployment states", async ({ page }) => {

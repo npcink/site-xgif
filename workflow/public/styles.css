@@ -139,6 +139,18 @@ body.workspace-nav-open {
   width: 100%;
 }
 
+.workspace-navigation .nav-count {
+  background: rgb(47 111 107 / 10%);
+  border-radius: 999px;
+  color: var(--accent);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  margin-left: auto;
+  min-width: 22px;
+  padding: 3px 7px;
+  text-align: center;
+}
+
 .workspace-navigation button:hover {
   background: rgb(255 253 248 / 65%);
   color: var(--ink);
@@ -463,21 +475,62 @@ h1 {
   grid-template-columns: minmax(0, 1fr);
 }
 
-.system-page-heading {
+.system-page-heading,
+.workspace-section-heading,
+.system-section-heading,
+.audit-results-heading {
   align-items: flex-end;
   display: flex;
+  gap: 24px;
   justify-content: space-between;
 }
 
-.system-page-heading h2 {
-  font-size: 26px;
-  margin: 3px 0 5px;
+.system-page-heading,
+.workspace-section-heading {
+  align-items: center;
+  min-height: 40px;
 }
 
-.system-page-heading p:last-child {
+.system-page-heading p:last-child,
+.workspace-section-heading > div > p:last-child,
+.system-section-heading p,
+.audit-results-heading > p {
   color: var(--muted);
   font-size: 13px;
   margin: 0;
+}
+
+.system-section-heading {
+  align-items: center;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 16px;
+}
+
+.system-section-heading h2,
+.audit-results-heading h2 {
+  font-size: 18px;
+  margin: 0 0 4px;
+}
+
+.system-section-tabs {
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  gap: 22px;
+}
+
+.system-section-tabs button {
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  color: var(--muted);
+  min-height: 42px;
+  padding: 0 2px;
+}
+
+.system-section-tabs button.active {
+  border-bottom-color: var(--accent);
+  color: var(--accent);
 }
 
 .network-disclosure {
@@ -700,6 +753,41 @@ button.danger:hover {
 
 .panel.system-panel {
   grid-template-columns: minmax(0, 1fr);
+}
+
+.panel.audit-panel {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.audit-workspace {
+  display: grid;
+  gap: 20px;
+}
+
+.audit-workspace > section {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+}
+
+.audit-workspace .tag-governance {
+  border-bottom: 1px solid var(--line);
+  padding: 22px;
+}
+
+.audit-results {
+  padding: 22px;
+}
+
+.audit-results-heading {
+  align-items: center;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 16px;
+}
+
+.audit-results-heading > p {
+  max-width: 460px;
+  text-align: right;
 }
 
 .editor,
@@ -1506,11 +1594,6 @@ summary:focus-visible {
   margin-bottom: 16px;
 }
 
-.library-heading h2 {
-  font-size: 24px;
-  margin: 3px 0 4px;
-}
-
 .library-heading > div > p:last-child {
   color: var(--muted);
   font-size: 12px;
@@ -1814,12 +1897,6 @@ summary:focus-visible {
   overflow-wrap: anywhere;
 }
 
-.content-audit-dialog,
-.sync-history-dialog {
-  max-width: 940px;
-  width: min(940px, calc(100vw - 32px));
-}
-
 .version-history-dialog {
   max-width: 760px;
 }
@@ -1874,9 +1951,14 @@ summary:focus-visible {
 .sync-history-list {
   display: grid;
   gap: 12px;
-  max-height: min(660px, 72vh);
-  overflow: auto;
-  padding: 18px 22px 24px;
+}
+
+.audit-panel .content-audit-list {
+  padding-top: 18px;
+}
+
+.system-section .sync-history-list {
+  min-height: 120px;
 }
 
 .tag-governance {
@@ -1895,7 +1977,7 @@ summary:focus-visible {
   justify-content: space-between;
 }
 
-.tag-governance-heading h3 {
+.tag-governance-heading h2 {
   font-size: 18px;
   margin: 0;
 }
@@ -3366,13 +3448,6 @@ summary:focus-visible {
 
   .publisher-health small {
     display: none;
-  }
-
-  .system-status-panel {
-    min-width: min(640px, calc(100vw - 32px));
-    position: fixed;
-    right: 16px;
-    top: 72px;
   }
 
   .shell {

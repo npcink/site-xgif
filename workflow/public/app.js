@@ -68,9 +68,7 @@ const trashDialog = $("#trash-dialog");
 const trashList = $("#trash-list");
 const batchEditDialog = $("#batch-edit-dialog");
 const batchEditForm = $("#batch-edit-form");
-const contentAuditDialog = $("#content-audit-dialog");
 const assetLibraryDialog = $("#asset-library-dialog");
-const syncHistoryDialog = $("#sync-history-dialog");
 const versionHistoryDialog = $("#version-history-dialog");
 const articlePublishOptions = $("#article-publish-options");
 const articleRealPreview = $("#article-real-preview");
@@ -120,6 +118,7 @@ let librarySearchTimer = null;
 let libraryRequestController = null;
 let libraryRequestSequence = 0;
 let recycleBinItems = [];
+let trashReturnFocus = null;
 const recycleSelectedIds = new Set();
 const librarySelection = createLibrarySelection();
 const librarySelectedItems = new Map();
@@ -857,12 +856,13 @@ function syncImageActionState() {
   else submit.textContent = draft ? "保存图片草稿" : "检查并发布图片";
 }
 
-function switchTab(name) {
+function switchTab(name, { skipRoute = false, systemView = "status" } = {}) {
   const titles = {
     article: "新建文章",
     image: "新建图片",
     import: "导入内容",
     library: "内容库",
+    audit: "内容体检与标签",
     system: "系统状态与恢复",
   };
   $$(".tab").forEach((item) => {
@@ -871,16 +871,62 @@ function switchTab(name) {
     if (active) item.setAttribute("aria-current", "page");
     else item.removeAttribute("aria-current");
   });
+  $$(".workspace-nav-section").forEach((section) => {
+    section.classList.toggle("is-current", Boolean($(".tab.active", section)));
+  });
   $$(".panel").forEach((item) => item.classList.toggle("active", item.id === `${name}-panel`));
   workspacePageTitle.textContent = titles[name] || "本地发布助手";
   setWorkspaceNavigationOpen(false);
   window.scrollTo({ top: 0, behavior: "auto" });
+  if (!skipRoute) updateWorkspaceRoute(name, { systemView });
   if (name === "library") loadLibrary();
-  if (name === "system") {
-    loadStatus();
-    loadRecoveryDashboard();
-  }
+  if (name === "audit") loadContentAudit();
+  if (name === "system") setSystemView(systemView, { updateRoute: false });
   return true;
+}
+
+function workspaceRoute(name, systemView = "status") {
+  return name === "system" && systemView !== "status" ? `#system/${systemView}` : `#${name}`;
+}
+
+function updateWorkspaceRoute(name, { replace = false, systemView = "status" } = {}) {
+  const next = workspaceRoute(name, systemView);
+  if (window.location.hash === next) return;
+  window.history[replace ? "replaceState" : "pushState"]({ workspace: name, systemView }, "", next);
+}
+
+function setSystemView(view, { updateRoute = true } = {}) {
+  const next = ["status", "sync", "recovery"].includes(view) ? view : "status";
+  for (const button of $$("[data-system-view]")) {
+    const active = button.dataset.systemView === next;
+    button.classList.toggle("active", active);
+    if (active) button.setAttribute("aria-current", "page");
+    else button.removeAttribute("aria-current");
+  }
+  for (const section of $$("[data-system-section]")) {
+    const active = section.dataset.systemSection === next;
+    section.classList.toggle("active", active);
+    section.hidden = !active;
+  }
+  if (updateRoute) updateWorkspaceRoute("system", { systemView: next });
+  if (next === "status") loadStatus();
+  if (next === "sync") loadSyncHistory();
+  if (next === "recovery") loadRecoveryDashboard();
+}
+
+function restoreWorkspaceRoute({ replace = false } = {}) {
+  const [name, detail] = window.location.hash.slice(1).split("/");
+  const workspace = ["article", "image", "import", "library", "audit", "system"].includes(name)
+    ? name
+    : "article";
+  switchTab(workspace, { skipRoute: true, systemView: detail || "status" });
+  if (replace || !window.location.hash) {
+    window.history.replaceState(
+      { workspace, systemView: detail || "status" },
+      "",
+      workspaceRoute(workspace, detail || "status"),
+    );
+  }
 }
 
 function setWorkspaceNavigationOpen(open) {
@@ -897,22 +943,8 @@ function setWorkspaceNavigationOpen(open) {
 
 function runWorkspaceNavigationAction(action) {
   setWorkspaceNavigationOpen(false);
-  if (action === "content-audit") {
-    switchTab("library");
-    openContentAudit();
-    return;
-  }
   if (action === "trash") {
-    switchTab("library");
     openRecycleBin();
-    return;
-  }
-  if (action === "sync-history") {
-    openSyncHistory();
-    return;
-  }
-  if (action === "system-status") {
-    switchTab("system");
     return;
   }
   if (action === "site-preview") $("#open-site-preview").click();
@@ -1518,10 +1550,9 @@ function renderContentAuditGroup(report, status, label) {
     </details>`;
 }
 
-async function openContentAudit() {
+async function loadContentAudit() {
   $("#content-audit-summary").textContent = "正在检查全部内容…";
   $("#content-audit-list").innerHTML = '<p class="library-empty">正在读取体检结果…</p>';
-  contentAuditDialog.showModal();
   try {
     const [report] = await Promise.all([
       api("/api/content/audit"),
@@ -1615,9 +1646,8 @@ async function applyTagMerge() {
   }
 }
 
-async function openSyncHistory() {
+async function loadSyncHistory() {
   $("#sync-history-list").innerHTML = '<p class="library-empty">正在读取同步记录…</p>';
-  syncHistoryDialog.showModal();
   try {
     const result = await api("/api/history?action=sync_content&limit=20");
     $("#sync-history-list").innerHTML = result.items.length
@@ -1789,9 +1819,17 @@ function selectReusableAsset(item) {
   assetLibraryDialog.close();
 }
 
+function updateTrashCount(count) {
+  const value = String(Number(count) || 0);
+  $("#library-trash-count").textContent = value;
+  const sidebarCount = $("#sidebar-trash-count");
+  sidebarCount.textContent = value;
+  sidebarCount.setAttribute("aria-label", `${value} 条内容`);
+}
+
 function renderRecycleBin(items) {
   recycleBinItems = items;
-  $("#library-trash-count").textContent = String(items.length);
+  updateTrashCount(items.length);
   if (!items.length) {
     trashList.innerHTML = '<p class="library-empty">回收站为空。</p>';
     updateTrashSelection();
@@ -1832,6 +1870,7 @@ async function loadRecycleBin() {
 }
 
 async function openRecycleBin() {
+  trashReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   recycleSelectedIds.clear();
   trashList.innerHTML = '<p class="library-empty">正在读取回收站…</p>';
   trashDialog.showModal();
@@ -2745,7 +2784,7 @@ $("#library-task-action").addEventListener("click", (event) => {
   setLibraryStatus(action === "draft" ? "draft" : action === "unknown" ? "unknown" : "local");
   loadLibrary();
 });
-$("#library-audit").addEventListener("click", openContentAudit);
+$("#library-audit").addEventListener("click", () => switchTab("audit"));
 $("#article-open-assets").addEventListener("click", () => openAssetLibrary("insert"));
 $("#article-cover-assets").addEventListener("click", () => openAssetLibrary("cover"));
 $("#asset-library-close").addEventListener("click", () => assetLibraryDialog.close());
@@ -2762,10 +2801,9 @@ assetLibraryDialog.addEventListener("click", (event) => {
 });
 $("#tag-governance-refresh").addEventListener("click", loadTagGovernance);
 $("#tag-merge-preview").addEventListener("click", previewTagMerge);
+$("#content-audit-refresh").addEventListener("click", loadContentAudit);
 $("#library-open-trash").addEventListener("click", openRecycleBin);
-$("#open-sync-history").addEventListener("click", openSyncHistory);
-$("#content-audit-close").addEventListener("click", () => contentAuditDialog.close());
-$("#sync-history-close").addEventListener("click", () => syncHistoryDialog.close());
+$("#sync-history-refresh").addEventListener("click", loadSyncHistory);
 $("#article-version-history").addEventListener("click", () => openVersionHistory(articleForm));
 $("#image-version-history").addEventListener("click", () => openVersionHistory(imageForm));
 $("#version-history-close").addEventListener("click", () => versionHistoryDialog.close());
@@ -2781,15 +2819,13 @@ $("#version-history-list").addEventListener("click", (event) => {
   const savedButton = event.target.closest("[data-saved-version]");
   if (savedButton) restoreSavedVersion(savedButton.dataset.savedVersion);
 });
-contentAuditDialog.addEventListener("click", (event) => {
-  if (event.target === contentAuditDialog) contentAuditDialog.close();
-});
-syncHistoryDialog.addEventListener("click", (event) => {
-  if (event.target === syncHistoryDialog) syncHistoryDialog.close();
-});
 $("#trash-dialog-close").addEventListener("click", () => trashDialog.close());
 trashDialog.addEventListener("click", (event) => {
   if (event.target === trashDialog) trashDialog.close();
+});
+trashDialog.addEventListener("close", () => {
+  if (trashReturnFocus?.isConnected) trashReturnFocus.focus();
+  trashReturnFocus = null;
 });
 trashList.addEventListener("change", (event) => {
   const id = event.target.dataset.trashSelect;
@@ -2843,6 +2879,9 @@ $("#system-create-backup").addEventListener("click", (event) =>
 $("#system-run-recovery").addEventListener("click", runRecoveryVerification);
 $("#recovery-dashboard-refresh").addEventListener("click", loadRecoveryDashboard);
 $("#open-system-status").addEventListener("click", () => switchTab("system"));
+for (const button of $$("[data-system-view]")) {
+  button.addEventListener("click", () => setSystemView(button.dataset.systemView));
+}
 $("#library-query").addEventListener("input", () => {
   clearTimeout(librarySearchTimer);
   librarySearchTimer = setTimeout(() => {
@@ -3131,7 +3170,7 @@ async function loadStatus() {
       : "内容 Git：待检查";
     const privateHistory = status.localContentHistory?.ready ? "私有快照：正常" : "私有快照：待创建";
     $("#status").textContent = `仓库：${status.repoRoot} · 分支：${status.branch} · ${ai} · ${remote} · ${localIndex} · ${gitContent} · ${privateHistory}`;
-    $("#library-trash-count").textContent = String(status.localData?.trash || 0);
+    updateTrashCount(status.localData?.trash || 0);
     const publisher = $("#publisher-service");
     publisher.dataset.state = "ready";
     publisher.textContent = "管理端运行中";
@@ -3237,6 +3276,8 @@ updateArticlePreview();
 updateImagePreview();
 setWorkspaceNavigationOpen(false);
 loadStatus();
+restoreWorkspaceRoute({ replace: true });
+window.addEventListener("popstate", () => restoreWorkspaceRoute());
 
 window.addEventListener("beforeunload", (event) => {
   if (!isFormDirty(articleForm) && !isFormDirty(imageForm)) return;
