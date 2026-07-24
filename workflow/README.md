@@ -47,6 +47,41 @@ XGIF_AI_BASE_URL="https://api.openai.com/v1"
 
 首次使用时，可从 `.env.example` 复制一份为 `.env` 后填写。修改 `.env` 后重启本地发布器即可生效。未配置时，发布器仍可正常手动发布内容；AI 按钮会提示缺少配置。
 
+## 离线相关推荐
+
+文章页和图片页的推荐不在浏览器中调用 AI，也不依赖线上向量数据库。生成流程分成两层：
+
+1. 默认规则层根据标签稀有度、标题/摘要/图片情绪与场景的文本重合度、发布时间进行排序；文章底部保留两个相关位置和一个稳定的“换个口味”位置。
+2. 配置本地向量模型后，以向量相似度为主、规则相关度和新鲜度为辅重新排序。向量只保存在本机可重建的 SQLite 缓存中，最终只把内容 ID 清单写入 `site/src/data/recommendations.json`。
+
+任何阶段都不会删除或改写文章。草稿、非公开图片和当前内容自身不会进入候选。向量服务未配置、隧道中断、响应格式异常或超时时，命令会生成规则推荐并正常结束；需要把向量不可用视为错误时使用 `--require-embeddings`。
+
+```bash
+# 始终生成规则推荐，不访问模型
+npm run recommendations:build -- --rules-only
+
+# 使用 .env 中的本地 OpenAI 兼容向量端点；失败时自动回退规则
+npm run recommendations:build
+
+# 验收向量链路，服务不可用时返回非零状态
+npm run recommendations:build -- --require-embeddings
+```
+
+当前建议模型是 `qwen3-embedding:0.6b`。M4 的 Ollama 继续只监听 `127.0.0.1:11434`；从 M5 使用时先建立临时隧道：
+
+```bash
+ssh -N -L 127.0.0.1:11435:127.0.0.1:11434 muze@muze-for-mac-mini
+```
+
+然后在 `workflow/.env` 配置：
+
+```bash
+XGIF_EMBEDDING_BASE_URL="http://127.0.0.1:11435/v1"
+XGIF_EMBEDDING_MODEL="qwen3-embedding:0.6b"
+```
+
+静态站点构建只读取已经生成的 JSON，不启动 Ollama，也不会把向量、正文副本、模型或 `.env` 发布到线上。新增或修改公开内容后重新运行生成命令；未重新生成时，页面会校验内容 ID，并以实时规则排序补足缺失项。
+
 ## 写入位置
 
 - 文章：`site/src/content/articles/*.md`
@@ -84,7 +119,7 @@ npm run content:audit
 
 ## 本地数据安全
 
-文章正文和图片元数据仍以 `site/src/content/**/*.md` 为公开权威源；外部来源文章同时在 `workflow/private-sources/articles/<contentId>.md` 保留本地私有正文副本，用于编辑恢复和异地私有备份。SQLite 只保存可重建的内容索引、回收站索引、本地操作历史和同步记录。数据库位于 `workflow/.runtime/xgif.sqlite3`，不会进入 Git；数据库迁移、重建代码和公开内容文件才进入公开 Git。
+文章正文和图片元数据仍以 `site/src/content/**/*.md` 为公开权威源；外部来源文章同时在 `workflow/private-sources/articles/<contentId>.md` 保留本地私有正文副本，用于编辑恢复和异地私有备份。SQLite 只保存可重建的内容索引、回收站索引、本地操作历史、同步记录和推荐向量缓存。数据库位于 `workflow/.runtime/xgif.sqlite3`，不会进入 Git；数据库迁移、重建代码、公开内容文件和不含向量的静态推荐 ID 清单才进入公开 Git。
 
 发布台启动时会检查数据库完整性。发现损坏时会先把原数据库隔离为 `.corrupt-*`，然后扫描 Markdown 与回收站旁车自动重建。常用维护命令：
 

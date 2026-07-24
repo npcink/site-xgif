@@ -24,6 +24,7 @@
     "r2:cleanup": "node r2-cleanup-cli.js",
     "notes:migrate": "node article-note-migration-cli.js",
     "notes:migrate:apply": "node article-note-migration-cli.js --apply",
+    "recommendations:build": "node --disable-warning=ExperimentalWarning recommendation-cli.js",
     "test:recovery": "node --disable-warning=ExperimentalWarning --test tests/local-data-store.test.mjs",
     "test:http": "node --disable-warning=ExperimentalWarning tests/local-http.integration.mjs",
     "test:browser": "playwright test --config playwright.config.mjs",

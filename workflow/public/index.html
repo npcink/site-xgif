@@ -757,6 +757,7 @@
             <p>管理页面和配置仅在本机打开。只有在你点击 AI、同步、云端核对或 R2 操作时，相关内容才会发送到已配置的外部服务。</p>
             <dl>
               <div><dt>AI</dt><dd id="network-ai-detail">读取配置中</dd></div>
+              <div><dt>相关推荐</dt><dd>正文只在本机通过 SSH 隧道发送到 M4 Ollama，线上页面不调用模型。</dd></div>
               <div><dt>同步</dt><dd>GitHub、Cloudflare 和可选的 R2</dd></div>
               <div><dt>线上核对</dt><dd>只读取 www.xgif.cn 的公开页面</dd></div>
             </dl>
@@ -782,6 +783,34 @@
               <strong id="connection-preview">未配置</strong>
               <a id="connection-preview-link" href="#" target="_blank" rel="noopener" hidden>打开部署预览</a>
             </article>
+          </section>
+          <section class="recommendation-status" aria-labelledby="recommendation-status-title">
+            <div class="recommendation-status-heading">
+              <div>
+                <strong id="recommendation-status-title">相关推荐</strong>
+                <p id="recommendation-status-summary">正在读取推荐清单</p>
+              </div>
+              <button type="button" id="recommendation-refresh">更新相关推荐</button>
+            </div>
+            <dl class="recommendation-status-grid">
+              <div>
+                <dt>当前模式</dt>
+                <dd id="recommendation-mode">检查中</dd>
+              </div>
+              <div>
+                <dt>内容覆盖</dt>
+                <dd id="recommendation-coverage">检查中</dd>
+              </div>
+              <div>
+                <dt>向量模型</dt>
+                <dd id="recommendation-model">检查中</dd>
+              </div>
+              <div>
+                <dt>最近更新</dt>
+                <dd id="recommendation-generated-at">检查中</dd>
+              </div>
+            </dl>
+            <p class="recommendation-result" id="recommendation-result" role="status" aria-live="polite"></p>
           </section>
           <div class="system-actions">
             <button type="button" id="open-pending-content">查看待同步</button>

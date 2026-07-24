@@ -2,7 +2,8 @@
 import { getCollection, render, type CollectionEntry } from "astro:content";
 import ArticleCard from "./ArticleCard.astro";
 import FavoriteButton from "./FavoriteButton.astro";
-import { contentHref } from "../lib/content";
+import { contentHref, selectContentRecommendations } from "../lib/content";
+import { staticRecommendationIds } from "../lib/recommendation-manifest";
 
 interface Props {
   item: CollectionEntry<"images">;
@@ -12,9 +13,12 @@ const { item } = Astro.props;
 const canonicalPath = contentHref(item);
 const { Content } = await render(item);
 const allArticles = (await getCollection("articles")).filter((entry) => !entry.data.draft);
-const relatedArticles = allArticles
-  .filter((entry) => entry.data.tags.some((tag) => item.data.tags.includes(tag)))
-  .slice(0, 2);
+const relatedArticles = selectContentRecommendations(item, allArticles, {
+  limit: 2,
+  relatedSlots: 2,
+  allowSurprise: false,
+  preferredIds: staticRecommendationIds(item.data.contentId, "articles"),
+});
 const isUserProvided = item.data.sourceKind === "user_provided";
 const isUnknownSource = item.data.sourceKind === "unknown";
 const imageAspectRatio =

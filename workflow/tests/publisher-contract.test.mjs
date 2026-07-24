@@ -19,6 +19,8 @@ test("publisher exposes local public URLs and keeps empty result panels hidden",
   assert.match(server, /function previewContentUrl/);
   assert.match(server, /function createArticleTitleSuggestions/);
   assert.match(server, /\/api\/ai\/article-title-suggestions/);
+  assert.match(server, /\/api\/recommendations/);
+  assert.match(server, /refreshRecommendationManifest/);
   assert.match(server, /sanitizeArticleTitleSuggestions/);
   assert.match(server, /allocateContentId/);
   assert.match(server, /contentId: \$\{yamlString\(payload\.contentId\)\}/);
@@ -133,6 +135,12 @@ test("publisher exposes local public URLs and keeps empty result panels hidden",
   assert.match(html, /id="system-panel"/);
   assert.match(html, /id="open-system-status"/);
   assert.match(html, /class="network-disclosure"/);
+  assert.doesNotMatch(html, /<h2>内容库<\/h2>/);
+  assert.doesNotMatch(html, /<h2>内容体检与标签<\/h2>/);
+  assert.doesNotMatch(html, /<h2>系统状态与恢复<\/h2>/);
+  assert.match(html, /正文只在本机通过 SSH 隧道发送到 M4 Ollama/);
+  assert.match(html, /id="recommendation-refresh"/);
+  assert.match(html, /id="recommendation-result" role="status" aria-live="polite"/);
   assert.match(html, /id="article-next-action"/);
   assert.match(html, /id="article-next-step-title"/);
   assert.match(html, /class="library-tools-more"/);
@@ -148,6 +156,9 @@ test("publisher exposes local public URLs and keeps empty result panels hidden",
   assert.match(app, /function applyArticleTitleSuggestion/);
   assert.match(app, /function invalidateArticleTitleSuggestions/);
   assert.match(app, /\/api\/ai\/article-title-suggestions/);
+  assert.match(app, /function renderRecommendationStatus/);
+  assert.match(app, /\/api\/recommendations/);
+  assert.match(app, /OpenAI 兼容接口/);
   assert.match(app, /syncAiAvailability\(\);\n    articleDetails\.open = true/);
   assert.match(app, /function setWorkspaceNavigationOpen/);
   assert.match(app, /function runWorkspaceNavigationAction/);
@@ -233,6 +244,7 @@ test("publisher exposes local public URLs and keeps empty result panels hidden",
   assert.match(css, /\.asset-library-item/);
   assert.match(css, /\.recovery-dashboard/);
   assert.match(css, /\.connection-grid/);
+  assert.match(css, /\.recommendation-status/);
   assert.match(css, /\.content-state-grid/);
   assert.match(css, /\.markdown-toolbar/);
   assert.match(css, /\.library-detail-more/);

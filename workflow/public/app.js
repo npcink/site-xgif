@@ -3032,6 +3032,7 @@ $("#open-site-preview").addEventListener("click", () => {
   window.open(sitePreviewUrl, "_blank", "noopener");
 });
 $("#refresh-services").addEventListener("click", loadStatus);
+$("#recommendation-refresh").addEventListener("click", refreshRecommendations);
 $("#retry-push").addEventListener("click", async () => {
   showResult(libraryResult, "正在推送...");
   try {
@@ -3133,6 +3134,73 @@ $("#open-pending-content").addEventListener("click", () => {
   switchTab("library");
 });
 
+function recommendationModeLabel(mode) {
+  if (mode === "hybrid") return "混合推荐";
+  if (mode === "rules") return "规则推荐";
+  return "尚未生成";
+}
+
+function localDateTime(value) {
+  const date = new Date(value);
+  if (!value || Number.isNaN(date.getTime())) return "尚无记录";
+  return new Intl.DateTimeFormat("zh-CN", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(date);
+}
+
+function renderRecommendationStatus(recommendations) {
+  const status = recommendations || {};
+  const root = $(".recommendation-status");
+  const total = Number(status.total || 0);
+  const covered = Number(status.covered || 0);
+  const current = Boolean(status.available);
+  root.dataset.state = current && !status.stale ? "ready" : "attention";
+  $("#recommendation-mode").textContent = recommendationModeLabel(status.mode);
+  $("#recommendation-coverage").textContent = `${covered}/${total} 条内容`;
+  $("#recommendation-model").textContent = status.model || "不使用向量模型";
+  $("#recommendation-generated-at").textContent = localDateTime(status.generatedAt);
+
+  const vectorDetail = status.embeddingConfigured
+    ? `更新时优先使用本地向量模型 ${status.embeddingModel || ""}`.trim()
+    : "本地向量未连接时会自动使用规则推荐";
+  $("#recommendation-status-summary").textContent = current && !status.stale
+    ? `已是最新。${vectorDetail}`
+    : `清单与当前公开内容不一致，需要更新。${vectorDetail}`;
+}
+
+async function refreshRecommendations() {
+  const button = $("#recommendation-refresh");
+  const result = $("#recommendation-result");
+  button.disabled = true;
+  button.textContent = "正在更新";
+  result.dataset.state = "loading";
+  result.textContent = "正在核对公开内容与本地推荐清单。";
+  try {
+    const response = await api("/api/recommendations", {});
+    renderRecommendationStatus(response.recommendations);
+    result.dataset.state = response.fallback ? "attention" : "ready";
+    if (response.unchanged) {
+      result.textContent = "相关推荐已是最新，没有改写推荐清单。";
+    } else if (response.fallback) {
+      result.textContent = "本地向量服务不可用，已安全回退到规则推荐。站点构建不受影响。";
+    } else {
+      const generated = Number(response.summary?.generated || 0);
+      const cacheHits = Number(response.summary?.cacheHits || 0);
+      result.textContent = `混合推荐已更新。新增 ${generated} 条向量，复用 ${cacheHits} 条缓存。`;
+    }
+  } catch (error) {
+    result.dataset.state = "error";
+    result.textContent = `更新失败：${error.message}`;
+  } finally {
+    button.disabled = false;
+    button.textContent = "更新相关推荐";
+  }
+}
+
 async function loadStatus() {
   try {
     const status = await api("/api/status");
@@ -3144,8 +3212,11 @@ async function loadStatus() {
       ? `${status.ai.model}。仅在点击 AI 按钮时发送当前表单内容`
       : "未配置，不会发送内容";
     $("#connection-ai").textContent = status.ai?.available ? "已配置" : "未配置";
+    const aiEndpoint = typeof status.ai?.baseUrl === "string" && status.ai.baseUrl.trim()
+      ? status.ai.baseUrl
+      : "OpenAI 兼容接口";
     $("#connection-ai-detail").textContent = status.ai?.available
-      ? `${status.ai.model} · ${status.ai.baseUrl}`
+      ? `${status.ai.model}，${aiEndpoint}`
       : "需要 API 密钥与模型名称，不会在页面显示密钥";
     $("#connection-git").textContent = status.git?.canPush
       ? `${status.branch} · 远程已配置`
@@ -3163,6 +3234,7 @@ async function loadStatus() {
     deploymentPreviewLink.hidden = !status.deploymentPreviewUrl;
     if (status.deploymentPreviewUrl) deploymentPreviewLink.href = status.deploymentPreviewUrl;
     $("#connection-preview").textContent = status.deploymentPreviewUrl ? "已配置" : "未配置";
+    renderRecommendationStatus(status.recommendations);
     const remote = status.git?.canPush ? "远程：已配置" : "远程：未配置";
     const localIndex = status.localData?.ok ? "索引：正常" : "索引：需重启恢复";
     const gitContent = status.contentSafety?.ok
@@ -3253,6 +3325,8 @@ async function loadStatus() {
     $("#publisher-health").dataset.state = "error";
     $("#publisher-health-label").textContent = "无法读取完整环境状态";
     $("#publisher-health-detail").textContent = "可继续编辑；发布或同步前请展开系统详情重新检查";
+    $(".recommendation-status").dataset.state = "attention";
+    $("#recommendation-status-summary").textContent = "暂时无法读取推荐状态，可稍后刷新。";
   }
 }
 

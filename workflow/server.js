@@ -43,6 +43,10 @@ import {
   contentPublicationCounts,
   publicationFromDeployment,
 } from "./publication-state.js";
+import {
+  getRecommendationStatus,
+  refreshRecommendationManifest,
+} from "./recommendation-engine.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..");
@@ -96,6 +100,7 @@ const runtimeVersion = publisherSourceVersion(__dirname);
 const csrfToken = randomUUID();
 const recoveryDrillStatusPath = path.join(__dirname, ".runtime", "recovery-drill.json");
 const staticAssetCache = new Map();
+let recommendationRefreshPromise = null;
 
 const mimeTypes = new Map([
   [".html", "text/html; charset=utf-8"],
@@ -1219,6 +1224,38 @@ function getAiConfig() {
     baseUrl,
     available: Boolean(apiKey && model),
   };
+}
+
+async function recommendationStatusForApi() {
+  try {
+    return await getRecommendationStatus({ repoRoot });
+  } catch {
+    return {
+      available: false,
+      mode: "missing",
+      model: null,
+      dimensions: null,
+      generatedAt: null,
+      total: 0,
+      covered: 0,
+      stale: true,
+      embeddingConfigured: false,
+      embeddingModel: null,
+      configurationCode: "RECOMMENDATION_STATUS_UNAVAILABLE",
+    };
+  }
+}
+
+async function refreshRecommendations() {
+  if (!recommendationRefreshPromise) {
+    recommendationRefreshPromise = refreshRecommendationManifest({
+      repoRoot,
+      store: localDataStore,
+    }).finally(() => {
+      recommendationRefreshPromise = null;
+    });
+  }
+  return recommendationRefreshPromise;
 }
 
 function clampText(value, maxLength) {
@@ -2503,12 +2540,20 @@ async function handleApi(req, res) {
   }
 
   if (pathname === "/api/status" && req.method === "GET") {
-    const [git, sitePreview, contentSafety, localContentHistory, publicationItems] = await Promise.all([
+    const [
+      git,
+      sitePreview,
+      contentSafety,
+      localContentHistory,
+      publicationItems,
+      recommendations,
+    ] = await Promise.all([
       getGitStatus(),
       probeUrl(localSiteUrl),
       getContentGitSafety(),
       localContentBackupStatus(),
       listContent("all").then((items) => getContentPublicationStates(items)),
+      recommendationStatusForApi(),
     ]);
     sendJson(res, 200, {
       repoRoot,
@@ -2533,6 +2578,7 @@ async function handleApi(req, res) {
         ? { provider: "cloudflare-r2", bucket: r2Storage.bucket, publicBaseUrl: r2Storage.publicBaseUrl }
         : { provider: "local" },
       localData: localDataStatus(),
+      recommendations,
       target: {
         articles: path.relative(repoRoot, target.articles),
         images: path.relative(repoRoot, target.imageEntries),
@@ -2540,6 +2586,20 @@ async function handleApi(req, res) {
         flomoImportLedger: path.relative(repoRoot, target.flomoImportLedger),
         r2AssetLedger: path.relative(repoRoot, target.r2AssetLedger),
       },
+    });
+    return;
+  }
+
+  if (pathname === "/api/recommendations" && req.method === "POST") {
+    await readJson(req);
+    const result = await refreshRecommendations();
+    sendJson(res, 200, {
+      ok: true,
+      unchanged: result.unchanged,
+      fallback: Boolean(result.summary.fallbackCode),
+      fallbackCode: result.summary.fallbackCode || null,
+      summary: result.summary,
+      recommendations: result.status,
     });
     return;
   }

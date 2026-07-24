@@ -609,6 +609,86 @@ h1 {
   font-weight: 700;
 }
 
+.recommendation-status {
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 12px;
+  padding-top: 16px;
+}
+
+.recommendation-status-heading {
+  align-items: center;
+  display: flex;
+  gap: 18px;
+  justify-content: space-between;
+}
+
+.recommendation-status-heading strong {
+  font-size: 14px;
+}
+
+.recommendation-status-heading p,
+.recommendation-result {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+  margin: 4px 0 0;
+}
+
+.recommendation-status-heading button {
+  flex: 0 0 auto;
+  font-size: 12px;
+  min-height: 34px;
+  padding: 0 11px;
+}
+
+.recommendation-status-grid {
+  border: 1px solid var(--line);
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 0;
+}
+
+.recommendation-status-grid > div {
+  border-left: 1px solid var(--line);
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 11px 12px;
+}
+
+.recommendation-status-grid > div:first-child {
+  border-left: 0;
+}
+
+.recommendation-status-grid dt {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.recommendation-status-grid dd {
+  font-size: 12px;
+  font-weight: 700;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.recommendation-status[data-state="attention"] #recommendation-status-summary {
+  color: #75601b;
+}
+
+.recommendation-status[data-state="ready"] #recommendation-status-summary {
+  color: var(--accent);
+}
+
+.recommendation-result:empty {
+  display: none;
+}
+
+.recommendation-result[data-state="error"] {
+  color: var(--danger);
+}
+
 .system-technical-details {
   border-top: 1px solid var(--line);
   padding-top: 12px;
@@ -3455,8 +3535,18 @@ summary:focus-visible {
   }
 
   .recovery-dashboard-grid,
+  .recommendation-status-grid,
   .tag-governance-list {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .recommendation-status-grid > div:nth-child(3) {
+    border-left: 0;
+    border-top: 1px solid var(--line);
+  }
+
+  .recommendation-status-grid > div:nth-child(4) {
+    border-top: 1px solid var(--line);
   }
 
   .tag-governance-controls {
@@ -3604,8 +3694,29 @@ summary:focus-visible {
   }
 
   .recovery-dashboard-grid,
+  .recommendation-status-grid,
   .tag-governance-list {
     grid-template-columns: 1fr;
+  }
+
+  .recommendation-status-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .recommendation-status-heading button {
+    width: 100%;
+  }
+
+  .recommendation-status-grid > div,
+  .recommendation-status-grid > div:first-child,
+  .recommendation-status-grid > div:nth-child(3) {
+    border-left: 0;
+    border-top: 1px solid var(--line);
+  }
+
+  .recommendation-status-grid > div:first-child {
+    border-top: 0;
   }
 
   .recovery-status-item,

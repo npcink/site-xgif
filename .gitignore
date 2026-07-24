@@ -40,7 +40,10 @@ yarn-error.log*
 !/workflow/.env.example
 
 # local tooling
+/.codex/
+/design-qa.md
 /.wrangler/
+/site/.wrangler/
 /outputs/
 /work/
 /workflow/.runtime/

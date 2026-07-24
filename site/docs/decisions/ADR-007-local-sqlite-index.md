@@ -27,6 +27,7 @@
 - Markdown 内容索引；
 - 回收站索引；
 - 本地操作历史；
+- 推荐向量缓存（由公开内容和模型版本重建）；
 - 数据库迁移版本。
 
 数据库结构迁移保存在 `workflow/db/migrations/` 并提交 Git。启动发布台时执行 `PRAGMA quick_check`；如果数据库损坏，则先把数据库及 WAL/SHM 隔离为 `.corrupt-*` 文件，再从 Markdown 与回收站旁车元数据自动重建。
@@ -47,6 +48,8 @@
 6. SQLite：可删除、可重建的管理索引。
 
 SQLite 永远不能成为文章正文、图片授权信息或 R2 对象位置的唯一保存位置。
+
+推荐系统的详细边界见 [`ADR-012`](./ADR-012-offline-hybrid-recommendations.md)：SQLite 只缓存向量；静态站点读取的是可提交、无正文、无向量的内容 ID 清单。
 
 ## 备选方案
 

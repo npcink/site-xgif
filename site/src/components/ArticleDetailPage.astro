@@ -7,8 +7,10 @@ import {
   contentHref,
   formatShortDate,
   publicArticleNote,
+  selectContentRecommendations,
   selectArticleRecommendations,
 } from "../lib/content";
+import { staticRecommendationIds } from "../lib/recommendation-manifest";
 
 interface Props {
   article: CollectionEntry<"articles">;
@@ -22,10 +24,18 @@ const [allArticles, allImages] = await Promise.all([
   getCollection("articles"),
   getCollection("images").then((entries) => entries.filter((entry) => !entry.data.draft && entry.data.public)),
 ]);
-const recommendedArticles = selectArticleRecommendations(article, allArticles);
-const relatedImages = allImages
-  .filter((entry) => entry.data.tags.some((tag) => article.data.tags.includes(tag)))
-  .slice(0, 3);
+const recommendedArticles = selectArticleRecommendations(
+  article,
+  allArticles,
+  3,
+  staticRecommendationIds(article.data.contentId, "articles"),
+);
+const relatedImages = selectContentRecommendations(article, allImages, {
+  limit: 3,
+  relatedSlots: 3,
+  allowSurprise: false,
+  preferredIds: staticRecommendationIds(article.data.contentId, "images"),
+});
 const sourceLabel = {
   original: "原创内容",
   publication: "访问来源站",

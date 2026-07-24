@@ -16,6 +16,11 @@ test("system status is a dedicated workspace instead of a floating popover", asy
   await expect(page.locator("#workspace-page-title")).toHaveText("系统状态与恢复");
   await expect(page.locator(".status-details")).toHaveCount(0);
   await expect(page.locator(".network-disclosure")).toBeVisible();
+  await expect(page.locator(".network-disclosure")).toContainText("M4 Ollama");
+  await expect(page.locator(".recommendation-status")).toBeVisible();
+  await expect(page.locator("#recommendation-mode")).not.toHaveText("检查中");
+  await expect(page.locator("#recommendation-refresh")).toBeEnabled();
+  await expect(page.locator("#connection-ai-detail")).not.toContainText("undefined");
 });
 
 test("workspace page titles are not repeated inside their content", async ({ page }) => {
