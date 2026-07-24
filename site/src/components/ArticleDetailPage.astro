@@ -33,7 +33,7 @@ const articleHref = contentHref("articles", article);
 
 <article class="detail-page article-detail" data-detail-content data-detail-kind="article">
   <header class="detail-header">
-    <a class="back-link" href="/articles/">← 返回文章摘要</a>
+    <a class="back-link" href="/articles/">← 返回文章列表</a>
     <div class="detail-meta">
       <span>{article.data.source}</span>
       <time datetime={article.data.pubDate.toISOString()}>{formatShortDate(article.data.pubDate)}</time>
@@ -50,7 +50,7 @@ const articleHref = contentHref("articles", article);
           {sourceLabel} <span>↗</span>
         </a>
       )}
-      {!preview && <a class="dialog-full-link" href={articleHref}>在独立页面查看摘要 →</a>}
+      {!preview && <a class="dialog-full-link" href={articleHref}>打开独立文章页 →</a>}
     </div>
   </header>
 

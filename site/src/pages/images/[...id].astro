@@ -28,6 +28,8 @@ const jsonLd = {
   name: item.data.title,
   description: item.data.description,
   contentUrl: item.data.image,
+  ...(item.data.width ? { width: item.data.width } : {}),
+  ...(item.data.height ? { height: item.data.height } : {}),
   ...(item.data.author ? { creditText: item.data.author } : {}),
   ...(item.data.licenseUrl ? { license: item.data.licenseUrl } : {}),
   ...(item.data.sourceUrl ? { acquireLicensePage: item.data.sourceUrl } : {}),
@@ -41,7 +43,12 @@ const jsonLd = {
     <a class="back-link" href="/images/">← 返回图片库</a>
     <div class="image-detail-grid">
       <figure class:list={[`ratio-${item.data.ratio}`]}>
-        <img src={item.data.image} alt={item.data.title} />
+        <img
+          src={item.data.image}
+          alt={item.data.title}
+          width={item.data.width}
+          height={item.data.height}
+        />
       </figure>
       <div class="image-detail-copy">
         <p class="section-kicker">REACTION / 图片详情</p>

@@ -9,7 +9,7 @@ const legacyDisclosure = [
   "请通过页面中的“查看原始来源”链接阅读完整内容。",
 ].join("\n");
 
-const unsafeArticleMarkup = /<\s*\/?\s*(?:script|iframe|object|embed|style|form|input|button|svg|math|link|meta)\b|\bon[a-z]+\s*=|(?:javascript|vbscript)\s*:|data\s*:\s*text\/html/iu;
+const rawArticleHtml = /<(?!https?:\/\/)\s*(?:\/?\s*[A-Za-z][^>]*|!--[\s\S]*?--)>/iu;
 
 const contentRoot = new URL("../src/content/", import.meta.url);
 
@@ -89,11 +89,11 @@ test("published external articles expose a full body instead of the legacy discl
   }
 });
 
-test("public articles do not contain executable or embedded markup", async () => {
+test("public articles contain no raw HTML from imports", async () => {
   const articles = await frontmatter("articles");
   for (const article of articles) {
     const body = article.text.match(/^---\r?\n[\s\S]*?\r?\n---\r?\n?([\s\S]*)$/u)?.[1] || "";
     if (field(article.text, "draft") === "true") continue;
-    assert.doesNotMatch(body, unsafeArticleMarkup, `${article.file} 包含危险公开正文`);
+    assert.doesNotMatch(body, rawArticleHtml, `${article.file} 包含原始 HTML`);
   }
 });

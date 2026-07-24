@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { inflateRawSync } from "node:zlib";
+import { calendarDate } from "./calendar-date.js";
 import { extractArticleSource } from "./article-source.js";
 import { splitTerminalImportTags } from "./import-tags.js";
 
@@ -181,7 +182,7 @@ export function parseFlomoHtml(html) {
     const body = trailingTags.bodyLines.join("\n\n").trim();
     if (!body) throw importError(`第 ${index + 1} 条 memo 没有可导入的正文。`);
     const pubDateMatch = timeText.match(/^\d{4}-\d{2}-\d{2}/);
-    const pubDate = pubDateMatch?.[0] || new Date().toISOString().slice(0, 10);
+    const pubDate = pubDateMatch?.[0] || calendarDate();
     const suggestion = suggestedTitle(body, pubDate, index);
     const hash = contentHash(body);
     const charCount = [...body.replace(/\s/g, "")].length;

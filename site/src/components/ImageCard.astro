@@ -18,7 +18,14 @@ const href = contentHref("images", item);
   data-search={`${item.data.title} ${item.data.description} ${item.data.source} ${item.data.tags.join(" ")} ${item.data.mood.join(" ")} ${item.data.scenes.join(" ")}`.toLowerCase()}
   aria-label={`查看图片：${item.data.title}`}
 >
-  <img src={item.data.image} alt={item.data.title} loading="lazy" decoding="async" />
+  <img
+    src={item.data.image}
+    alt={item.data.title}
+    width={item.data.width}
+    height={item.data.height}
+    loading="lazy"
+    decoding="async"
+  />
   <div class="image-shade"></div>
   <div class="image-copy">
     <div class="image-tags">

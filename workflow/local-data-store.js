@@ -27,9 +27,10 @@ function parseOperationDetails(value) {
   }
 }
 
-function parseFrontmatter(content) {
+function parseContentDocument(content) {
   const match = String(content || "").match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
   const raw = match?.[1] || "";
+  const body = match?.[2] || "";
   const data = {};
 
   for (const line of raw.split(/\r?\n/)) {
@@ -52,7 +53,7 @@ function parseFrontmatter(content) {
     data[key] = value;
   }
 
-  return data;
+  return { data, body };
 }
 
 async function listFilesRecursively(directory, predicate) {
@@ -127,8 +128,17 @@ export class LocalDataStore {
       this.db.exec("PRAGMA journal_mode = WAL");
     }
 
-    await this.applyMigrations();
-    await this.rebuildAll();
+    const appliedMigrations = await this.applyMigrations();
+    const indexed = this.db.prepare("SELECT COUNT(*) AS count FROM content_index").get().count;
+    if (this.recovery?.recovered || appliedMigrations.length || indexed === 0) {
+      await this.rebuildAll();
+    } else {
+      const content = await this.syncContentIndex();
+      const trash = await this.rebuildTrashIndex();
+      if (content.changed || content.removed) {
+        this.recordOperation("index_sync", { ...content, trash });
+      }
+    }
     return this.getStatus();
   }
 
@@ -168,6 +178,7 @@ export class LocalDataStore {
       "INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)",
     );
 
+    const newlyApplied = [];
     for (const file of migrationFiles) {
       if (applied.get(file)) continue;
       const sql = await readFile(path.join(this.migrationsDir, file), "utf8");
@@ -176,11 +187,13 @@ export class LocalDataStore {
         this.db.exec(sql);
         markApplied.run(file, nowIso());
         this.db.exec("COMMIT");
+        newlyApplied.push(file);
       } catch (error) {
         this.db.exec("ROLLBACK");
         throw error;
       }
     }
+    return newlyApplied;
   }
 
   async scanContentIndex() {
@@ -197,7 +210,7 @@ export class LocalDataStore {
       );
       for (const file of files) {
         const [content, fileStat] = await Promise.all([readFile(file, "utf8"), stat(file)]);
-        const data = parseFrontmatter(content);
+        const { data, body } = parseContentDocument(content);
         records.push({
           file: portablePath(path.relative(this.repoRoot, file)),
           contentType: source.type,
@@ -208,6 +221,8 @@ export class LocalDataStore {
           pubDate: String(data.pubDate || ""),
           draft: Boolean(data.draft),
           public: data.public !== false,
+          contentId: String(data.contentId || ""),
+          bodyExcerpt: body.replace(/\s+/g, " ").trim().slice(0, 140),
           sha256: createHash("sha256").update(content).digest("hex"),
           size: fileStat.size,
           mtimeMs: Math.trunc(fileStat.mtimeMs),
@@ -222,8 +237,9 @@ export class LocalDataStore {
     const insert = this.db.prepare(`
       INSERT INTO content_index (
         file, content_type, title, summary, source, tags_json, pub_date,
-        is_draft, is_public, content_sha256, file_size, file_mtime_ms, indexed_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        is_draft, is_public, content_id, body_excerpt, content_sha256,
+        file_size, file_mtime_ms, indexed_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     const indexedAt = nowIso();
     this.db.exec("BEGIN IMMEDIATE");
@@ -240,6 +256,8 @@ export class LocalDataStore {
           record.pubDate,
           record.draft ? 1 : 0,
           record.public ? 1 : 0,
+          record.contentId,
+          record.bodyExcerpt,
           record.sha256,
           record.size,
           record.mtimeMs,
@@ -252,6 +270,155 @@ export class LocalDataStore {
       throw error;
     }
     return records.length;
+  }
+
+  async syncContentIndex() {
+    const sources = [
+      { type: "article", directory: this.articlesDir },
+      { type: "image", directory: this.imagesDir },
+    ];
+    const existingRows = this.db.prepare(
+      "SELECT file, file_size AS fileSize, file_mtime_ms AS fileMtimeMs FROM content_index",
+    ).all();
+    const existing = new Map(existingRows.map((row) => [row.file, row]));
+    const seen = new Set();
+    const changed = [];
+
+    for (const source of sources) {
+      const files = await listFilesRecursively(source.directory, (file) => /\.mdx?$/i.test(file));
+      for (const file of files) {
+        const relativeFile = portablePath(path.relative(this.repoRoot, file));
+        const fileStat = await stat(file);
+        const size = fileStat.size;
+        const mtimeMs = Math.trunc(fileStat.mtimeMs);
+        seen.add(relativeFile);
+        const previous = existing.get(relativeFile);
+        if (previous && previous.fileSize === size && previous.fileMtimeMs === mtimeMs) continue;
+        const content = await readFile(file, "utf8");
+        const { data, body } = parseContentDocument(content);
+        changed.push({
+          file: relativeFile,
+          contentType: source.type,
+          title: String(data.title || "未命名内容"),
+          summary: String(data.summary || data.description || ""),
+          source: String(data.source || ""),
+          tags: Array.isArray(data.tags) ? data.tags : [],
+          pubDate: String(data.pubDate || ""),
+          draft: Boolean(data.draft),
+          public: data.public !== false,
+          contentId: String(data.contentId || ""),
+          bodyExcerpt: body.replace(/\s+/g, " ").trim().slice(0, 140),
+          sha256: createHash("sha256").update(content).digest("hex"),
+          size,
+          mtimeMs,
+        });
+      }
+    }
+
+    const removed = existingRows.map((row) => row.file).filter((file) => !seen.has(file));
+    if (!changed.length && !removed.length) return { changed: 0, removed: 0 };
+
+    const upsert = this.db.prepare(`
+      INSERT INTO content_index (
+        file, content_type, title, summary, source, tags_json, pub_date,
+        is_draft, is_public, content_id, body_excerpt, content_sha256,
+        file_size, file_mtime_ms, indexed_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(file) DO UPDATE SET
+        content_type = excluded.content_type,
+        title = excluded.title,
+        summary = excluded.summary,
+        source = excluded.source,
+        tags_json = excluded.tags_json,
+        pub_date = excluded.pub_date,
+        is_draft = excluded.is_draft,
+        is_public = excluded.is_public,
+        content_id = excluded.content_id,
+        body_excerpt = excluded.body_excerpt,
+        content_sha256 = excluded.content_sha256,
+        file_size = excluded.file_size,
+        file_mtime_ms = excluded.file_mtime_ms,
+        indexed_at = excluded.indexed_at
+    `);
+    const remove = this.db.prepare("DELETE FROM content_index WHERE file = ?");
+    const indexedAt = nowIso();
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      for (const record of changed) {
+        upsert.run(
+          record.file,
+          record.contentType,
+          record.title,
+          record.summary,
+          record.source,
+          JSON.stringify(record.tags),
+          record.pubDate,
+          record.draft ? 1 : 0,
+          record.public ? 1 : 0,
+          record.contentId,
+          record.bodyExcerpt,
+          record.sha256,
+          record.size,
+          record.mtimeMs,
+          indexedAt,
+        );
+      }
+      for (const file of removed) remove.run(file);
+      this.db.exec("COMMIT");
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
+    return { changed: changed.length, removed: removed.length };
+  }
+
+  listContentIndex({ type = "all", query = "", sort = "newest" } = {}) {
+    const filters = [];
+    const parameters = [];
+    if (type === "article" || type === "image") {
+      filters.push("content_type = ?");
+      parameters.push(type);
+    }
+    const normalizedQuery = String(query || "").trim().toLowerCase();
+    if (normalizedQuery) {
+      filters.push("LOWER(title || ' ' || summary || ' ' || source || ' ' || tags_json) LIKE ?");
+      parameters.push(`%${normalizedQuery}%`);
+    }
+    const orderBy = sort === "oldest"
+      ? "pub_date ASC, file ASC"
+      : sort === "title"
+        ? "title COLLATE NOCASE ASC, file ASC"
+        : "pub_date DESC, file ASC";
+    const where = filters.length ? `WHERE ${filters.join(" AND ")}` : "";
+    return this.db.prepare(`
+      SELECT
+        file,
+        content_type AS type,
+        title,
+        summary,
+        source,
+        tags_json AS tagsJson,
+        content_id AS contentId,
+        pub_date AS pubDate,
+        is_draft AS draft,
+        is_public AS public,
+        body_excerpt AS bodyExcerpt
+      FROM content_index
+      ${where}
+      ORDER BY ${orderBy}
+    `).all(...parameters).map((row) => ({
+      file: row.file,
+      type: row.type,
+      title: row.title,
+      summary: row.summary,
+      source: row.source,
+      tags: parseOperationDetails(row.tagsJson),
+      contentId: row.contentId,
+      pubDate: row.pubDate,
+      draft: Boolean(row.draft),
+      public: Boolean(row.public),
+      bodyExcerpt: row.bodyExcerpt,
+    }));
   }
 
   async scanTrashSidecars() {

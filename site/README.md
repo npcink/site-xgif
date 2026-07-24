@@ -62,7 +62,15 @@ npm run build
 
 Astro 会把纯静态部署产物输出到 `dist/`。
 
-`npm test` 会运行构建、详情交互契约、sitemap、来源与图片授权元数据检查。
+`npm test` 会运行构建、详情交互契约、sitemap、来源与图片授权元数据检查，并扫描构建产物中的站内断链。`/build.json` 会记录当前构建对应的 Git commit 与构建时间，便于区分“源码已推送”和“线上已经运行该版本”。
+
+真实线上巡检可单独执行：
+
+```bash
+npm run test:production
+```
+
+它会核对生产首页、反馈邮箱、sitemap、公开文章正文与来源、构建 commit、R2 站内读取和防盗链。GitHub Actions 每天执行同一巡检，并额外要求裸域名 `xgif.cn` 使用 301/308 跳转到 `www.xgif.cn`。
 
 ## 维护交接
 

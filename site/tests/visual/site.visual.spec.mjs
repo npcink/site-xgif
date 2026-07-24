@@ -12,6 +12,58 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
+test("key pages satisfy the basic accessibility contract", async ({ page }) => {
+  const routes = ["/", "/articles/", "/articles/20260710-vfks/", "/images/", "/search/", "/rights/"];
+  for (const route of routes) {
+    await page.goto(route, { waitUntil: "networkidle" });
+    const issues = await page.evaluate(() => {
+      const visible = (element) => {
+        const style = getComputedStyle(element);
+        const box = element.getBoundingClientRect();
+        return style.display !== "none" && style.visibility !== "hidden" && box.width > 0 && box.height > 0;
+      };
+      const accessibleName = (element) => (
+        element.getAttribute("aria-label")
+        || element.getAttribute("title")
+        || element.textContent
+        || element.querySelector("img")?.getAttribute("alt")
+        || ""
+      ).trim();
+      const duplicateIds = [...document.querySelectorAll("[id]")]
+        .map((element) => element.id)
+        .filter((id, index, ids) => id && ids.indexOf(id) !== index);
+      return {
+        main: document.querySelectorAll("main").length,
+        visibleH1: [...document.querySelectorAll("h1")].filter(visible).length,
+        unnamedControls: [...document.querySelectorAll("a, button, summary")]
+          .filter(visible)
+          .filter((element) => !accessibleName(element))
+          .map((element) => element.outerHTML.slice(0, 120)),
+        unlabeledInputs: [...document.querySelectorAll("input, select, textarea")]
+          .filter(visible)
+          .filter((element) => {
+            const id = element.getAttribute("id");
+            return !element.getAttribute("aria-label")
+              && !element.getAttribute("aria-labelledby")
+              && !(id && document.querySelector(`label[for="${CSS.escape(id)}"]`))
+              && !element.closest("label");
+          })
+          .map((element) => element.outerHTML.slice(0, 120)),
+        emptyAlt: [...document.querySelectorAll("img")].filter((image) => !image.getAttribute("alt")?.trim()).length,
+        duplicateIds: [...new Set(duplicateIds)],
+      };
+    });
+    expect(issues, `${route} 基础可访问性问题`).toEqual({
+      main: 1,
+      visibleH1: 1,
+      unnamedControls: [],
+      unlabeledInputs: [],
+      emptyAlt: 0,
+      duplicateIds: [],
+    });
+  }
+});
+
 async function waitForImages(page) {
   await page.waitForFunction(() => Array.from(document.images)
     .filter((image) => {

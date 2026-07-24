@@ -8,11 +8,11 @@ const articles = sortByDate((await getCollection("articles")).filter((entry) => 
 const sources = Array.from(new Set(articles.map((entry) => entry.data.source)));
 ---
 
-<BaseLayout title="文章摘要 — xgif.cn" description="快速了解值得看的文章，并保留来源链接。">
+<BaseLayout title="文章 — xgif.cn" description="通过编辑摘要快速了解，也可以阅读完整正文并核对来源。">
   <section class="archive-hero">
-    <p class="section-kicker">ARTICLES / 文章摘要</p>
-    <h1>不用读完，<br /><em>先看懂重点。</em></h1>
-    <p>手工整理的文章摘要、来源与编辑判断。</p>
+    <p class="section-kicker">ARTICLES / 文章</p>
+    <h1>先看懂重点，<br /><em>再决定是否读完。</em></h1>
+    <p>保留编辑摘要、完整正文、来源链接与编辑判断。</p>
   </section>
 
   <section class="archive-content">
@@ -27,7 +27,7 @@ const sources = Array.from(new Set(articles.map((entry) => entry.data.source)));
       </div>
     </div>
     <p class="filter-count" aria-live="polite">
-      <span data-page-summary>显示 1–{Math.min(12, articles.length)}，共 </span><span data-visible-count>{articles.length}</span> 篇摘要
+      <span data-page-summary>显示 1–{Math.min(12, articles.length)}，共 </span><span data-visible-count>{articles.length}</span> 篇文章
     </p>
     <div class="article-grid" data-filter-list>
       {articles.map((article, index) => <ArticleCard article={article} index={index} />)}
