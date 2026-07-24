@@ -1,0 +1,24 @@
+---
+interface Props {
+  contentId: string;
+  kind: "article" | "image";
+  title: string;
+  href: string;
+}
+
+const { contentId, kind, title, href } = Astro.props;
+---
+
+<button
+  class="favorite-toggle"
+  type="button"
+  data-favorite-toggle
+  data-content-id={contentId}
+  data-content-kind={kind}
+  data-content-title={title}
+  data-content-href={href}
+  aria-pressed="false"
+>
+  <span class="favorite-toggle-mark" aria-hidden="true">♡</span>
+  <span data-favorite-label>收藏</span>
+</button>

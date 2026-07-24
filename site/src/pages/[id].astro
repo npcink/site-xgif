@@ -1,0 +1,98 @@
+---
+import { getCollection, type CollectionEntry } from "astro:content";
+import ArticleDetailPage from "../components/ArticleDetailPage.astro";
+import ImageDetailPage from "../components/ImageDetailPage.astro";
+import { pageTitle, siteConfig } from "../config/site";
+import BaseLayout from "../layouts/BaseLayout.astro";
+import { contentHref } from "../lib/content";
+
+type Props =
+  | { kind: "article"; entry: CollectionEntry<"articles"> }
+  | { kind: "image"; entry: CollectionEntry<"images"> };
+
+export async function getStaticPaths() {
+  const contentIdPattern = /^\d{8}-[a-z0-9]{4}$/;
+  const [articles, images] = await Promise.all([
+    getCollection("articles").then((entries) => entries.filter((entry) => !entry.data.draft)),
+    getCollection("images").then((entries) => entries.filter((entry) => !entry.data.draft && entry.data.public)),
+  ]);
+  const records: Props[] = [
+    ...articles.map((entry) => ({ kind: "article" as const, entry })),
+    ...images.map((entry) => ({ kind: "image" as const, entry })),
+  ];
+  const seen = new Set<string>();
+
+  return records.map((record) => {
+    const contentId = record.entry.data.contentId;
+    if (!contentIdPattern.test(contentId)) {
+      throw new Error(`Invalid public content ID: ${contentId}`);
+    }
+    if (seen.has(contentId)) {
+      throw new Error(`Duplicate public content ID: ${contentId}`);
+    }
+    seen.add(contentId);
+    return { params: { id: contentId }, props: record };
+  });
+}
+
+const props = Astro.props as Props;
+const siteUrl = Astro.site ?? new URL(siteConfig.url);
+let title: string;
+let description: string;
+let socialImage: string | undefined;
+let pageType: "website" | "article" = "website";
+let jsonLd: Record<string, unknown>;
+
+if (props.kind === "article") {
+  const article = props.entry;
+  const canonicalPath = contentHref(article);
+  title = pageTitle(article.data.title);
+  description = article.data.summary;
+  socialImage = article.data.coverImage;
+  pageType = "article";
+  jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "Article",
+    headline: article.data.title,
+    description: article.data.summary,
+    ...(article.data.coverImage
+      ? { image: new URL(article.data.coverImage, siteUrl).href }
+      : {}),
+    datePublished: article.data.pubDate.toISOString(),
+    publisher: { "@type": "Organization", name: siteConfig.publisherName, url: siteUrl.href },
+    ...(article.data.sourceKind === "original"
+      ? { author: { "@type": "Organization", name: siteConfig.publisherName } }
+      : {}),
+    ...(article.data.sourceUrl
+      ? { isBasedOn: article.data.sourceUrl, citation: article.data.sourceUrl }
+      : {}),
+    mainEntityOfPage: new URL(canonicalPath, siteUrl).href,
+  };
+} else {
+  const item = props.entry;
+  const canonicalPath = contentHref(item);
+  title = pageTitle(item.data.title);
+  description = item.data.description;
+  socialImage = item.data.image;
+  jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "ImageObject",
+    name: item.data.title,
+    description: item.data.description,
+    contentUrl: item.data.image,
+    ...(item.data.width ? { width: item.data.width } : {}),
+    ...(item.data.height ? { height: item.data.height } : {}),
+    ...(item.data.author ? { creditText: item.data.author } : {}),
+    ...(item.data.licenseUrl ? { license: item.data.licenseUrl } : {}),
+    ...(item.data.sourceUrl ? { acquireLicensePage: item.data.sourceUrl } : {}),
+    datePublished: item.data.pubDate.toISOString(),
+    mainEntityOfPage: new URL(canonicalPath, siteUrl).href,
+  };
+}
+---
+
+<BaseLayout {title} {description} image={socialImage} {pageType} {jsonLd}>
+  {props.kind === "article"
+    ? <ArticleDetailPage article={props.entry} />
+    : <ImageDetailPage item={props.entry} />}
+</BaseLayout>

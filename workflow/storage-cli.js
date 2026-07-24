@@ -1,9 +1,8 @@
 import path from "node:path";
-import os from "node:os";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { LocalDataStore } from "./local-data-store.js";
 import { LocalContentBackup } from "./local-content-backup.js";
+import { runRecoveryDrill } from "./recovery-drill.js";
 
 const workflowRoot = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(workflowRoot, "..");
@@ -13,38 +12,10 @@ const contentBackup = new LocalContentBackup({ repoRoot, workflowRoot });
 
 try {
   if (command === "verify-recovery") {
-    const probeRoot = await mkdtemp(path.join(os.tmpdir(), "xgif-recovery-check-"));
-    const databasePath = path.join(probeRoot, "xgif.sqlite3");
-    let probe = new LocalDataStore({
+    console.log(JSON.stringify(await runRecoveryDrill({
       repoRoot,
       workflowRoot,
-      databasePath,
-      backupsDir: path.join(probeRoot, "backups"),
-    });
-    try {
-      const before = await probe.initialize();
-      probe.close();
-      await writeFile(databasePath, "simulated database corruption", "utf8");
-      probe = new LocalDataStore({
-        repoRoot,
-        workflowRoot,
-        databasePath,
-        backupsDir: path.join(probeRoot, "backups"),
-      });
-      const after = await probe.initialize();
-      if (before.content !== after.content || before.trash !== after.trash || !after.recovery?.recovered) {
-        throw new Error("恢复演练前后数量不一致。");
-      }
-      console.log(JSON.stringify({
-        ok: true,
-        content: after.content,
-        trash: after.trash,
-        corruptDatabaseWasQuarantined: true,
-      }, null, 2));
-    } finally {
-      probe.close();
-      await rm(probeRoot, { recursive: true, force: true });
-    }
+    }), null, 2));
   } else {
     await store.initialize();
   }

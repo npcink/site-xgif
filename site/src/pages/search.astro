@@ -2,6 +2,7 @@
 import { getCollection } from "astro:content";
 import ArticleCard from "../components/ArticleCard.astro";
 import ImageCard from "../components/ImageCard.astro";
+import { pageTitle } from "../config/site";
 import BaseLayout from "../layouts/BaseLayout.astro";
 import { sortByDate } from "../lib/content";
 
@@ -11,7 +12,7 @@ const images = sortByDate(
 );
 ---
 
-<BaseLayout title="搜索 — xgif.cn" description="搜索文章、图片、标签与来源。" noindex>
+<BaseLayout title={pageTitle("搜索")} description="搜索文章、图片、标签与来源。" noindex>
   <section class="search-page">
     <p class="section-kicker">SEARCH / 搜索</p>
     <h1>想找什么？</h1>

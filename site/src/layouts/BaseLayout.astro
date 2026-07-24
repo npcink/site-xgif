@@ -2,6 +2,7 @@
 import Header from "../components/Header.astro";
 import Footer from "../components/Footer.astro";
 import DetailDialog from "../components/DetailDialog.astro";
+import { siteConfig } from "../config/site";
 import "../styles/global.css";
 
 interface Props {
@@ -14,20 +15,22 @@ interface Props {
 }
 
 const {
-  title = "xgif.cn — 值得看的，三分钟看懂",
-  description = "整理有趣文章、编辑摘要、网络热点、图片和表情包的轻内容站。",
-  image = "/og.png",
+  title = siteConfig.defaultTitle,
+  description = siteConfig.description,
+  image = siteConfig.defaultSocialImage,
   noindex = false,
   pageType = "website",
   jsonLd,
 } = Astro.props;
 
-const canonical = new URL(Astro.url.pathname, Astro.site);
-const socialImage = new URL(image, Astro.site);
+const siteUrl = Astro.site ?? new URL(siteConfig.url);
+const canonical = new URL(Astro.url.pathname, siteUrl);
+const socialImage = new URL(image, siteUrl);
+const rssUrl = new URL(siteConfig.rss.path, siteUrl);
 ---
 
 <!doctype html>
-<html lang="zh-CN">
+<html lang={siteConfig.locale}>
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width" />
@@ -36,6 +39,7 @@ const socialImage = new URL(image, Astro.site);
     {noindex && <meta name="robots" content="noindex" />}
     <link rel="canonical" href={canonical} />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="alternate" type="application/rss+xml" title={siteConfig.rss.title} href={rssUrl} />
     <meta property="og:type" content={pageType} />
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
@@ -55,5 +59,6 @@ const socialImage = new URL(image, Astro.site);
     </main>
     <Footer />
     <DetailDialog />
+    <script is:inline type="module" src="/scripts/favorites.js"></script>
   </body>
 </html>

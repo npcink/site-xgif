@@ -27,7 +27,7 @@ function parseOperationDetails(value) {
   }
 }
 
-function parseContentDocument(content) {
+export function parseContentDocument(content) {
   const match = String(content || "").match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
   const raw = match?.[1] || "";
   const body = match?.[2] || "";
@@ -546,6 +546,118 @@ export class LocalDataStore {
     `).all();
   }
 
+  listRecommendationEmbeddings({ model } = {}) {
+    const normalizedModel = String(model || "").trim();
+    if (!normalizedModel) return [];
+
+    return this.db.prepare(`
+      SELECT
+        content_id AS contentId,
+        content_type AS contentType,
+        content_sha256 AS contentSha256,
+        model,
+        dimensions,
+        vector_json AS vectorJson,
+        updated_at AS updatedAt
+      FROM recommendation_embeddings
+      WHERE model = ?
+      ORDER BY content_id ASC
+    `).all(normalizedModel).flatMap((row) => {
+      try {
+        const vector = JSON.parse(row.vectorJson);
+        if (
+          !Array.isArray(vector)
+          || vector.length !== row.dimensions
+          || !vector.length
+          || vector.some((value) => !Number.isFinite(value))
+        ) {
+          return [];
+        }
+        return [{ ...row, vector }];
+      } catch {
+        return [];
+      }
+    });
+  }
+
+  upsertRecommendationEmbedding({
+    contentId,
+    contentType,
+    contentSha256,
+    model,
+    vector,
+  }) {
+    const record = {
+      contentId: String(contentId || "").trim(),
+      contentType: String(contentType || "").trim(),
+      contentSha256: String(contentSha256 || "").trim(),
+      model: String(model || "").trim(),
+      vector,
+    };
+    if (!record.contentId || !record.contentSha256 || !record.model) {
+      throw new TypeError("Embedding cache requires contentId, contentSha256, and model.");
+    }
+    if (!["article", "image"].includes(record.contentType)) {
+      throw new TypeError("Embedding cache contentType must be article or image.");
+    }
+    if (
+      !Array.isArray(record.vector)
+      || !record.vector.length
+      || record.vector.some((value) => !Number.isFinite(value))
+    ) {
+      throw new TypeError("Embedding cache vector must contain finite numbers.");
+    }
+
+    this.db.prepare(`
+      INSERT INTO recommendation_embeddings (
+        content_id, model, content_type, content_sha256,
+        dimensions, vector_json, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(content_id, model) DO UPDATE SET
+        content_type = excluded.content_type,
+        content_sha256 = excluded.content_sha256,
+        dimensions = excluded.dimensions,
+        vector_json = excluded.vector_json,
+        updated_at = excluded.updated_at
+    `).run(
+      record.contentId,
+      record.model,
+      record.contentType,
+      record.contentSha256,
+      record.vector.length,
+      JSON.stringify(record.vector),
+      nowIso(),
+    );
+  }
+
+  pruneRecommendationEmbeddings({ model, validContentIds = [] } = {}) {
+    const normalizedModel = String(model || "").trim();
+    if (!normalizedModel) return 0;
+    const validIds = new Set(validContentIds.map((value) => String(value || "").trim()).filter(Boolean));
+    const rows = this.db.prepare(`
+      SELECT content_id AS contentId
+      FROM recommendation_embeddings
+      WHERE model = ?
+    `).all(normalizedModel);
+    const remove = this.db.prepare(`
+      DELETE FROM recommendation_embeddings
+      WHERE content_id = ? AND model = ?
+    `);
+    let removed = 0;
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      for (const row of rows) {
+        if (validIds.has(row.contentId)) continue;
+        removed += Number(remove.run(row.contentId, normalizedModel).changes || 0);
+      }
+      this.db.exec("COMMIT");
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
+    return removed;
+  }
+
   recordOperation(action, details = {}) {
     this.db.prepare(`
       INSERT INTO operation_history (action, details_json, created_at)
@@ -583,6 +695,9 @@ export class LocalDataStore {
     const trash = this.db.prepare(
       "SELECT COUNT(*) AS count FROM trash_items WHERE status = 'trashed'",
     ).get().count;
+    const embeddings = this.db.prepare(
+      "SELECT COUNT(*) AS count FROM recommendation_embeddings",
+    ).get().count;
     const lastRebuild = this.db.prepare(`
       SELECT created_at AS createdAt
       FROM operation_history
@@ -595,6 +710,7 @@ export class LocalDataStore {
       database: portablePath(path.relative(this.repoRoot, this.databasePath)),
       content,
       trash,
+      embeddings,
       lastRebuild,
       recovery: this.recovery,
     };

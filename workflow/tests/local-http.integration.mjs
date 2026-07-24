@@ -39,6 +39,8 @@ function call({ method = "GET", pathname, headers = {}, body = "" }) {
         const text = Buffer.concat(chunks).toString("utf8");
         resolve({
           status: res.statusCode,
+          headers: res.headers,
+          rawBody: Buffer.concat(chunks),
           body: text,
           json: () => JSON.parse(text),
         });
@@ -69,6 +71,21 @@ try {
   const health = await call({ pathname: "/api/health" });
   assert.equal(health.status, 200);
   assert.equal(health.json().service, "xgif-local-publisher");
+
+  const staticAsset = await call({
+    pathname: "/app.js?v=integration",
+    headers: { "accept-encoding": "br, gzip" },
+  });
+  assert.equal(staticAsset.status, 200);
+  assert.equal(staticAsset.headers["content-encoding"], "br");
+  assert.match(staticAsset.headers["cache-control"], /max-age=3600/);
+  assert.ok(staticAsset.headers.etag);
+  assert.ok(staticAsset.rawBody.byteLength > 0);
+  const unchangedAsset = await call({
+    pathname: "/app.js?v=integration",
+    headers: { "if-none-match": staticAsset.headers.etag },
+  });
+  assert.equal(unchangedAsset.status, 304);
 
   const hostileHost = await call({
     pathname: "/api/health",
@@ -104,6 +121,19 @@ try {
     body: "{}",
   });
   assert.equal(validCsrf.status, 404);
+
+  const emptyTitleSuggestions = await call({
+    method: "POST",
+    pathname: "/api/ai/article-title-suggestions",
+    headers: {
+      "content-type": "application/json",
+      "x-xgif-csrf": csrf,
+      origin: `http://127.0.0.1:${port}`,
+    },
+    body: "{}",
+  });
+  assert.equal(emptyTitleSuggestions.status, 400);
+  assert.match(emptyTitleSuggestions.json().error, /正文、摘要或来源链接/);
   console.log("本地发布器 HTTP 集成检查通过。");
 } finally {
   child.kill("SIGTERM");

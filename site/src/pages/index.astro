@@ -44,7 +44,7 @@ const popularTags = ["AI", "互联网", "打工", "无语", "反转", "群聊", 
       <div class="feature-copy">
         <span class="mini-label">READ · {featured.data.readTime.toUpperCase()}</span>
         <h2>{featured.data.title}</h2>
-        <a href={contentHref("articles", featured)} data-detail-link>阅读全文 <span>→</span></a>
+        <a href={contentHref(featured)} data-detail-link data-detail-kind="article">阅读全文 <span>→</span></a>
       </div>
     </div>
   </section>
@@ -52,7 +52,7 @@ const popularTags = ["AI", "互联网", "打工", "无语", "反转", "群聊", 
   <section class="tag-ticker" aria-label="热门标签">
     <div class="ticker-label">本周热词</div>
     <div class="ticker-track">
-      {popularTags.slice(0, 5).map((tag) => <a href={`/tags/${encodeURIComponent(tag)}/`}>#{tag}</a>)}
+      {popularTags.slice(0, 5).map((tag) => <a href={`/tags/${encodeURIComponent(tag)}`}>#{tag}</a>)}
     </div>
   </section>
 
@@ -82,7 +82,7 @@ const popularTags = ["AI", "互联网", "打工", "无语", "反转", "群聊", 
     <div class="content-section" id="articles" data-home-section="articles">
       <div class="content-title">
         <h2>文章 <sup>{String(articles.length).padStart(2, "0")}</sup></h2>
-        <a href="/articles/">查看全部文章 →</a>
+        <a href="/articles">查看全部文章 →</a>
       </div>
       <div class="article-grid">
         {homeArticles.map((article, index) => <ArticleCard article={article} index={index} />)}
@@ -92,7 +92,7 @@ const popularTags = ["AI", "互联网", "打工", "无语", "反转", "群聊", 
     <div class="content-section image-section" id="images" data-home-section="images">
       <div class="content-title">
         <h2>图片 / 表情包 <sup>{String(images.length).padStart(2, "0")}</sup></h2>
-        <a href="/images/">查看全部图片 →</a>
+        <a href="/images">查看全部图片 →</a>
       </div>
       <div class="masonry-grid">
         {homeImages.map((item) => <ImageCard item={item} />)}
@@ -115,7 +115,7 @@ const popularTags = ["AI", "互联网", "打工", "无语", "反转", "群聊", 
     </div>
     <div class="tag-cloud">
       {popularTags.map((tag, index) => (
-        <a href={`/tags/${encodeURIComponent(tag)}/`}>
+        <a href={`/tags/${encodeURIComponent(tag)}`}>
           <span>{String(index + 1).padStart(2, "0")}</span> {tag} <b>↗</b>
         </a>
       ))}
@@ -131,7 +131,7 @@ const popularTags = ["AI", "互联网", "打工", "无语", "反转", "群聊", 
     </div>
     <div class="newsletter-placeholder">
       <span>无需注册 · 不采集联系方式</span>
-      <a href="/articles/">浏览全部文章 <span>→</span></a>
+      <a href="/articles">浏览全部文章 <span>→</span></a>
     </div>
   </section>
   <script is:inline src="/scripts/home-discovery.js"></script>

@@ -1,4 +1,5 @@
 import type { CollectionEntry } from "astro:content";
+import { selectContentRecommendations } from "./recommendations.mjs";
 
 export function sortByDate<T extends { data: { pubDate: Date } }>(items: T[]) {
   return [...items].sort((a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf());
@@ -13,12 +14,25 @@ export function formatShortDate(date: Date) {
     .replace("/", ".");
 }
 
-export function contentHref(
-  kind: "articles" | "images",
-  entry: { data: { contentId: string } },
-) {
-  return `/${kind}/${entry.data.contentId}/`;
+export function contentHref(entry: { data: { contentId: string } }) {
+  return `/${entry.data.contentId}`;
 }
+
+export function selectArticleRecommendations(
+  article: CollectionEntry<"articles">,
+  articles: CollectionEntry<"articles">[],
+  limit = 3,
+  preferredIds: string[] = [],
+) {
+  return selectContentRecommendations(article, articles, {
+    limit,
+    relatedSlots: Math.min(2, limit),
+    allowSurprise: true,
+    preferredIds,
+  }) as CollectionEntry<"articles">[];
+}
+
+export { selectContentRecommendations };
 
 const internalArticleNotePatterns = [
   /flomo\s*私人(?:笔记|收藏)?导入/i,

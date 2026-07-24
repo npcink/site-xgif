@@ -23,6 +23,7 @@
     "check:deploy": "npm run build && wrangler deploy --dry-run"
   },
   "dependencies": {
+    "@astrojs/rss": "^4.0.19",
     "@fontsource-variable/geist": "^5.2.9",
     "@fontsource-variable/geist-mono": "^5.2.8",
     "astro": "7.1.3"

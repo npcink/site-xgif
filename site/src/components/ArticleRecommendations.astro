@@ -1,0 +1,37 @@
+---
+import type { CollectionEntry } from "astro:content";
+import { contentHref, formatShortDate } from "../lib/content";
+
+interface Props {
+  articles: CollectionEntry<"articles">[];
+}
+
+const { articles } = Astro.props;
+---
+
+{articles.length > 0 && (
+  <section class="article-recommendations" aria-labelledby="article-recommendations-title">
+    <div class="article-recommendations-heading">
+      <h2 id="article-recommendations-title">继续阅读</h2>
+      <a href="/articles">查看全部文章 →</a>
+    </div>
+    <div class="article-recommendation-list">
+      {articles.map((item) => (
+        <a
+          class="article-recommendation"
+          href={contentHref(item)}
+          data-detail-link
+          data-detail-kind="article"
+        >
+          <span class="article-recommendation-meta">
+            <span>{item.data.source}</span>
+            <time datetime={item.data.pubDate.toISOString()}>{formatShortDate(item.data.pubDate)}</time>
+          </span>
+          <h3>{item.data.title}</h3>
+          <p>{item.data.summary}</p>
+          <span class="article-recommendation-arrow" aria-hidden="true">→</span>
+        </a>
+      ))}
+    </div>
+  </section>
+)}

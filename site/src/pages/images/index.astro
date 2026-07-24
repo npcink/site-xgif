@@ -1,6 +1,7 @@
 ---
 import { getCollection } from "astro:content";
 import ImageCard from "../../components/ImageCard.astro";
+import { pageTitle } from "../../config/site";
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import { sortByDate } from "../../lib/content";
 
@@ -10,7 +11,7 @@ const images = sortByDate(
 const moods = Array.from(new Set(images.flatMap((entry) => entry.data.mood)));
 ---
 
-<BaseLayout title="图片与表情包 — xgif.cn" description="按情绪、场景和标签整理的图片、GIF 与表情包。">
+<BaseLayout title={pageTitle("图片与表情包")} description="按情绪、场景和标签整理的图片、GIF 与表情包。">
   <section class="archive-hero image-archive-hero">
     <p class="section-kicker">REACTIONS / 图片与表情包</p>
     <h1>不想解释，<br /><em>就发张图。</em></h1>

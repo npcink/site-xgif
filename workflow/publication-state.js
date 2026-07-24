@@ -1,0 +1,85 @@
+function normalizeTimestamp(value) {
+  const timestamp = String(value || "").trim();
+  return Number.isNaN(Date.parse(timestamp)) ? "" : timestamp;
+}
+
+export function publicationFromDeployment(
+  deployment = {},
+  {
+    previous = null,
+    checkedAt = new Date().toISOString(),
+  } = {},
+) {
+  const currentCheck = normalizeTimestamp(checkedAt) || new Date().toISOString();
+
+  if (deployment.state === "live") {
+    return {
+      state: "online",
+      label: "已上线",
+      description: "线上页面已经匹配当前内容。",
+      verification: "verified",
+      checkedAt: currentCheck,
+      lastVerifiedAt: currentCheck,
+      url: deployment.url || "",
+    };
+  }
+
+  if (deployment.state === "pending_deploy") {
+    return {
+      state: "pending",
+      label: "待上线",
+      description: deployment.description || "线上页面还没有匹配当前版本。",
+      verification: "verified",
+      checkedAt: currentCheck,
+      lastVerifiedAt: currentCheck,
+      url: deployment.url || "",
+    };
+  }
+
+  if (deployment.state === "unknown") {
+    const previousState = ["online", "pending"].includes(previous?.state)
+      ? previous.state
+      : "";
+    if (previousState) {
+      const previousLabel = previousState === "online" ? "已上线" : "待上线";
+      return {
+        ...previous,
+        label: previousState === "online" ? "上次确认已上线" : "上次确认待上线",
+        description: `本次无法连接线上站点，暂时保留上次“${previousLabel}”结果。`,
+        verification: "unknown",
+        checkedAt: currentCheck,
+        lastVerifiedAt: normalizeTimestamp(previous.lastVerifiedAt),
+        url: deployment.url || previous.url || "",
+      };
+    }
+  }
+
+  return {
+    state: "unknown",
+    label: "待验证",
+    description: deployment.description || "当前无法连接线上站点，尚无可保留的核对结果。",
+    verification: "unknown",
+    checkedAt: currentCheck,
+    lastVerifiedAt: "",
+    url: deployment.url || "",
+  };
+}
+
+export function contentPublicationCounts(items = []) {
+  const counts = {
+    all: items.length,
+    draft: 0,
+    local: 0,
+    pending: 0,
+    unknown: 0,
+    online: 0,
+    unverified: 0,
+  };
+
+  for (const item of items) {
+    const state = item.publication?.state || "unknown";
+    if (Object.hasOwn(counts, state)) counts[state] += 1;
+    if (item.publication?.verification === "unknown") counts.unverified += 1;
+  }
+  return counts;
+}

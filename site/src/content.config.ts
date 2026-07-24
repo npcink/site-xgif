@@ -30,7 +30,11 @@ const articles = defineCollection({
     readTime: z.string(),
     editorNote: z.string().optional(),
     internalNote: z.string().optional(),
+    internalReviewStatus: z.enum(["unresolved", "resolved"]).optional(),
+    internalReviewResolvedAt: z.string().optional(),
     note: z.string().optional(),
+    coverImage: imagePath.optional(),
+    coverAlt: z.string().optional(),
     featured: z.boolean().default(false),
     draft: z.boolean().default(false),
   }).superRefine((data, context) => {

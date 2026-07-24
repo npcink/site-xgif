@@ -1,6 +1,7 @@
 ---
 import { getCollection } from "astro:content";
 import ArticleCard from "../../components/ArticleCard.astro";
+import { pageTitle } from "../../config/site";
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import { sortByDate } from "../../lib/content";
 
@@ -8,7 +9,7 @@ const articles = sortByDate((await getCollection("articles")).filter((entry) => 
 const sources = Array.from(new Set(articles.map((entry) => entry.data.source)));
 ---
 
-<BaseLayout title="文章 — xgif.cn" description="通过编辑摘要快速了解，也可以阅读完整正文并核对来源。">
+<BaseLayout title={pageTitle("文章")} description="通过编辑摘要快速了解，也可以阅读完整正文并核对来源。">
   <section class="archive-hero">
     <p class="section-kicker">ARTICLES / 文章</p>
     <h1>先看懂重点，<br /><em>再决定是否读完。</em></h1>

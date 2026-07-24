@@ -1,13 +1,14 @@
 ---
+import { pageTitle, siteConfig } from "../config/site";
 import BaseLayout from "../layouts/BaseLayout.astro";
 ---
 
-<BaseLayout title="关于 xgif.cn" description="xgif.cn 的内容原则与编辑方式。">
+<BaseLayout title={pageTitle("关于")} description={`${siteConfig.name} 的内容原则与编辑方式。`}>
   <section class="legal-page">
     <p class="section-kicker">ABOUT / 关于本站</p>
     <h1>把有趣的信息，<br />认真地整理。</h1>
     <div class="legal-copy">
-      <p>xgif.cn 是一个轻内容索引站：文章用短摘要帮助你先判断值不值得读，图片与反应图帮助你找到适合当下语境的表达。</p>
+      <p>{siteConfig.name} 是一个轻内容索引站：文章用短摘要帮助你先判断值不值得读，图片与反应图帮助你找到适合当下语境的表达。</p>
       <p>AI 只用于辅助归纳和整理；内容是否发布、标签如何归类、编辑判断是否成立，最终由人工确认。</p>
       <p>我们优先保留来源、作者与授权信息；无法确认来源的群聊转存图片会明确标记。发现链接失效、归因不准确或内容需要下架时，请通过版权与更正页面联系我们。</p>
     </div>

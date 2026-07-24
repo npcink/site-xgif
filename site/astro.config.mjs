@@ -1,7 +1,8 @@
 import { defineConfig } from "astro/config";
+import { siteConfig } from "./src/config/site.ts";
 
 export default defineConfig({
-  site: "https://www.xgif.cn",
+  site: siteConfig.url,
   output: "static",
-  trailingSlash: "always",
+  trailingSlash: "never",
 });

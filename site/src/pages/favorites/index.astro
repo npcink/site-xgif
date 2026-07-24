@@ -1,0 +1,58 @@
+---
+import { getCollection } from "astro:content";
+import { pageTitle } from "../../config/site";
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import { contentHref } from "../../lib/content";
+
+const [articles, images] = await Promise.all([
+  getCollection("articles").then((entries) => entries.filter((entry) => !entry.data.draft)),
+  getCollection("images").then((entries) => entries.filter((entry) => !entry.data.draft && entry.data.public)),
+]);
+const catalog = [
+  ...articles.map((entry) => ({
+    contentId: entry.data.contentId,
+    kind: "article",
+    title: entry.data.title,
+    href: contentHref(entry),
+  })),
+  ...images.map((entry) => ({
+    contentId: entry.data.contentId,
+    kind: "image",
+    title: entry.data.title,
+    href: contentHref(entry),
+  })),
+];
+const safeCatalog = JSON.stringify(catalog).replaceAll("<", "\\u003c");
+---
+
+<BaseLayout title={pageTitle("本地收藏")} description="保存在当前浏览器中的 XGIF 文章与图片收藏。" noindex>
+  <section class="favorites-page" data-favorites-page>
+    <header class="favorites-heading">
+      <p class="section-kicker">LOCAL / 本地收藏</p>
+      <h1>留住想再看一眼的内容。</h1>
+      <p>收藏只保存在当前浏览器。你可以导出 JSON 备份，再在另一台设备上合并或覆盖导入。</p>
+    </header>
+
+    <div class="favorites-toolbar" aria-label="收藏管理">
+      <p data-favorites-summary>正在读取本地收藏…</p>
+      <div class="favorites-actions">
+        <button type="button" data-favorites-export>导出 JSON</button>
+        <button type="button" data-favorites-import="merge">导入并合并</button>
+        <button class="quiet-button" type="button" data-favorites-import="replace">覆盖导入</button>
+        <button class="quiet-button" type="button" data-favorites-clear-unavailable hidden>清理不可用项</button>
+      </div>
+      <input type="file" accept="application/json,.json" data-favorites-file hidden />
+    </div>
+
+    <p class="favorites-status" data-favorites-status role="status" aria-live="polite" hidden></p>
+    <div class="favorites-list" data-favorites-list></div>
+    <div class="favorites-empty" data-favorites-empty hidden>
+      <span aria-hidden="true">♡</span>
+      <h2>收藏夹还是空的</h2>
+      <p>打开任意文章或图片详情，点击“收藏”即可加入这里。</p>
+      <a href="/articles">去逛文章 →</a>
+    </div>
+  </section>
+  <script is:inline type="application/json" data-favorites-catalog set:html={safeCatalog}></script>
+  <script is:inline type="module" src="/scripts/favorites-page.js"></script>
+</BaseLayout>

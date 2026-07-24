@@ -13,7 +13,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 test("key pages satisfy the basic accessibility contract", async ({ page }) => {
-  const routes = ["/", "/articles/", "/articles/20260710-vfks/", "/images/", "/search/", "/rights/"];
+  const routes = ["/", "/articles", "/20260710-vfks", "/images", "/search", "/rights"];
   for (const route of routes) {
     await page.goto(route, { waitUntil: "networkidle" });
     const issues = await page.evaluate(() => {
@@ -73,16 +73,16 @@ async function waitForImages(page) {
     .every((image) => image.complete && image.naturalWidth > 0));
 }
 
-async function openConfusedImageDialog(page) {
-  await page.goto("/images/", { waitUntil: "networkidle" });
+async function openImageDialog(page) {
+  await page.goto("/images", { waitUntil: "networkidle" });
   await waitForImages(page);
-  await page.locator('a[href="/images/20260707-6s1n/"][data-detail-link]').click();
-  await expect(page.getByRole("dialog", { name: "这就给我整不会了" })).toBeVisible();
+  await page.locator('a[href="/20260723-z4xw"][data-detail-link]').click();
+  await expect(page.getByRole("dialog", { name: "去摧毁金融区吧" })).toBeVisible();
   await waitForImages(page);
 }
 
 async function openSearchState(page, query) {
-  await page.goto(`/search/?q=${encodeURIComponent(query)}`, { waitUntil: "networkidle" });
+  await page.goto(`/search?q=${encodeURIComponent(query)}`, { waitUntil: "networkidle" });
   await waitForImages(page);
   await expect(page.locator("[data-filter-input]")).toHaveValue(query);
   await page.locator("[data-filter-input]").blur();
@@ -99,7 +99,7 @@ test("homepage matches the approved visual baseline", async ({ page }, testInfo)
 });
 
 test("image dialog matches the approved visual baseline", async ({ page }, testInfo) => {
-  await openConfusedImageDialog(page);
+  await openImageDialog(page);
 
   await expect(page).toHaveScreenshot(`image-dialog-${testInfo.project.name}.png`, {
     animations: "disabled",
@@ -108,7 +108,7 @@ test("image dialog matches the approved visual baseline", async ({ page }, testI
 });
 
 test("image library matches the approved visual baseline", async ({ page }, testInfo) => {
-  await page.goto("/images/", { waitUntil: "networkidle" });
+  await page.goto("/images", { waitUntil: "networkidle" });
   await waitForImages(page);
 
   await expect(page).toHaveScreenshot(`image-library-${testInfo.project.name}.png`, {
@@ -118,11 +118,11 @@ test("image library matches the approved visual baseline", async ({ page }, test
 });
 
 test("image library filtered state matches the approved visual baseline", async ({ page }, testInfo) => {
-  await page.goto("/images/", { waitUntil: "networkidle" });
+  await page.goto("/images", { waitUntil: "networkidle" });
   await waitForImages(page);
   await page.getByRole("button", { name: "无语" }).click();
   await expect(page.getByRole("button", { name: "无语" })).toHaveClass(/active/);
-  await expect(page.locator("[data-visible-count]")).toHaveText("4");
+  await expect(page.locator("[data-visible-count]")).toHaveText("1");
 
   await expect(page).toHaveScreenshot(`image-library-filtered-${testInfo.project.name}.png`, {
     animations: "disabled",
@@ -131,7 +131,7 @@ test("image library filtered state matches the approved visual baseline", async 
 });
 
 test("search results match the approved visual baseline", async ({ page }, testInfo) => {
-  await openSearchState(page, "打工");
+  await openSearchState(page, "海边");
   await expect(page.locator("[data-empty]")).toBeHidden();
 
   await expect(page).toHaveScreenshot(`search-results-${testInfo.project.name}.png`, {
@@ -151,7 +151,7 @@ test("search empty state matches the approved visual baseline", async ({ page },
 });
 
 test("article detail matches the approved visual baseline", async ({ page }, testInfo) => {
-  await page.goto("/articles/20260710-vfks/", { waitUntil: "networkidle" });
+  await page.goto("/20260710-vfks", { waitUntil: "networkidle" });
   await waitForImages(page);
   await expect(page.getByRole("heading", { name: "海边旧事与父亲的记忆" })).toBeVisible();
 
@@ -162,7 +162,7 @@ test("article detail matches the approved visual baseline", async ({ page }, tes
 });
 
 test("tag index matches the approved visual baseline", async ({ page }, testInfo) => {
-  await page.goto("/tags/", { waitUntil: "networkidle" });
+  await page.goto("/tags", { waitUntil: "networkidle" });
   await expect(page.getByRole("heading", { name: /从一个词/ })).toBeVisible();
 
   await expect(page).toHaveScreenshot(`tag-index-${testInfo.project.name}.png`, {
@@ -172,9 +172,9 @@ test("tag index matches the approved visual baseline", async ({ page }, testInfo
 });
 
 test("tag results match the approved visual baseline", async ({ page }, testInfo) => {
-  await page.goto("/tags/AI/", { waitUntil: "networkidle" });
+  await page.goto("/tags/反转", { waitUntil: "networkidle" });
   await waitForImages(page);
-  await expect(page.getByRole("heading", { name: "#AI" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "#反转" })).toBeVisible();
 
   await expect(page).toHaveScreenshot(`tag-results-${testInfo.project.name}.png`, {
     animations: "disabled",
@@ -183,7 +183,7 @@ test("tag results match the approved visual baseline", async ({ page }, testInfo
 });
 
 test("tag related images match the approved visual baseline", async ({ page }, testInfo) => {
-  await page.goto("/tags/AI/", { waitUntil: "networkidle" });
+  await page.goto("/tags/反转", { waitUntil: "networkidle" });
   const relatedImages = page.getByRole("heading", { name: "相关图片" });
   await relatedImages.scrollIntoViewIfNeeded();
   await waitForImages(page);

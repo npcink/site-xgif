@@ -7,13 +7,14 @@ interface Props {
 }
 
 const { item } = Astro.props;
-const href = contentHref("images", item);
+const href = contentHref(item);
 ---
 
 <a
   class:list={["image-card", item.data.ratio]}
   href={href}
   data-detail-link
+  data-detail-kind="image"
   data-search-item
   data-search={`${item.data.title} ${item.data.description} ${item.data.source} ${item.data.tags.join(" ")} ${item.data.mood.join(" ")} ${item.data.scenes.join(" ")}`.toLowerCase()}
   aria-label={`查看图片：${item.data.title}`}

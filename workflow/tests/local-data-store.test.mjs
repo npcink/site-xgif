@@ -17,6 +17,7 @@ async function fixture() {
   const sourceMigrations = [
     new URL("../db/migrations/001-initial.sql", import.meta.url),
     new URL("../db/migrations/002-content-query-fields.sql", import.meta.url),
+    new URL("../db/migrations/003-recommendation-embeddings.sql", import.meta.url),
   ];
   await Promise.all([
     mkdir(articlesDir, { recursive: true }),
@@ -161,5 +162,52 @@ draft: true
   const refreshed = store.listContentIndex({ type: "article", query: "新的摘要" });
   assert.equal(refreshed[0].title, "已修改标题");
   assert.equal(refreshed[0].draft, true);
+  store.close();
+});
+
+test("recommendation embedding cache validates, refreshes, and prunes vectors", async () => {
+  const dirs = await fixture();
+  const store = new LocalDataStore(dirs);
+  await store.initialize();
+
+  store.upsertRecommendationEmbedding({
+    contentId: "20260724-vector",
+    contentType: "article",
+    contentSha256: "sha-one",
+    model: "embedding-test",
+    vector: [0.1, 0.2, 0.3],
+  });
+  assert.equal(store.getStatus().embeddings, 1);
+  assert.deepEqual(
+    store.listRecommendationEmbeddings({ model: "embedding-test" })[0].vector,
+    [0.1, 0.2, 0.3],
+  );
+
+  store.upsertRecommendationEmbedding({
+    contentId: "20260724-vector",
+    contentType: "article",
+    contentSha256: "sha-two",
+    model: "embedding-test",
+    vector: [0.5, 0.6],
+  });
+  const refreshed = store.listRecommendationEmbeddings({ model: "embedding-test" })[0];
+  assert.equal(refreshed.contentSha256, "sha-two");
+  assert.deepEqual(refreshed.vector, [0.5, 0.6]);
+
+  assert.throws(
+    () => store.upsertRecommendationEmbedding({
+      contentId: "broken",
+      contentType: "article",
+      contentSha256: "sha",
+      model: "embedding-test",
+      vector: [Number.NaN],
+    }),
+    /finite numbers/,
+  );
+  assert.equal(
+    store.pruneRecommendationEmbeddings({ model: "embedding-test", validContentIds: [] }),
+    1,
+  );
+  assert.equal(store.getStatus().embeddings, 0);
   store.close();
 });
