@@ -22,4 +22,8 @@ XGIF 的公开站点是 Cloudflare Workers Static Assets，管理器只在单人
 
 管理器仍然轻量、单人、本地优先，但不再依赖“端口能打开”作为健康证据。SQLite 损坏不会损失内容；R2 对账和删除有独立恢复边界；线上成功可以对应到具体 Git 提交，而不是只看 Cloudflare 控制台的一次绿色状态。
 
-裸域名 `xgif.cn` 的 301/308 仍由站点所有者在 Cloudflare 配置。定时生产巡检会在该配置缺失时报警，本地检查只提醒而不阻断。
+在本决策落地时，裸域名 `xgif.cn` 的 301/308 仍由站点所有者在 Cloudflare 配置。定时生产巡检会在该配置缺失时报警，本地检查只提醒而不阻断。
+
+## 后续状态
+
+2026-07-24，站点所有者已完成 Cloudflare 代理 DNS 和 Single Redirect 配置。HTTP 与 HTTPS 裸域请求均返回 301 到 `https://www.xgif.cn`，路径和查询参数得到保留；`REQUIRE_APEX_REDIRECT=true` 的生产巡检通过。

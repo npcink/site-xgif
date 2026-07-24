@@ -74,7 +74,7 @@ npm run test:production
 
 ## 维护交接
 
-项目目标、发布器工作流、AI 配置、视觉约定、部署前提与后续优先级见 [docs/PROJECT_HANDOFF.md](docs/PROJECT_HANDOFF.md)。
+项目目标、架构边界、运行命令与部署前提见 [docs/PROJECT_HANDOFF.md](docs/PROJECT_HANDOFF.md)；本阶段的演进过程、失误复盘和开发经验见 [docs/DEVELOPMENT_RETROSPECTIVE_2026-07-24.md](docs/DEVELOPMENT_RETROSPECTIVE_2026-07-24.md)。
 
 ## 部署
 
