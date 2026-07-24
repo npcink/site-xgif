@@ -122,7 +122,7 @@ test("image library filtered state matches the approved visual baseline", async 
   await waitForImages(page);
   await page.getByRole("button", { name: "无语" }).click();
   await expect(page.getByRole("button", { name: "无语" })).toHaveClass(/active/);
-  await expect(page.locator("[data-visible-count]")).toHaveText("4");
+  await expect(page.locator("[data-visible-count]")).toHaveText("1");
 
   await expect(page).toHaveScreenshot(`image-library-filtered-${testInfo.project.name}.png`, {
     animations: "disabled",
@@ -131,7 +131,7 @@ test("image library filtered state matches the approved visual baseline", async 
 });
 
 test("search results match the approved visual baseline", async ({ page }, testInfo) => {
-  await openSearchState(page, "打工");
+  await openSearchState(page, "海边");
   await expect(page.locator("[data-empty]")).toBeHidden();
 
   await expect(page).toHaveScreenshot(`search-results-${testInfo.project.name}.png`, {
@@ -172,9 +172,9 @@ test("tag index matches the approved visual baseline", async ({ page }, testInfo
 });
 
 test("tag results match the approved visual baseline", async ({ page }, testInfo) => {
-  await page.goto("/tags/AI", { waitUntil: "networkidle" });
+  await page.goto("/tags/反转", { waitUntil: "networkidle" });
   await waitForImages(page);
-  await expect(page.getByRole("heading", { name: "#AI" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "#反转" })).toBeVisible();
 
   await expect(page).toHaveScreenshot(`tag-results-${testInfo.project.name}.png`, {
     animations: "disabled",
@@ -183,7 +183,7 @@ test("tag results match the approved visual baseline", async ({ page }, testInfo
 });
 
 test("tag related images match the approved visual baseline", async ({ page }, testInfo) => {
-  await page.goto("/tags/AI", { waitUntil: "networkidle" });
+  await page.goto("/tags/反转", { waitUntil: "networkidle" });
   const relatedImages = page.getByRole("heading", { name: "相关图片" });
   await relatedImages.scrollIntoViewIfNeeded();
   await waitForImages(page);
