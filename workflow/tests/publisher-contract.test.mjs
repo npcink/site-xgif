@@ -65,10 +65,12 @@ test("publisher exposes local public URLs and keeps empty result panels hidden",
   assert.match(html, /id="library-task-action"/);
   assert.match(html, /id="library-batch-toggle"/);
   assert.match(html, /id="library-feedback" hidden role="status" aria-live="polite"/);
-  assert.match(html, /styles\.css\?v=20260724-title-ai/);
-  assert.match(html, /app\.js\?v=20260724-title-ai/);
+  assert.match(html, /styles\.css\?v=20260724-pc-console/);
+  assert.match(html, /app\.js\?v=20260724-pc-console/);
   assert.match(html, /data-library-status="draft"/);
   assert.match(html, /data-library-status="local"/);
+  assert.match(html, /data-library-status="pending"/);
+  assert.match(html, /data-library-status="unknown"/);
   assert.match(html, /data-library-status="online"/);
   assert.doesNotMatch(html, /data-library-status="pending_commit"/);
   assert.match(html, /data-library-view="compact"/);
@@ -88,6 +90,9 @@ test("publisher exposes local public URLs and keeps empty result panels hidden",
   assert.match(html, /id="open-pending-content"/);
   assert.match(html, /id="library-inspector" hidden/);
   assert.match(html, /id="library-close-detail"/);
+  assert.match(html, /id="library-duplicate"/);
+  assert.match(html, /id="library-return-draft"/);
+  assert.match(html, /class="library-detail-more"/);
   assert.match(html, /class="library-more-actions"/);
   assert.match(html, /id="trash-dialog"/);
   assert.match(html, /id="trash-select-all"/);
@@ -116,6 +121,16 @@ test("publisher exposes local public URLs and keeps empty result panels hidden",
   assert.match(html, /id="article-title-suggestions"[^>]*hidden/);
   assert.match(html, /id="article-title-candidate-list"/);
   assert.match(html, /id="article-title-ai-status" role="status" aria-live="polite"/);
+  assert.match(html, /id="article-result" hidden/);
+  assert.match(html, /class="markdown-toolbar"/);
+  assert.match(html, /id="article-body-stats"/);
+  assert.match(html, /id="article-outline"/);
+  assert.match(html, /id="article-version-history"/);
+  assert.match(html, /id="image-version-history"/);
+  assert.match(html, /id="version-history-dialog"/);
+  assert.match(html, /id="system-panel"/);
+  assert.match(html, /id="open-system-status"/);
+  assert.match(html, /class="network-disclosure"/);
   assert.match(html, /id="article-next-action"/);
   assert.match(html, /id="article-next-step-title"/);
   assert.match(html, /class="library-tools-more"/);
@@ -139,6 +154,13 @@ test("publisher exposes local public URLs and keeps empty result panels hidden",
   assert.match(app, /workspace-open-site-preview/);
   assert.match(app, /function markFormDirty/);
   assert.match(app, /function markFormClean/);
+  assert.match(app, /new AbortController\(\)/);
+  assert.match(app, /function readDraftRevisions/);
+  assert.match(app, /function restoreSavedVersion/);
+  assert.match(app, /function applyMarkdownAction/);
+  assert.match(app, /\/api\/assets\/upload/);
+  assert.match(app, /\/api\/content\/duplicate/);
+  assert.match(app, /\/api\/content\/history\/restore/);
   assert.match(app, /beforeunload/);
   assert.match(app, /articleNextAction\.addEventListener/);
   assert.match(app, /function renderLibraryTable/);
@@ -204,6 +226,10 @@ test("publisher exposes local public URLs and keeps empty result panels hidden",
   assert.match(css, /\.tag-governance/);
   assert.match(css, /\.asset-library-item/);
   assert.match(css, /\.recovery-dashboard/);
+  assert.match(css, /\.connection-grid/);
+  assert.match(css, /\.content-state-grid/);
+  assert.match(css, /\.markdown-toolbar/);
+  assert.match(css, /\.library-detail-more/);
 });
 
 test("draft publishing uses explicit states, protected-branch guards, and mandatory quality checks", async () => {
@@ -232,6 +258,8 @@ test("draft publishing uses explicit states, protected-branch guards, and mandat
   assert.match(server, /main 分支受保护/);
   assert.match(server, /function getContentWorkflowStates/);
   assert.match(server, /function getContentPublicationStates/);
+  assert.match(server, /publicationFromDeployment/);
+  assert.match(server, /contentPublicationCounts/);
   assert.match(server, /async function getContentGitSafety/);
   assert.match(server, /function contentStatusCounts/);
   assert.match(server, /async function inspectBatchDrafts/);
@@ -256,10 +284,17 @@ test("draft publishing uses explicit states, protected-branch guards, and mandat
   assert.match(server, /\/api\/storage\/backup/);
   assert.match(server, /\/api\/trash/);
   assert.match(server, /\/api\/content\/batch/);
+  assert.match(server, /\/api\/content\/duplicate/);
+  assert.match(server, /\/api\/content\/history/);
+  assert.match(server, /\/api\/content\/history\/restore/);
+  assert.match(server, /\/api\/assets\/upload/);
+  assert.match(server, /brotliCompressSync/);
+  assert.match(server, /gzipSync/);
+  assert.match(server, /function safeDisplayUrl/);
   assert.match(server, /pageSize/);
   assert.match(server, /pagination:/);
   assert.match(css, /\.workflow-state/);
-  assert.match(readme, /草稿、待完成、已上线/);
+  assert.match(readme, /草稿、待同步、待上线、待验证、已上线/);
   assert.match(readme, /“发布到本地”/);
   assert.match(readme, /“同步所选”/);
   assert.match(readme, /移至回收站/);

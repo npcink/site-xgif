@@ -3,6 +3,7 @@
 # dependencies
 /node_modules
 /site/node_modules
+/workflow/node_modules/
 /.pnp
 .pnp.*
 .yarn/*
@@ -43,6 +44,8 @@ yarn-error.log*
 /outputs/
 /work/
 /workflow/.runtime/
+/workflow/playwright-report/
+/workflow/test-results/
 /workflow/trash/
 /workflow/backups/
 /workflow/private-sources/

@@ -29,6 +29,7 @@ export class LocalContentBackup {
       "site/src/content/articles",
       "site/src/content/images",
       "site/public/images/memes",
+      "site/public/images/articles",
       "workflow/records",
       "workflow/private-sources",
       "workflow/trash",
@@ -47,6 +48,7 @@ export class LocalContentBackup {
   async ensureRepository() {
     await mkdir(path.dirname(this.gitDir), { recursive: true });
     await mkdir(path.join(this.workflowRoot, "trash"), { recursive: true });
+    await Promise.all(this.paths.map((item) => mkdir(path.join(this.repoRoot, item), { recursive: true })));
     if (await exists(path.join(this.gitDir, "HEAD"))) return;
     await run("git", ["init", "--bare", "--initial-branch=history", this.gitDir], this.repoRoot);
   }
@@ -120,5 +122,45 @@ export class LocalContentBackup {
         files: 0,
       };
     }
+  }
+
+  async listFileHistory(file, { limit = 20 } = {}) {
+    await this.ensureRepository();
+    const safeLimit = Math.max(1, Math.min(100, Number(limit) || 20));
+    try {
+      const result = await run("git", this.gitArgs([
+        "log",
+        `--max-count=${safeLimit}`,
+        "--format=%H%x00%cI%x00%s%x00",
+        "--",
+        file,
+      ]), this.repoRoot);
+      const fields = result.stdout.split("\0");
+      const items = [];
+      for (let index = 0; index + 2 < fields.length; index += 3) {
+        const commit = fields[index].trim();
+        if (!commit) continue;
+        items.push({
+          commit,
+          createdAt: fields[index + 1].trim(),
+          message: fields[index + 2].trim(),
+        });
+      }
+      return items;
+    } catch {
+      return [];
+    }
+  }
+
+  async readFileVersion(file, commit) {
+    await this.ensureRepository();
+    if (!/^[a-f0-9]{40}$/i.test(String(commit || ""))) {
+      throw new Error("版本标识无效。");
+    }
+    const history = await this.listFileHistory(file, { limit: 100 });
+    if (!history.some((item) => item.commit === commit)) {
+      throw new Error("该版本不属于当前内容的本地历史。");
+    }
+    return (await run("git", this.gitArgs(["show", `${commit}:${file}`]), this.repoRoot)).stdout;
   }
 }

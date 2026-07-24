@@ -44,6 +44,9 @@ jobs:
   publisher:
     name: Local publisher
     runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.61.1-noble
+      options: --ipc=host
     defaults:
       run:
         working-directory: workflow
@@ -52,4 +55,7 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version-file: site/.node-version
-      - run: npm test
+          cache: npm
+          cache-dependency-path: workflow/package-lock.json
+      - run: npm ci
+      - run: npm run test:all

@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>XGIF 本地发布助手</title>
-    <link rel="stylesheet" href="/styles.css?v=20260724-title-ai" />
+    <link rel="stylesheet" href="/styles.css?v=20260724-pc-console" />
   </head>
   <body>
     <div class="app-frame" id="app-frame">
@@ -48,8 +48,8 @@
         </nav>
 
         <footer class="sidebar-footer">
-          <span>LOCAL ONLY</span>
-          <small>内容和配置仅在本机处理</small>
+          <span>LOCAL WORKSPACE</span>
+          <small>管理端仅监听本机。AI 与同步只在主动触发时联网。</small>
         </footer>
       </aside>
 
@@ -72,35 +72,7 @@
                 <small id="publisher-health-detail">发布台、站点预览与待同步内容</small>
               </span>
             </div>
-            <details class="status-details" id="status-details">
-              <summary>系统详情与工具</summary>
-              <div class="system-status-panel">
-                <div class="service-status">
-                  <span class="service-pill" id="publisher-service">管理端检查中</span>
-                  <span class="service-pill" id="site-preview-service">站点预览检查中</span>
-                  <span class="service-pill" id="content-sync-summary">正在检查内容</span>
-                </div>
-                <div class="system-actions">
-                  <button type="button" id="open-pending-content">查看待同步</button>
-                  <button type="button" id="open-sync-history">同步记录</button>
-                  <button type="button" id="system-create-backup">创建安全备份</button>
-                  <button type="button" id="system-run-recovery">运行恢复演练</button>
-                  <button type="button" id="refresh-services">刷新状态</button>
-                  <button type="button" id="open-site-preview" disabled>打开站点预览</button>
-                </div>
-                <section class="recovery-dashboard" aria-labelledby="recovery-dashboard-title">
-                  <div class="recovery-dashboard-heading">
-                    <strong id="recovery-dashboard-title">数据安全状态</strong>
-                    <button type="button" id="recovery-dashboard-refresh">刷新</button>
-                  </div>
-                  <div class="recovery-dashboard-grid" id="recovery-dashboard-grid">
-                    <p>展开后读取备份与恢复状态。</p>
-                  </div>
-                  <p class="recovery-dashboard-result" id="recovery-dashboard-result" role="status"></p>
-                </section>
-                <div class="status" id="status">读取状态中...</div>
-              </div>
-            </details>
+            <button class="system-status-shortcut" type="button" id="open-system-status">系统状态</button>
           </div>
         </header>
 
@@ -119,13 +91,19 @@
               <p class="eyebrow">文章信息</p>
               <h2>整理并发布</h2>
             </div>
-            <button class="ai-action" type="button" data-ai-fill="article">AI 整理文章资料</button>
+            <div class="ai-action-control">
+              <button class="ai-action" type="button" data-ai-fill="article" aria-describedby="article-ai-availability">AI 整理文章资料</button>
+              <small id="article-ai-availability">正在检查 AI 配置</small>
+            </div>
           </div>
-          <p class="editor-state" id="article-editor-state"></p>
+          <div class="editor-state-row">
+            <p class="editor-state" id="article-editor-state"></p>
+            <button type="button" id="article-version-history">版本记录</button>
+          </div>
           <section class="workflow-step">
             <div class="step-heading">
               <span>1</span>
-              <div><strong>提供原始内容</strong><small>粘贴来源和正文，AI 会生成发布资料</small></div>
+              <div><strong>提供原始内容</strong><small>粘贴来源和正文。主动点击 AI 后，内容会发送到已配置的模型服务。</small></div>
             </div>
             <div class="form-grid article-reference">
               <label>
@@ -143,7 +121,31 @@
                   <label for="article-body">正文</label>
                   <button type="button" id="article-open-assets">选择已有素材</button>
                 </span>
+                <div class="markdown-toolbar" role="toolbar" aria-label="Markdown 格式">
+                  <button type="button" data-markdown-action="heading">二级标题</button>
+                  <button type="button" data-markdown-action="bold">加粗</button>
+                  <button type="button" data-markdown-action="italic">斜体</button>
+                  <button type="button" data-markdown-action="quote">引用</button>
+                  <button type="button" data-markdown-action="bullet">列表</button>
+                  <button type="button" data-markdown-action="link">链接</button>
+                </div>
                 <textarea id="article-body" name="body" rows="8" placeholder="粘贴正文、摘录或自己的补充说明"></textarea>
+                <div class="markdown-editor-footer">
+                  <span id="article-body-stats">0 字，0 段</span>
+                  <span>可直接粘贴或拖入图片</span>
+                </div>
+                <details class="markdown-find">
+                  <summary>查找与替换</summary>
+                  <div>
+                    <input id="article-find" type="search" placeholder="查找内容" />
+                    <input id="article-replace" placeholder="替换为" />
+                    <button type="button" id="article-find-next">查找下一个</button>
+                    <button type="button" id="article-replace-next">替换当前</button>
+                    <button type="button" id="article-replace-all">全部替换</button>
+                  </div>
+                  <p id="article-find-status" role="status"></p>
+                </details>
+                <nav class="markdown-outline" id="article-outline" aria-label="文章目录"></nav>
               </div>
             </div>
           </section>
@@ -211,10 +213,21 @@
                 公开编辑手记
                 <input name="editorNote" placeholder="可选：为什么值得看，会展示在公开页面" />
               </label>
-              <label class="span-2">
-                内部复核备注
-                <input name="internalNote" placeholder="仅本地后台可见，不会进入公开页面" />
-              </label>
+              <div class="form-field span-2 internal-review-fields">
+                <label>
+                  内部复核备注
+                  <input name="internalNote" placeholder="仅本地后台可见，不会进入公开页面" />
+                </label>
+                <label>
+                  复核状态
+                  <select name="internalReviewStatus">
+                    <option value="unresolved">尚未完成</option>
+                    <option value="resolved">已经确认</option>
+                  </select>
+                </label>
+                <input name="internalReviewResolvedAt" type="hidden" />
+                <small>存在未完成的复核备注时只能保存草稿。确认后会记录完成时间。</small>
+              </div>
               <div class="form-field span-2">
                 <span class="field-label-row">
                   <label for="article-cover-image">文章封面</label>
@@ -318,7 +331,7 @@
           <p class="preview-note" id="article-preview-note">保存草稿后，可用真实站点模板在新页面预览。</p>
           <article class="article-card" id="article-preview"></article>
           <article class="article-page-preview" id="article-page-preview"></article>
-          <pre class="result" id="article-result"></pre>
+          <pre class="result" id="article-result" hidden></pre>
         </aside>
       </section>
 
@@ -331,7 +344,10 @@
             </div>
             <button class="ai-action" type="button" data-ai-fill="image" disabled>AI 整理图片资料</button>
           </div>
-          <p class="editor-state" id="image-editor-state"></p>
+          <div class="editor-state-row">
+            <p class="editor-state" id="image-editor-state"></p>
+            <button type="button" id="image-version-history">版本记录</button>
+          </div>
           <section class="workflow-step">
             <div class="step-heading">
               <span>1</span>
@@ -562,7 +578,9 @@
           <div class="library-status-tabs" aria-label="按发布状态筛选">
             <button class="active" type="button" data-library-status="all" aria-pressed="true">全部 <span id="library-count-all">0</span></button>
             <button type="button" data-library-status="draft" aria-pressed="false">草稿 <span id="library-count-draft">0</span></button>
-            <button type="button" data-library-status="local" aria-pressed="false">待完成 <span id="library-count-local">0</span></button>
+            <button type="button" data-library-status="local" aria-pressed="false">待同步 <span id="library-count-local">0</span></button>
+            <button type="button" data-library-status="pending" aria-pressed="false">待上线 <span id="library-count-pending">0</span></button>
+            <button type="button" data-library-status="unknown" aria-pressed="false">待验证 <span id="library-count-unknown">0</span></button>
             <button type="button" data-library-status="online" aria-pressed="false">已上线 <span id="library-count-online">0</span></button>
           </div>
           <div class="library-toolbar">
@@ -654,8 +672,85 @@
             <button type="button" id="library-preview" hidden>真实预览</button>
             <button type="button" id="library-open" hidden>在网站打开</button>
             <button type="button" id="retry-push" hidden>重新同步</button>
+            <details class="library-detail-more" id="library-detail-more">
+              <summary>更多操作</summary>
+              <div>
+                <button type="button" id="library-duplicate">复制为草稿</button>
+                <button class="danger" type="button" id="library-return-draft">退回草稿</button>
+              </div>
+            </details>
           </div>
         </aside>
+      </section>
+
+      <section class="panel system-panel" id="system-panel">
+        <header class="system-page-heading">
+          <div>
+            <p class="eyebrow">系统与恢复</p>
+            <h2>运行状态</h2>
+            <p>检查本地服务、Git、云端核对与可恢复性。技术细节集中在这里，不遮挡内容工作区。</p>
+          </div>
+          <button type="button" id="refresh-services">刷新状态</button>
+        </header>
+        <div class="system-status-panel">
+          <div class="service-status">
+            <span class="service-pill" id="publisher-service">管理端检查中</span>
+            <span class="service-pill" id="site-preview-service">站点预览检查中</span>
+            <span class="service-pill" id="content-sync-summary">正在检查内容</span>
+          </div>
+          <section class="network-disclosure" aria-labelledby="network-disclosure-title">
+            <strong id="network-disclosure-title">联网边界</strong>
+            <p>管理页面和配置仅在本机打开。只有在你点击 AI、同步、云端核对或 R2 操作时，相关内容才会发送到已配置的外部服务。</p>
+            <dl>
+              <div><dt>AI</dt><dd id="network-ai-detail">读取配置中</dd></div>
+              <div><dt>同步</dt><dd>GitHub、Cloudflare 和可选的 R2</dd></div>
+              <div><dt>线上核对</dt><dd>只读取 www.xgif.cn 的公开页面</dd></div>
+            </dl>
+          </section>
+          <section class="connection-grid" aria-label="服务连接">
+            <article>
+              <span>AI 服务</span>
+              <strong id="connection-ai">检查中</strong>
+              <small id="connection-ai-detail">不会显示 API 密钥</small>
+            </article>
+            <article>
+              <span>Git 与 PR</span>
+              <strong id="connection-git">检查中</strong>
+              <a id="connection-pr-link" href="#" target="_blank" rel="noopener" hidden>打开 PR 预览</a>
+            </article>
+            <article>
+              <span>图片存储</span>
+              <strong id="connection-storage">检查中</strong>
+              <small id="connection-storage-detail"></small>
+            </article>
+            <article>
+              <span>部署预览</span>
+              <strong id="connection-preview">未配置</strong>
+              <a id="connection-preview-link" href="#" target="_blank" rel="noopener" hidden>打开部署预览</a>
+            </article>
+          </section>
+          <div class="system-actions">
+            <button type="button" id="open-pending-content">查看待同步</button>
+            <button type="button" id="open-sync-history">同步记录</button>
+            <button type="button" id="system-create-backup">创建安全备份</button>
+            <button type="button" id="system-run-recovery">运行恢复演练</button>
+            <button type="button" id="open-site-preview" disabled>打开站点预览</button>
+          </div>
+          <section class="recovery-dashboard" aria-labelledby="recovery-dashboard-title">
+            <div class="recovery-dashboard-heading">
+              <strong id="recovery-dashboard-title">数据安全状态</strong>
+              <button type="button" id="recovery-dashboard-refresh">刷新</button>
+            </div>
+            <div class="recovery-dashboard-grid" id="recovery-dashboard-grid">
+              <p>进入本页后读取备份与恢复状态。</p>
+            </div>
+            <p class="recovery-dashboard-result" id="recovery-dashboard-result" role="status"></p>
+          </section>
+          <details class="system-technical-details">
+            <summary>技术信息</summary>
+            <div class="status" id="status">读取状态中...</div>
+          </details>
+        </div>
       </section>
         </main>
       </div>
@@ -707,6 +802,19 @@
         <button type="button" id="sync-history-close">关闭</button>
       </div>
       <div class="sync-history-list" id="sync-history-list"></div>
+    </dialog>
+
+    <dialog class="trash-dialog version-history-dialog" id="version-history-dialog">
+      <div class="trash-dialog-heading">
+        <div>
+          <p class="eyebrow">自动保存与私有快照</p>
+          <h2>版本记录</h2>
+          <p id="version-history-summary">读取当前内容的浏览器暂存和 Markdown 快照。</p>
+        </div>
+        <button type="button" id="version-history-close">关闭</button>
+      </div>
+      <div class="version-history-list" id="version-history-list"></div>
+      <p class="recovery-dashboard-result" id="version-history-result" role="status"></p>
     </dialog>
 
     <dialog class="trash-dialog batch-edit-dialog" id="batch-edit-dialog">
@@ -796,6 +904,6 @@
       <div class="asset-library-list" id="asset-library-list"></div>
     </dialog>
 
-    <script src="/app.js?v=20260724-title-ai" type="module"></script>
+    <script src="/app.js?v=20260724-pc-console" type="module"></script>
   </body>
 </html>

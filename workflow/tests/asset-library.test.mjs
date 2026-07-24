@@ -8,16 +8,19 @@ import { listReusableAssets } from "../asset-library.js";
 test("asset library joins image metadata with local and R2 backup state", async () => {
   const repoRoot = await mkdtemp(path.join(os.tmpdir(), "xgif-assets-"));
   const entries = path.join(repoRoot, "site", "src", "content", "images");
+  const articles = path.join(repoRoot, "site", "src", "content", "articles");
   const publicImages = path.join(repoRoot, "site", "public", "images");
   const records = path.join(repoRoot, "workflow", "records");
   const privateAssets = path.join(repoRoot, "workflow", "private-sources", "r2-assets");
   await Promise.all([
     mkdir(entries, { recursive: true }),
+    mkdir(articles, { recursive: true }),
     mkdir(publicImages, { recursive: true }),
     mkdir(records, { recursive: true }),
     mkdir(privateAssets, { recursive: true }),
   ]);
   await writeFile(path.join(publicImages, "one.png"), Buffer.from("local-image"));
+  await writeFile(path.join(publicImages, "one-copy.png"), Buffer.from("local-image"));
   await writeFile(path.join(entries, "one.md"), `---
 title: "本地素材"
 contentId: "20260724-0001"
@@ -44,6 +47,33 @@ public: true
 draft: false
 ---
 `, "utf8");
+  await writeFile(path.join(entries, "one-copy.md"), `---
+title: "重复素材"
+contentId: "20260724-0003"
+description: "重复图片"
+image: "/images/one-copy.png"
+tags: ["反应图"]
+source: "原创"
+sourceKind: "original"
+pubDate: "2026-07-24"
+public: true
+draft: false
+---
+`, "utf8");
+  await writeFile(path.join(articles, "using-assets.md"), `---
+title: "素材使用"
+contentId: "20260724-a001"
+summary: "素材使用"
+tags: ["测试"]
+source: "原创"
+pubDate: "2026-07-24"
+draft: false
+coverImage: "/images/one.png"
+coverAlt: ""
+---
+
+![完整替代文本](/images/one.png)
+`, "utf8");
   await writeFile(path.join(records, "r2-assets.jsonl"), `${JSON.stringify({
     publicUrl: "https://img.xgif.cn/memes/hash.webp",
     objectKey: "memes/hash.webp",
@@ -52,9 +82,15 @@ draft: false
   })}\n`, "utf8");
 
   const report = await listReusableAssets({ repoRoot });
-  assert.equal(report.counts.total, 2);
-  assert.equal(report.counts.local, 1);
+  assert.equal(report.counts.total, 3);
+  assert.equal(report.counts.local, 2);
   assert.equal(report.counts.r2, 1);
-  assert.equal(report.items.find((item) => item.storage === "local").backup.ok, true);
+  assert.equal(report.counts.missingAlt, 1);
+  assert.equal(report.counts.duplicateGroups, 1);
+  const usedLocal = report.items.find((item) => item.image === "/images/one.png");
+  assert.equal(usedLocal.backup.ok, true);
+  assert.equal(usedLocal.usageCount, 2);
+  assert.equal(usedLocal.missingAltCount, 1);
+  assert.equal(usedLocal.duplicateCount, 1);
   assert.equal(report.items.find((item) => item.storage === "r2").backup.ok, false);
 });

@@ -63,15 +63,49 @@ async function remoteAssetDetails({ image, ledger, privateBackupDirectory }) {
   };
 }
 
+async function articleAssetUsage(articleDirectory) {
+  const usage = new Map();
+  const files = await readdir(articleDirectory).catch((error) =>
+    error?.code === "ENOENT" ? [] : Promise.reject(error));
+  const record = (image, details) => {
+    if (!image) return;
+    const items = usage.get(image) || [];
+    items.push(details);
+    usage.set(image, items);
+  };
+  for (const file of files.filter((name) => /\.mdx?$/iu.test(name))) {
+    const filePath = path.join(articleDirectory, file);
+    const parsed = parseContentDocument(await readFile(filePath, "utf8"));
+    if (!parsed) continue;
+    record(String(parsed.data.coverImage || ""), {
+      file,
+      placement: "cover",
+      altMissing: !String(parsed.data.coverAlt || "").trim(),
+    });
+    for (const match of parsed.body.matchAll(/!\[([^\]]*)\]\(([^)\s]+)(?:\s+["'][^"']*["'])?\)/gu)) {
+      record(match[2], {
+        file,
+        placement: "body",
+        altMissing: !match[1].trim(),
+      });
+    }
+  }
+  return usage;
+}
+
 export async function listReusableAssets({
   repoRoot,
   imageDirectory = path.join(repoRoot, "site", "src", "content", "images"),
+  articleDirectory = path.join(repoRoot, "site", "src", "content", "articles"),
+  articleAssetDirectory = path.join(repoRoot, "site", "public", "images", "articles"),
   ledgerPath = path.join(repoRoot, "workflow", "records", "r2-assets.jsonl"),
   privateBackupDirectory = path.join(repoRoot, "workflow", "private-sources", "r2-assets"),
 } = {}) {
-  const [files, ledger] = await Promise.all([
+  const [files, ledger, usage, articleAssetFiles] = await Promise.all([
     readdir(imageDirectory).catch((error) => error?.code === "ENOENT" ? [] : Promise.reject(error)),
     readJsonLines(ledgerPath),
+    articleAssetUsage(articleDirectory),
+    readdir(articleAssetDirectory).catch((error) => error?.code === "ENOENT" ? [] : Promise.reject(error)),
   ]);
   const items = [];
   for (const file of files.filter((name) => /\.mdx?$/iu.test(name)).sort()) {
@@ -83,6 +117,7 @@ export async function listReusableAssets({
     const details = image.startsWith("/")
       ? await localAssetDetails(repoRoot, image)
       : await remoteAssetDetails({ image, ledger, privateBackupDirectory });
+    const references = usage.get(image) || [];
     items.push({
       contentId: String(parsed.data.contentId || path.basename(file, path.extname(file))),
       title: String(parsed.data.title || "未命名素材"),
@@ -98,8 +133,50 @@ export async function listReusableAssets({
       tags: Array.isArray(parsed.data.tags) ? parsed.data.tags.map(String) : [],
       draft: Boolean(parsed.data.draft) || parsed.data.public === false,
       file: path.relative(repoRoot, filePath).split(path.sep).join("/"),
+      usage: references,
+      usageCount: references.length,
+      missingAltCount: references.filter((item) => item.altMissing).length,
       ...details,
     });
+  }
+  const knownImages = new Set(items.map((item) => item.image));
+  for (const file of articleAssetFiles.filter((name) => /\.(?:png|jpe?g|gif|webp)$/iu.test(name)).sort()) {
+    const image = `/images/articles/${file}`;
+    if (knownImages.has(image)) continue;
+    const details = await localAssetDetails(repoRoot, image);
+    const references = usage.get(image) || [];
+    items.push({
+      contentId: `article-asset-${details.sha256.slice(0, 16) || file}`,
+      title: file,
+      description: "文章正文上传素材",
+      image,
+      width: 0,
+      height: 0,
+      ratio: "",
+      source: "本地上传",
+      sourceKind: "original",
+      author: "",
+      license: "",
+      tags: [],
+      draft: false,
+      file: path.relative(repoRoot, path.join(articleAssetDirectory, file)).split(path.sep).join("/"),
+      usage: references,
+      usageCount: references.length,
+      missingAltCount: references.filter((item) => item.altMissing).length,
+      ...details,
+    });
+  }
+  const duplicateGroups = new Map();
+  for (const item of items) {
+    if (!item.sha256) continue;
+    const group = duplicateGroups.get(item.sha256) || [];
+    group.push(item);
+    duplicateGroups.set(item.sha256, group);
+  }
+  for (const item of items) {
+    item.duplicateCount = item.sha256
+      ? Math.max(0, (duplicateGroups.get(item.sha256)?.length || 1) - 1)
+      : 0;
   }
   return {
     generatedAt: new Date().toISOString(),
@@ -108,7 +185,11 @@ export async function listReusableAssets({
       reusable: items.filter((item) => item.backup.ok && !item.draft).length,
       local: items.filter((item) => item.storage === "local").length,
       r2: items.filter((item) => item.storage === "r2").length,
-      attention: items.filter((item) => !item.backup.ok || item.draft).length,
+      unused: items.filter((item) => item.usageCount === 0).length,
+      missingAlt: items.filter((item) => item.missingAltCount > 0).length,
+      duplicateGroups: [...duplicateGroups.values()].filter((group) => group.length > 1).length,
+      attention: items.filter((item) =>
+        !item.backup.ok || item.draft || item.missingAltCount > 0 || item.duplicateCount > 0).length,
     },
     items: items.sort((left, right) => right.contentId.localeCompare(left.contentId)),
   };

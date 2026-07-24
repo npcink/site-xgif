@@ -44,6 +44,17 @@ test("private Git snapshots include only content allowlist paths", async () => {
   const unchanged = await backup.snapshot("unchanged snapshot");
   assert.equal(unchanged.changed, false);
   assert.equal(unchanged.commit, second.commit);
+  const history = await backup.listFileHistory("site/src/content/articles/draft.md");
+  assert.equal(history.length, 2);
+  assert.equal(history[0].commit, second.commit);
+  assert.equal(
+    await backup.readFileVersion("site/src/content/articles/draft.md", first.commit),
+    "draft one",
+  );
+  assert.equal(
+    await backup.readFileVersion("site/src/content/articles/draft.md", second.commit),
+    "draft two",
+  );
 
   const { stdout } = await execFileAsync("git", [
     `--git-dir=${backup.gitDir}`,

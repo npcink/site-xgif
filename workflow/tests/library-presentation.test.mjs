@@ -26,6 +26,14 @@ test("content presentation exposes one reader-facing stage and next action", () 
     "待上线",
   );
   assert.equal(
+    libraryItemPresentation({ publication: { state: "pending" } }).label,
+    "待上线",
+  );
+  assert.equal(
+    libraryItemPresentation({ publication: { state: "unknown" } }).label,
+    "待验证",
+  );
+  assert.equal(
     libraryItemPresentation({ publication: { state: "online" } }).action,
     "open",
   );
@@ -39,6 +47,17 @@ test("task presentation prioritizes unfinished publication work over drafts", ()
   const drafts = libraryTaskPresentation({ all: 5, draft: 2, local: 0, online: 3 });
   assert.equal(drafts.title, "2 项草稿等待整理");
   assert.equal(drafts.action, "draft");
+
+  const unknown = libraryTaskPresentation({
+    all: 3,
+    draft: 0,
+    local: 0,
+    pending: 0,
+    unverified: 2,
+    online: 1,
+  });
+  assert.equal(unknown.title, "2 项线上状态待验证");
+  assert.equal(unknown.action, "unknown");
 
   const ready = libraryTaskPresentation({ all: 3, draft: 0, local: 0, online: 3 });
   assert.equal(ready.title, "3 项内容均已上线");

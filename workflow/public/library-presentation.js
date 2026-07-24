@@ -23,6 +23,12 @@ const STATUS_PRESENTATION = {
     nextDescription: "远程分支已包含当前内容；合并 PR 并完成 Cloudflare 部署后会自动核对线上版本。",
     action: "details",
   },
+  unknown: {
+    label: "待验证",
+    nextTitle: "稍后重新核对",
+    nextDescription: "当前无法连接线上站点。内容状态没有被降级，可在详情中查看上次核对结果。",
+    action: "details",
+  },
   online: {
     label: "已上线",
     nextTitle: "线上版本已核对",
@@ -34,23 +40,38 @@ const STATUS_PRESENTATION = {
 export function libraryItemPresentation(item = {}) {
   if (item.publication?.state === "online") return STATUS_PRESENTATION.online;
   if (item.publication?.state === "draft") return STATUS_PRESENTATION.draft;
+  if (item.publication?.state === "pending") return STATUS_PRESENTATION.pending_deploy;
+  if (item.publication?.state === "unknown") return STATUS_PRESENTATION.unknown;
   return STATUS_PRESENTATION[item.workflow?.state] || STATUS_PRESENTATION.pending_commit;
 }
 
 export function libraryTaskPresentation(counts = {}) {
   const total = Number(counts.all || 0);
   const drafts = Number(counts.draft || 0);
-  const pending = Number(counts.local || 0);
+  const local = Number(counts.local || 0);
+  const pending = Number(counts.pending || 0);
+  const unknown = Number(counts.unverified || counts.unknown || 0);
   const online = Number(counts.online || 0);
+  const unfinished = local + pending;
 
-  if (pending > 0) {
+  if (unfinished > 0) {
     return {
       state: "attention",
       kicker: "下一步",
-      title: `${pending} 项发布流程待完成`,
-      description: "逐条查看下一步操作；同步、合并 PR 和部署进度会在详情中明确显示。",
+      title: `${unfinished} 项发布流程待完成`,
+      description: `${local} 项待同步，${pending} 项等待合并或部署。详情会分别显示 Git 与线上状态。`,
       actionLabel: "查看待完成内容",
       action: "pending",
+    };
+  }
+  if (unknown > 0) {
+    return {
+      state: "checking",
+      kicker: "待核对",
+      title: `${unknown} 项线上状态待验证`,
+      description: "网络核对失败不会把已上线内容降级。稍后刷新系统状态即可重试。",
+      actionLabel: "查看待验证内容",
+      action: "unknown",
     };
   }
   if (drafts > 0) {
