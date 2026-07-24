@@ -3,11 +3,13 @@ import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 
-const publicDisclosure = [
+const legacyDisclosure = [
   "> 本页只提供编辑摘要，不转载来源站全文。",
   "",
   "请通过页面中的“查看原始来源”链接阅读完整内容。",
 ].join("\n");
+
+const unsafeArticleMarkup = /<\s*\/?\s*(?:script|iframe|object|embed|style|form|input|button|svg|math|link|meta)\b|\bon[a-z]+\s*=|(?:javascript|vbscript)\s*:|data\s*:\s*text\/html/iu;
 
 const contentRoot = new URL("../src/content/", import.meta.url);
 
@@ -74,7 +76,7 @@ test("all content uses unique stable IDs that match the Markdown filename", asyn
   assert.equal(new Set(ids).size, ids.length, "文章和图片的 contentId 必须全局唯一");
 });
 
-test("published external articles expose only the standard public disclosure body", async () => {
+test("published external articles expose a full body instead of the legacy disclosure", async () => {
   const articles = await frontmatter("articles");
   for (const article of articles) {
     const body = article.text.match(/^---\r?\n[\s\S]*?\r?\n---\r?\n?([\s\S]*)$/u)?.[1] || "";
@@ -82,6 +84,16 @@ test("published external articles expose only the standard public disclosure bod
       field(article.text, "draft") === "true"
       || !["publication", "editorial"].includes(field(article.text, "sourceKind"))
     ) continue;
-    assert.equal(body.trim(), publicDisclosure, `${article.file} 不应公开外部来源全文`);
+    assert.notEqual(body.trim(), legacyDisclosure, `${article.file} 仍是旧摘要占位`);
+    assert.ok(body.trim().length >= 80, `${article.file} 缺少可公开的完整正文`);
+  }
+});
+
+test("public articles do not contain executable or embedded markup", async () => {
+  const articles = await frontmatter("articles");
+  for (const article of articles) {
+    const body = article.text.match(/^---\r?\n[\s\S]*?\r?\n---\r?\n?([\s\S]*)$/u)?.[1] || "";
+    if (field(article.text, "draft") === "true") continue;
+    assert.doesNotMatch(body, unsafeArticleMarkup, `${article.file} 包含危险公开正文`);
   }
 });

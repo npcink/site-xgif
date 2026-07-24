@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { PUBLIC_ARTICLE_DISCLOSURE } from "../article-publication.js";
+import { LEGACY_ARTICLE_DISCLOSURE } from "../article-publication.js";
 import { auditContentLibrary, parseContentDocument } from "../content-audit.js";
 
 async function fixture() {
@@ -26,11 +26,8 @@ function article({
   draft = false,
   body,
 } = {}) {
-  const resolvedBody = body ?? (
-    ["publication", "editorial"].includes(sourceKind) && !draft
-      ? PUBLIC_ARTICLE_DISCLOSURE
-      : "这是一段足够完整的测试正文，用来验证上线体检是否可以区分可发布内容、待人工确认内容和必须退回草稿的内容。正文需要超过最小长度，并且不包含未结构化链接。它还应当保留清晰的叙述结构，确保测试通过来自内容质量，而不是仅仅依靠字段齐全。"
-  );
+  const resolvedBody = body
+    ?? `${contentId}：这是一段足够完整的测试正文，用来验证上线体检是否可以区分可发布内容、待人工确认内容和必须退回草稿的内容。正文需要超过最小长度，并且不包含未结构化链接。它还应当保留清晰的叙述结构，确保测试通过来自内容质量，而不是仅仅依靠字段齐全。`;
   return `---
 title: ${JSON.stringify(title)}
 contentId: ${JSON.stringify(contentId)}
@@ -58,7 +55,6 @@ test("content audit classifies ready, review, and blocked articles", async () =>
         contentId: "20260723-0002",
         title: "需要确认来源",
         sourceUrl: "https://jandan.net/",
-        body: PUBLIC_ARTICLE_DISCLOSURE,
       }),
       "utf8",
     ),
@@ -122,6 +118,42 @@ sourceKind: "unknown"
     report.items.find((item) => item.title === "缺失图片").blockers.join(" "),
     /图片文件不存在/,
   );
+});
+
+test("content audit blocks a legacy external-article disclosure placeholder", async () => {
+  const dirs = await fixture();
+  await writeFile(
+    path.join(dirs.articlesDir, "20260723-0006.md"),
+    article({
+      contentId: "20260723-0006",
+      title: "尚未恢复正文",
+      body: LEGACY_ARTICLE_DISCLOSURE,
+    }),
+    "utf8",
+  );
+
+  const report = await auditContentLibrary({ repoRoot: dirs.repoRoot });
+  const item = report.items.find((entry) => entry.title === "尚未恢复正文");
+  assert.equal(item.status, "draft");
+  assert.match(item.blockers.join(" "), /恢复完整正文/);
+});
+
+test("content audit blocks unsafe markup imported from an external article", async () => {
+  const dirs = await fixture();
+  await writeFile(
+    path.join(dirs.articlesDir, "20260723-0007.md"),
+    article({
+      contentId: "20260723-0007",
+      title: "危险外部正文",
+      body: "这是一段导入正文。<script>alert('xss')</script> 后续文字不能让危险标签绕过公开内容体检。",
+    }),
+    "utf8",
+  );
+
+  const report = await auditContentLibrary({ repoRoot: dirs.repoRoot });
+  const item = report.items.find((entry) => entry.title === "危险外部正文");
+  assert.equal(item.status, "draft");
+  assert.match(item.blockers.join(" "), /危险协议/);
 });
 
 test("content document parser keeps public and internal notes separate", () => {

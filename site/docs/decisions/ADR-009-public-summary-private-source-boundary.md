@@ -2,7 +2,7 @@
 
 ## 状态
 
-已接受
+已被 [ADR-010](ADR-010-external-article-full-body-publication.md) 替代
 
 ## 日期
 

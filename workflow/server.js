@@ -6,9 +6,6 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { inferArticleSourceName } from "./article-source.js";
 import {
-  PUBLIC_ARTICLE_DISCLOSURE,
-  isExternalArticle,
-  isPublicArticleDisclosure,
   prepareArticlePublication,
   readEditableArticleBody,
 } from "./article-publication.js";
@@ -1230,16 +1227,6 @@ function buildArticleMarkdown(payload) {
   const internalNote = String(payload.internalNote || "").trim();
   const editorNoteLine = editorNote ? `editorNote: ${yamlString(editorNote)}\n` : "";
   const internalNoteLine = internalNote ? `internalNote: ${yamlString(internalNote)}\n` : "";
-  if (
-    isExternalArticle(payload)
-    && !payload.draft
-    && !isPublicArticleDisclosure(payload.body)
-  ) {
-    const error = new Error("外部来源公开文章只能写入编辑摘要说明，完整正文必须保存在私有来源库。");
-    error.statusCode = 422;
-    throw error;
-  }
-
   return `---\ntitle: ${yamlString(payload.title)}\ncontentId: ${yamlString(payload.contentId)}\nsummary: ${yamlString(payload.summary)}\nsource: ${yamlString(payload.source)}\n${sourceUrlLine}sourceKind: ${yamlString(payload.sourceKind || "original")}\ntags: ${yamlArray(tags)}\npubDate: ${date}\nreadTime: ${yamlString(payload.readTime || "1 分钟")}\n${editorNoteLine}${internalNoteLine}featured: ${Boolean(payload.featured)}\ndraft: ${Boolean(payload.draft)}\n---\n\n${markdownBody(payload.body)}`;
 }
 

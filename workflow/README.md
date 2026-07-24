@@ -76,7 +76,7 @@ npm run content:audit
 
 ## 本地数据安全
 
-原创文章正文和图片元数据仍以 `site/src/content/**/*.md` 为权威源；外部来源文章的完整导入正文以 `workflow/private-sources/articles/<contentId>.md` 为本地私有权威源，公开 Markdown 只保存编辑摘要和来源入口。SQLite 只保存可重建的内容索引、回收站索引、本地操作历史和同步记录。数据库位于 `workflow/.runtime/xgif.sqlite3`，不会进入 Git；数据库迁移、重建代码和公开内容文件才进入公开 Git。
+文章正文和图片元数据仍以 `site/src/content/**/*.md` 为公开权威源；外部来源文章同时在 `workflow/private-sources/articles/<contentId>.md` 保留本地私有正文副本，用于编辑恢复和异地私有备份。SQLite 只保存可重建的内容索引、回收站索引、本地操作历史和同步记录。数据库位于 `workflow/.runtime/xgif.sqlite3`，不会进入 Git；数据库迁移、重建代码和公开内容文件才进入公开 Git。
 
 发布台启动时会检查数据库完整性。发现损坏时会先把原数据库隔离为 `.corrupt-*`，然后扫描 Markdown 与回收站旁车自动重建。常用维护命令：
 
@@ -116,7 +116,7 @@ npm run data:rebuild --prefix workflow
 
 第一条命令只显示可安全修复项；第二条只应用有明确证据的链接和来源名称，并把没有来源证据的 flomo“原创”改为“来源待确认”；第三条从 Markdown 刷新本地 SQLite 索引。
 
-导入结果始终是 `draft: true` 的 Markdown 草稿，不会自动提交或推送。若点击“AI 整理选中项”，只有当前勾选的正文和来源元数据会发送给 `.env` 中配置的 AI 服务。外部来源草稿发布时，完整正文会转入本机 `private-sources/articles/`，公开 Markdown 只保留“不转载来源站全文”的说明；再次退回草稿时，管理端会恢复私有正文供编辑。每次成功导入会在 `records/flomo-imports.jsonl` 追加正文哈希、时间和目标文件；台账不保存正文。完整边界见 [`ADR-009`](../site/docs/decisions/ADR-009-public-summary-private-source-boundary.md)。
+导入结果始终是 `draft: true` 的 Markdown 草稿，不会自动提交或推送。若点击“AI 整理选中项”，只有当前勾选的正文和来源元数据会发送给 `.env` 中配置的 AI 服务。外部来源草稿发布时，完整正文会写入公开 Markdown，并在本机 `private-sources/articles/` 保留备份；再次退回草稿时，管理端仍可从私有副本恢复正文供编辑。每次成功导入会在 `records/flomo-imports.jsonl` 追加正文哈希、时间和目标文件；台账不保存正文。完整边界见 [`ADR-010`](../site/docs/decisions/ADR-010-external-article-full-body-publication.md)。
 
 文章备注分成两个字段：`editorNote` 是可以显示给读者的“公开编辑手记”，`internalNote` 是只在本地内容管理中显示的复核提醒。AI 只会建议公开编辑手记；flomo 导入批次、来源待核验等内部信息必须写入 `internalNote`，不能进入公开页面。
 
@@ -213,4 +213,4 @@ PUBLISHER_MAX_IMAGE_DIMENSION="6000"
 
 ## 说明
 
-公开站点不需要数据库，也不会启动线上后台。本地发布台使用可删除重建的 SQLite 管理索引，Astro 只读取公开 Markdown 和图片文件。原创文章可以不填写外部来源链接；转载和编辑整理内容仍必须保留真实来源链接，但完整来源正文只留在本机私有来源库。数据边界见 [`ADR-007`](../site/docs/decisions/ADR-007-local-sqlite-index.md) 与 [`ADR-009`](../site/docs/decisions/ADR-009-public-summary-private-source-boundary.md)。
+公开站点不需要数据库，也不会启动线上后台。本地发布台使用可删除重建的 SQLite 管理索引，Astro 只读取公开 Markdown 和图片文件。原创文章可以不填写外部来源链接；转载和编辑整理内容仍必须保留真实来源链接，完整正文会进入公开 Markdown，并在本机私有来源库保留备份。数据边界见 [`ADR-007`](../site/docs/decisions/ADR-007-local-sqlite-index.md) 与 [`ADR-010`](../site/docs/decisions/ADR-010-external-article-full-body-publication.md)。

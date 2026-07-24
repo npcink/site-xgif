@@ -2,7 +2,7 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { isContentId } from "./content-id.js";
 
-export const PUBLIC_ARTICLE_DISCLOSURE = [
+export const LEGACY_ARTICLE_DISCLOSURE = [
   "> 本页只提供编辑摘要，不转载来源站全文。",
   "",
   "请通过页面中的“查看原始来源”链接阅读完整内容。",
@@ -12,8 +12,8 @@ export function isExternalArticle(payload) {
   return ["publication", "editorial"].includes(String(payload?.sourceKind || ""));
 }
 
-export function isPublicArticleDisclosure(body) {
-  return String(body || "").trim() === PUBLIC_ARTICLE_DISCLOSURE;
+export function isLegacyArticleDisclosure(body) {
+  return String(body || "").trim() === LEGACY_ARTICLE_DISCLOSURE;
 }
 
 export function privateArticleSourcePath({ workflowRoot, contentId }) {
@@ -46,7 +46,7 @@ export async function prepareArticlePublication(payload, { workflowRoot }) {
     contentId: article.contentId,
   });
   const privateBody = await readPrivateBody(privateSourcePath);
-  const editableBody = isPublicArticleDisclosure(article.body)
+  const editableBody = isLegacyArticleDisclosure(article.body)
     ? privateBody
     : article.body;
 
@@ -55,19 +55,20 @@ export async function prepareArticlePublication(payload, { workflowRoot }) {
   return {
     payload: {
       ...article,
-      body: article.draft
-        ? (editableBody || article.body)
-        : PUBLIC_ARTICLE_DISCLOSURE,
+      body: editableBody || article.body,
     },
     privateSourcePath,
   };
 }
 
 export async function readEditableArticleBody(payload, { workflowRoot }) {
-  if (!isExternalArticle(payload)) return String(payload?.body || "").trim();
+  const publicBody = String(payload?.body || "").trim();
+  if (!isExternalArticle(payload) || !isLegacyArticleDisclosure(publicBody)) {
+    return publicBody;
+  }
   const privateSourcePath = privateArticleSourcePath({
     workflowRoot,
     contentId: payload.contentId,
   });
-  return (await readPrivateBody(privateSourcePath)) || String(payload?.body || "").trim();
+  return (await readPrivateBody(privateSourcePath)) || publicBody;
 }
