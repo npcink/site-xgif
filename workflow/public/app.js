@@ -10,6 +10,10 @@ import {
   setLibraryFileSelected,
   setLibraryPageSelected,
 } from "./library-selection.js";
+import {
+  libraryItemPresentation,
+  libraryTaskPresentation,
+} from "./library-presentation.js";
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -33,16 +37,27 @@ const imageResult = $("#image-result");
 const articleDetails = $("#article-details");
 const imageDetails = $("#image-details");
 const articlePagePreview = $("#article-page-preview");
+const articleTitleAi = $("#article-title-ai");
+const articleTitleSuggestions = $("#article-title-suggestions");
+const articleTitleCandidateList = $("#article-title-candidate-list");
+const articleTitleAiStatus = $("#article-title-ai-status");
+const workspaceSidebar = $("#workspace-sidebar");
+const workspaceNavToggle = $("#workspace-nav-toggle");
+const workspacePageTitle = $("#workspace-page-title");
 const contentList = $("#content-list");
 const libraryDetail = $("#library-detail");
 const libraryResult = $("#library-result");
+const libraryFeedback = $("#library-feedback");
 const libraryEdit = $("#library-edit");
 const libraryTransition = $("#library-transition");
+const librarySyncCurrent = $("#library-sync-current");
 const libraryPreview = $("#library-preview");
 const libraryOpen = $("#library-open");
 const libraryActions = $("#library-actions");
 const libraryPanel = $("#library-panel");
+const libraryMain = $(".library-main", libraryPanel);
 const libraryInspector = $("#library-inspector");
+const libraryInspectorDialogQuery = window.matchMedia("(max-width: 1280px)");
 const librarySelectionSummary = $("#library-selection-summary");
 const libraryPageSummary = $("#library-page-summary");
 const libraryPagination = $("#library-pagination");
@@ -85,6 +100,8 @@ let libraryPage = 1;
 let libraryPages = 1;
 let libraryTotal = 0;
 let libraryPageItems = [];
+let libraryCounts = { all: 0, draft: 0, local: 0, online: 0 };
+let libraryBatchMode = false;
 let librarySearchTimer = null;
 let recycleBinItems = [];
 const recycleSelectedIds = new Set();
@@ -228,6 +245,70 @@ function updateArticleReview(data = formData(articleForm)) {
     : "整理后在这里快速复核标题、摘要和标签。";
 }
 
+function articleTitleSuggestionPayload() {
+  const data = formData(articleForm);
+  return {
+    title: data.title,
+    summary: data.summary,
+    source: data.source,
+    sourceUrl: data.sourceUrl,
+    body: data.body,
+  };
+}
+
+function renderArticleTitleSuggestions(titles) {
+  articleTitleCandidateList.replaceChildren();
+  for (const title of titles) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.dataset.titleCandidate = title;
+    button.setAttribute("aria-pressed", "false");
+    button.textContent = title;
+    articleTitleCandidateList.append(button);
+  }
+  articleTitleSuggestions.hidden = false;
+  articleTitleAi.textContent = "AI 再换一组";
+  articleTitleAiStatus.dataset.state = "ready";
+  articleTitleAiStatus.textContent = "已生成 3 个候选标题，请选择一个。";
+}
+
+function syncArticleTitleCandidateSelection() {
+  const currentTitle = $('[name="title"]', articleForm).value.trim();
+  for (const button of $$("[data-title-candidate]", articleTitleCandidateList)) {
+    button.setAttribute("aria-pressed", String(button.dataset.titleCandidate === currentTitle));
+  }
+}
+
+function applyArticleTitleSuggestion(title) {
+  const titleInput = $('[name="title"]', articleForm);
+  titleInput.value = title;
+  markFormDirty(articleForm);
+  syncArticleActionState();
+  syncAiAvailability();
+  updateArticlePreview();
+  saveLocalDraft(articleForm);
+  syncArticleTitleCandidateSelection();
+  articleTitleAiStatus.dataset.state = "applied";
+  articleTitleAiStatus.textContent = "已采用候选标题，尚未保存到 Markdown。";
+}
+
+function resetArticleTitleSuggestions() {
+  articleTitleCandidateList.replaceChildren();
+  articleTitleSuggestions.hidden = true;
+  articleTitleAi.textContent = "AI 换标题";
+  articleTitleAiStatus.dataset.state = "";
+  articleTitleAiStatus.textContent = "";
+}
+
+function invalidateArticleTitleSuggestions() {
+  if (articleTitleSuggestions.hidden) return;
+  articleTitleCandidateList.replaceChildren();
+  articleTitleSuggestions.hidden = true;
+  articleTitleAi.textContent = "AI 换标题";
+  articleTitleAiStatus.dataset.state = "stale";
+  articleTitleAiStatus.textContent = "文章资料已修改，请重新生成候选标题。";
+}
+
 function updateImageReview(data = formData(imageForm)) {
   const tags = list(data.tags);
   $("#image-ai-title").textContent = data.title || "等待选择图片并整理";
@@ -264,6 +345,17 @@ function syncAiAvailability() {
   const articleData = formData(articleForm);
   $('[data-ai-fill="article"]').disabled = ![articleData.title, articleData.sourceUrl, articleData.body]
     .some((value) => String(value || "").trim());
+  const titleSourceAvailable = [articleData.body, articleData.summary, articleData.sourceUrl]
+    .some((value) => String(value || "").trim());
+  const titleAiBusy = articleTitleAi.getAttribute("aria-busy") === "true";
+  articleTitleAi.disabled = titleAiBusy || !titleSourceAvailable;
+  if (!titleSourceAvailable && articleTitleAiStatus.dataset.state !== "busy") {
+    articleTitleAiStatus.dataset.state = "hint";
+    articleTitleAiStatus.textContent = "填写正文、摘要或来源链接后可生成候选标题。";
+  } else if (titleSourceAvailable && articleTitleAiStatus.dataset.state === "hint") {
+    articleTitleAiStatus.dataset.state = "";
+    articleTitleAiStatus.textContent = "";
+  }
   $('[data-ai-fill="image"]').disabled = !selectedImage?.dataUrl?.startsWith("data:");
 }
 
@@ -285,18 +377,21 @@ function showResult(node, data) {
   node.classList.remove("error");
   node.hidden = false;
   node.textContent = typeof data === "string" ? data : JSON.stringify(data, null, 2);
+  if (node === libraryResult) libraryFeedback.hidden = false;
 }
 
 function showError(node, error) {
   node.classList.add("error");
   node.hidden = false;
   node.textContent = error.message;
+  if (node === libraryResult) libraryFeedback.hidden = false;
 }
 
 function clearResult(node) {
   node.hidden = true;
   node.classList.remove("error");
   node.textContent = "";
+  if (node === libraryResult) libraryFeedback.hidden = true;
 }
 
 function draftKey(form) {
@@ -457,10 +552,59 @@ function syncImageActionState() {
 }
 
 function switchTab(name) {
-  $$(".tab").forEach((item) => item.classList.toggle("active", item.dataset.tab === name));
+  const titles = {
+    article: "新建文章",
+    image: "新建图片",
+    import: "导入内容",
+    library: "内容库",
+  };
+  $$(".tab").forEach((item) => {
+    const active = item.dataset.tab === name;
+    item.classList.toggle("active", active);
+    if (active) item.setAttribute("aria-current", "page");
+    else item.removeAttribute("aria-current");
+  });
   $$(".panel").forEach((item) => item.classList.toggle("active", item.id === `${name}-panel`));
+  workspacePageTitle.textContent = titles[name] || "本地发布助手";
+  setWorkspaceNavigationOpen(false);
   if (name === "library") loadLibrary();
   return true;
+}
+
+function setWorkspaceNavigationOpen(open) {
+  const expanded = Boolean(open);
+  const wasOpen = document.body.classList.contains("workspace-nav-open");
+  const mobile = window.matchMedia("(max-width: 900px)").matches;
+  document.body.classList.toggle("workspace-nav-open", expanded);
+  workspaceNavToggle.setAttribute("aria-expanded", String(expanded));
+  if (mobile && !expanded) workspaceSidebar.setAttribute("aria-hidden", "true");
+  else workspaceSidebar.removeAttribute("aria-hidden");
+  if (expanded) $("#workspace-nav-close").focus();
+  else if (mobile && wasOpen && workspaceSidebar.contains(document.activeElement)) workspaceNavToggle.focus();
+}
+
+function runWorkspaceNavigationAction(action) {
+  setWorkspaceNavigationOpen(false);
+  if (action === "content-audit") {
+    switchTab("library");
+    openContentAudit();
+    return;
+  }
+  if (action === "trash") {
+    switchTab("library");
+    openRecycleBin();
+    return;
+  }
+  if (action === "sync-history") {
+    openSyncHistory();
+    return;
+  }
+  if (action === "system-status") {
+    $("#status-details").open = true;
+    $("#status-details summary").focus();
+    return;
+  }
+  if (action === "site-preview") $("#open-site-preview").click();
 }
 
 function applyArticleSuggestion(suggestion, expectedBody) {
@@ -765,7 +909,7 @@ async function applyFlomoImport() {
   await loadLibrary();
   renderFlomoInspection(await api("/api/import/flomo/inspect", { fileData: flomoFileData }));
   flomoCompleteActions.hidden = false;
-  $("#flomo-review-drafts").textContent = `前往内容管理查看 ${result.imported} 篇草稿`;
+  $("#flomo-review-drafts").textContent = `前往内容库查看 ${result.imported} 篇草稿`;
 }
 
 function formatAsset(asset) {
@@ -791,12 +935,18 @@ function formatPublish(result) {
   if (result.git?.push?.attempted) {
     lines.push(result.git.push.ok
       ? "远程推送成功。"
-      : `远程推送失败：${result.git.push.error || "未配置远程仓库。"}\n可在“内容管理”中点击“重试远程推送”。`);
+      : `远程推送失败：${result.git.push.error || "未配置远程仓库。"}\n可在“内容库”中点击“重新同步”。`);
   }
   return lines.join("\n");
 }
 
 function renderLibraryCounts(counts = {}) {
+  libraryCounts = {
+    all: Number(counts.all || 0),
+    draft: Number(counts.draft || 0),
+    local: Number(counts.local || 0),
+    online: Number(counts.online || 0),
+  };
   const countTargets = {
     all: "#library-count-all",
     draft: "#library-count-draft",
@@ -806,6 +956,17 @@ function renderLibraryCounts(counts = {}) {
   for (const [status, selector] of Object.entries(countTargets)) {
     $(selector).textContent = Number(counts[status] || 0);
   }
+  const task = libraryTaskPresentation(libraryCounts);
+  $("#library-task-summary").textContent =
+    `${libraryCounts.all} 项内容 · ${libraryCounts.draft} 项草稿 · ${libraryCounts.local} 项待完成`;
+  $("#library-task-banner").dataset.state = task.state;
+  $("#library-task-kicker").textContent = task.kicker;
+  $("#library-task-title").textContent = task.title;
+  $("#library-task-description").textContent = task.description;
+  const action = $("#library-task-action");
+  action.hidden = task.action === "none";
+  action.textContent = task.actionLabel;
+  action.dataset.libraryTaskAction = task.action;
 }
 
 function renderLibraryView() {
@@ -828,7 +989,9 @@ function currentLibraryFilter() {
 function updateLibrarySelection() {
   const summary = summarizeLibrarySelection(librarySelection);
   const selectedCount = summary.count;
-  librarySelectionSummary.textContent = summary.label;
+  librarySelectionSummary.textContent = selectedCount
+    ? summary.label.replace(/^已选择/, "已批量选择")
+    : "批量模式：尚未选择";
   librarySelectionBar.classList.toggle("has-selection", selectedCount > 0);
   $("#library-bulk-publish").disabled = selectedCount === 0;
   $("#library-bulk-draft").disabled = selectedCount === 0;
@@ -859,12 +1022,40 @@ function clearLibrarySelection() {
   librarySelectedItems.clear();
 }
 
+function setLibraryBatchMode(enabled) {
+  libraryBatchMode = Boolean(enabled);
+  libraryPanel.classList.toggle("is-batch-mode", libraryBatchMode);
+  contentList.dataset.batchMode = String(libraryBatchMode);
+  librarySelectionBar.hidden = !libraryBatchMode;
+  const toggle = $("#library-batch-toggle");
+  toggle.setAttribute("aria-pressed", String(libraryBatchMode));
+  toggle.textContent = libraryBatchMode ? "退出批量" : "批量管理";
+  if (!libraryBatchMode) clearLibrarySelection();
+  renderLibraryTable(libraryPageItems);
+}
+
+function syncLibraryInspectorMode() {
+  const inspectorIsDialog = libraryInspectorDialogQuery.matches && !libraryInspector.hidden;
+  libraryMain.inert = inspectorIsDialog;
+  libraryInspector.setAttribute("role", inspectorIsDialog ? "dialog" : "complementary");
+  if (inspectorIsDialog) libraryInspector.setAttribute("aria-modal", "true");
+  else libraryInspector.removeAttribute("aria-modal");
+  return inspectorIsDialog;
+}
+
 function closeLibraryInspector() {
+  const activeFile = activeContent?.file;
   activeContent = null;
   libraryPanel.classList.remove("has-detail");
+  libraryMain.inert = false;
   libraryInspector.hidden = true;
+  libraryInspector.removeAttribute("aria-modal");
+  libraryInspector.removeAttribute("role");
   libraryActions.hidden = true;
   libraryDetail.innerHTML = '<p class="library-empty">从列表选择一条内容查看详情。</p>';
+  const trigger = $$("[data-content-open]", contentList)
+    .find((button) => button.dataset.contentOpen === activeFile);
+  trigger?.focus();
 }
 
 function renderLibraryTable(items) {
@@ -878,7 +1069,7 @@ function renderLibraryTable(items) {
     <table class="content-table">
       <thead>
         <tr>
-          <th class="content-select-cell"><input id="library-select-page" type="checkbox" aria-label="选择当前页全部内容" /></th>
+          <th class="content-select-cell" data-batch-cell><input id="library-select-page" type="checkbox" aria-label="选择当前页全部内容" /></th>
           <th scope="col">标题</th>
           <th scope="col">状态</th>
           <th scope="col">日期</th>
@@ -889,13 +1080,14 @@ function renderLibraryTable(items) {
         ${items.map((item) => {
           const active = activeContent?.file === item.file;
           const selected = isLibraryFileSelected(librarySelection, item.file);
+          const presentation = libraryItemPresentation(item);
           if (selected) librarySelectedItems.set(item.file, item);
           const typeLabel = item.type === "article" ? "文章" : "图片";
           const summary = item.summary || item.bodyExcerpt || "暂无摘要";
           const tags = list(item.tags).slice(0, 2);
           return `
             <tr class="content-item${active ? " active" : ""}" data-content-file="${escapeHtml(item.file)}" data-content-type="${item.type}">
-              <td class="content-select-cell">
+              <td class="content-select-cell" data-batch-cell>
                 <input type="checkbox" data-content-select="${escapeHtml(item.file)}" aria-label="选择《${escapeHtml(item.title)}》" ${selected ? "checked" : ""} />
               </td>
               <td class="content-title-cell">
@@ -904,7 +1096,7 @@ function renderLibraryTable(items) {
                 <span class="content-item-summary">${escapeHtml(summary)}</span>
               </td>
               <td>
-                <span class="workflow-state compact" data-state="${escapeHtml(item.publication?.state || "unknown")}">${escapeHtml(item.publication?.label || "状态待确认")}</span>
+                <span class="workflow-state compact" data-state="${escapeHtml(item.workflow?.state || item.publication?.state || "unknown")}">${escapeHtml(presentation.label)}</span>
               </td>
               <td class="content-date-cell">${escapeHtml(item.pubDate || "未定")}</td>
               <td class="content-tags-cell">${tags.length ? tags.map((tag) => `<span>${escapeHtml(tag)}</span>`).join("") : "—"}</td>
@@ -1374,12 +1566,15 @@ function renderWorkflowState(workflow) {
 }
 
 function renderPublicationState(publication) {
-  const state = $("#library-publication-state");
-  const description = $("#library-publication-description");
-  if (!state || !description || !publication) return;
-  state.dataset.state = publication.state;
-  state.textContent = publication.label;
-  description.textContent = publication.description;
+  const nextStep = $(".library-next-step", libraryDetail);
+  if (!nextStep || !publication || !activeContent) return;
+  activeContent.publication = publication;
+  const presentation = libraryItemPresentation(activeContent);
+  nextStep.dataset.state = activeContent.workflow?.state || publication.state;
+  $("span", nextStep).textContent = presentation.label;
+  $("strong", nextStep).textContent = presentation.nextTitle;
+  $("p", nextStep).textContent = presentation.nextDescription;
+  updateLibraryActions(activeContent);
 }
 
 async function refreshDeploymentState(item) {
@@ -1388,12 +1583,12 @@ async function refreshDeploymentState(item) {
     const deployment = await api(`/api/content/deployment?${new URLSearchParams({ type: item.type, file: item.file })}`);
     if (activeContent?.file !== item.file) return;
     activeContent.publication = deployment.state === "live"
-      ? { state: "online", label: "云端已发布", description: "云端页面已经匹配当前内容。" }
-      : { state: "local", label: "本地已发布", description: deployment.description || "云端还不是当前版本。" };
+      ? { state: "online", label: "已上线", description: "线上页面已经匹配当前内容。" }
+      : { state: "local", label: "待完成", description: deployment.description || "线上还不是当前版本。" };
     renderPublicationState(activeContent.publication);
   } catch {
     if (activeContent?.file === item.file) {
-      renderPublicationState({ state: "local", label: "本地已发布", description: "暂时无法核对云端页面。" });
+      renderPublicationState({ state: "local", label: "待完成", description: "暂时无法核对线上页面。" });
     }
   }
 }
@@ -1404,19 +1599,24 @@ function updateLibraryActions(item) {
     return;
   }
   libraryActions.hidden = false;
+  const presentation = libraryItemPresentation(item);
   for (const button of $$("button", libraryActions)) button.classList.remove("primary");
   libraryEdit.hidden = false;
   libraryEdit.textContent = item.data.draft ? "打开复核" : "打开编辑";
   libraryTransition.hidden = item.type !== "article";
   libraryTransition.textContent = item.data.draft ? "复核并发布" : "退回草稿";
+  librarySyncCurrent.hidden = presentation.action !== "sync";
   libraryPreview.hidden = item.type !== "article" || !item.data.draft || !item.previewUrl || !sitePreviewAvailable;
   const isPublic = !item.data.draft && (item.type === "article" || item.data.public !== false);
   libraryOpen.hidden = !isPublic || !sitePreviewAvailable;
-  libraryOpen.textContent = item.type === "article" ? "打开本地文章" : "打开本地图片";
-  $("#retry-push").hidden = item.workflow?.state !== "pending_push";
+  libraryOpen.textContent = item.publication?.state === "online"
+    ? "打开线上内容"
+    : item.type === "article" ? "打开本地文章" : "打开本地图片";
+  $("#retry-push").hidden = presentation.action !== "retry";
   if (!$("#retry-push").hidden) $("#retry-push").classList.add("primary");
+  else if (!librarySyncCurrent.hidden) librarySyncCurrent.classList.add("primary");
   else if (item.type === "article" && item.data.draft) libraryTransition.classList.add("primary");
-  else if (isPublic && !libraryOpen.hidden) libraryOpen.classList.add("primary");
+  else if (presentation.action === "open" && !libraryOpen.hidden) libraryOpen.classList.add("primary");
   else libraryEdit.classList.add("primary");
 }
 
@@ -1426,17 +1626,54 @@ async function selectContent(type, file) {
     const listItem = libraryPageItems.find((entry) => entry.file === file);
     item.publication = listItem?.publication || (item.data.draft
       ? { state: "draft", label: "草稿", description: "只保存在本地内容库。" }
-      : { state: "local", label: "本地已发布", description: "正在核对云端页面。" });
+      : { state: "local", label: "待完成", description: "正在核对线上页面。" });
     activeContent = item;
     libraryPanel.classList.add("has-detail");
     libraryInspector.hidden = false;
+    const inspectorIsDialog = syncLibraryInspectorMode();
     updateLibraryActions(item);
-    clearResult(libraryResult);
+    const presentation = libraryItemPresentation(item);
     const internalNote = item.type === "article" && item.data.internalNote
       ? `<div class="internal-review-note"><strong>内部复核备注</strong><p>${escapeHtml(item.data.internalNote)}</p></div>`
       : "";
-    libraryDetail.innerHTML = `<div class="library-detail"><p class="eyebrow">${item.type === "article" ? "文章" : "图片"} · ${escapeHtml(item.data.pubDate || "")}</p><h2>${escapeHtml(item.data.title || "未命名内容")}</h2><p>${escapeHtml(item.data.summary || item.data.description || "")}</p>${internalNote}<div class="tags">${renderTags(item.data.tags)}</div><div class="workflow-summary"><span class="workflow-state" id="library-publication-state" data-state="${escapeHtml(item.publication.state)}">${escapeHtml(item.publication.label)}</span><p id="library-publication-description">${escapeHtml(item.publication.description)}</p><details class="sync-details"><summary>同步详情</summary><span class="workflow-state" id="library-workflow-state" data-state="${escapeHtml(item.workflow?.state || "unknown")}">${escapeHtml(item.workflow?.label || "状态待确认")}</span><p id="library-workflow-description">${escapeHtml(item.workflow?.description || "正在读取发布状态。")}</p></details></div><p class="content-item-meta">${escapeHtml(item.file)}</p></div>`;
+    const media = item.type === "image" && item.data.image
+      ? `<figure class="library-detail-media"><img src="${escapeHtml(item.data.image)}" alt="${escapeHtml(item.data.title || "图片预览")}" /></figure>`
+      : item.type === "article" && item.data.coverImage
+        ? `<figure class="library-detail-media article"><img src="${escapeHtml(item.data.coverImage)}" alt="${escapeHtml(item.data.coverAlt || item.data.title || "文章封面")}" /></figure>`
+        : "";
+    const sourceDetail = item.type === "image"
+      ? item.data.sourceKind === "user_provided"
+        ? "用户提供 · 已确认可公开发布"
+        : item.data.source || "来源待确认"
+      : item.data.source || "未标注来源";
+    const syncOpen = presentation.action === "retry" ? " open" : "";
+    libraryDetail.innerHTML = `
+      <div class="library-detail">
+        ${media}
+        <p class="eyebrow">${item.type === "article" ? "文章" : "图片"} · ${escapeHtml(item.data.pubDate || "")}</p>
+        <h2>${escapeHtml(item.data.title || "未命名内容")}</h2>
+        <p class="library-detail-summary">${escapeHtml(item.data.summary || item.data.description || "")}</p>
+        ${internalNote}
+        <div class="tags">${renderTags(item.data.tags)}</div>
+        <section class="library-next-step" data-state="${escapeHtml(item.workflow?.state || item.publication?.state || "unknown")}">
+          <span>${escapeHtml(presentation.label)}</span>
+          <strong>${escapeHtml(presentation.nextTitle)}</strong>
+          <p>${escapeHtml(presentation.nextDescription)}</p>
+        </section>
+        <dl class="library-detail-facts">
+          <div><dt>来源</dt><dd>${escapeHtml(sourceDetail)}</dd></div>
+          <div><dt>发布日期</dt><dd>${escapeHtml(item.data.pubDate || "未定")}</dd></div>
+          <div><dt>内容 ID</dt><dd>${escapeHtml(item.data.contentId || "尚未分配")}</dd></div>
+        </dl>
+        <details class="sync-details"${syncOpen}>
+          <summary>同步与技术信息</summary>
+          <span class="workflow-state" id="library-workflow-state" data-state="${escapeHtml(item.workflow?.state || "unknown")}">${escapeHtml(item.workflow?.label || "状态待确认")}</span>
+          <p id="library-workflow-description">${escapeHtml(item.workflow?.description || "正在读取发布状态。")}</p>
+          <code>${escapeHtml(item.file)}</code>
+        </details>
+      </div>`;
     await loadLibrary();
+    if (inspectorIsDialog) $("#library-close-detail").focus();
     refreshDeploymentState(item);
   } catch (error) {
     showError(libraryResult, error);
@@ -1450,6 +1687,8 @@ function openActiveContent(nextDraft = null) {
     setFormValues(articleForm, { ...data, tags: list(data.tags).join(", "), body });
     setPublishMode(articleForm, typeof nextDraft === "boolean" ? (nextDraft ? "draft" : "publish") : (data.draft ? "draft" : "publish"));
     syncArticleAttribution();
+    resetArticleTitleSuggestions();
+    syncAiAvailability();
     articleDetails.open = true;
     setEditing(articleForm, {
       file,
@@ -1482,6 +1721,20 @@ function openActiveContent(nextDraft = null) {
 }
 
 for (const tab of $$(".tab")) tab.addEventListener("click", () => switchTab(tab.dataset.tab));
+workspaceNavToggle.addEventListener("click", () => setWorkspaceNavigationOpen(true));
+$("#workspace-nav-close").addEventListener("click", () => setWorkspaceNavigationOpen(false));
+$("#workspace-nav-scrim").addEventListener("click", () => setWorkspaceNavigationOpen(false));
+for (const button of $$("[data-nav-action]")) {
+  button.addEventListener("click", () => runWorkspaceNavigationAction(button.dataset.navAction));
+}
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && document.body.classList.contains("workspace-nav-open")) {
+    setWorkspaceNavigationOpen(false);
+  }
+});
+window.matchMedia("(max-width: 900px)").addEventListener("change", () => {
+  setWorkspaceNavigationOpen(false);
+});
 
 for (const input of $$("input, textarea, select", articleForm)) {
   input.addEventListener("input", () => {
@@ -1491,6 +1744,8 @@ for (const input of $$("input, textarea, select", articleForm)) {
     syncArticleActionState();
     syncAiAvailability();
     updateArticlePreview();
+    if (input.name === "title") syncArticleTitleCandidateSelection();
+    if (["body", "summary", "sourceUrl"].includes(input.name)) invalidateArticleTitleSuggestions();
     saveLocalDraft(articleForm);
   });
   input.addEventListener("change", () => {
@@ -1500,6 +1755,8 @@ for (const input of $$("input, textarea, select", articleForm)) {
     syncArticleActionState();
     syncAiAvailability();
     updateArticlePreview();
+    if (input.name === "title") syncArticleTitleCandidateSelection();
+    if (["body", "summary", "sourceUrl"].includes(input.name)) invalidateArticleTitleSuggestions();
     saveLocalDraft(articleForm);
   });
 }
@@ -1587,6 +1844,7 @@ $('[data-ai-fill="article"]').addEventListener("click", async (event) => {
     const payload = formData(articleForm);
     const suggestion = (await api("/api/ai/article-suggestion", payload)).suggestion;
     const paragraphFormatting = applyArticleSuggestion(suggestion, payload.body);
+    resetArticleTitleSuggestions();
     const paragraphMessage = paragraphFormatting === "applied"
       ? "不合理的长段落已整理；正文内容未改动。"
       : paragraphFormatting === "rejected"
@@ -1600,6 +1858,36 @@ $('[data-ai-fill="article"]').addEventListener("click", async (event) => {
   }
   catch (error) { showError(articleResult, error); }
   finally { button.disabled = false; button.textContent = "AI 整理文章资料"; syncAiAvailability(); }
+});
+
+articleTitleAi.addEventListener("click", async () => {
+  const payload = articleTitleSuggestionPayload();
+  const requestContext = JSON.stringify(payload);
+  articleTitleAi.setAttribute("aria-busy", "true");
+  articleTitleAiStatus.dataset.state = "busy";
+  articleTitleAiStatus.textContent = "正在生成 3 个新标题…";
+  syncAiAvailability();
+  try {
+    const { titles } = await api("/api/ai/article-title-suggestions", payload);
+    if (JSON.stringify(articleTitleSuggestionPayload()) !== requestContext) {
+      articleTitleAiStatus.dataset.state = "error";
+      articleTitleAiStatus.textContent = "生成期间文章资料已修改，请重新生成标题。";
+      return;
+    }
+    renderArticleTitleSuggestions(titles);
+  } catch (error) {
+    articleTitleAiStatus.dataset.state = "error";
+    articleTitleAiStatus.textContent = error.message;
+  } finally {
+    articleTitleAi.setAttribute("aria-busy", "false");
+    syncAiAvailability();
+  }
+});
+
+articleTitleCandidateList.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-title-candidate]");
+  if (!button) return;
+  applyArticleTitleSuggestion(button.dataset.titleCandidate);
 });
 
 $('[data-ai-fill="image"]').addEventListener("click", async (event) => {
@@ -1767,8 +2055,8 @@ async function transitionSelectedContent(target) {
         result.skipped.length ? `${result.skipped.length} 条已经处于目标状态，已跳过。` : "",
         result.failed.length ? `${result.failed.length} 条处理失败：\n${batchFailureSummary(result.failed)}` : "",
         target === "draft"
-          ? "云端已发布内容需继续同步后，云端页面才会下架。"
-          : "本地站点已更新；云端内容尚未变化。",
+          ? "已上线内容需继续同步后，线上页面才会下架。"
+          : "本地站点已更新；线上内容尚未变化。",
       ].filter(Boolean).join("\n"),
     );
   } catch (error) {
@@ -1780,10 +2068,9 @@ async function transitionSelectedContent(target) {
   }
 }
 
-async function syncSelectedContent() {
+async function syncSelectedContent(button = $("#library-bulk-sync")) {
   const selection = summarizeLibrarySelection(librarySelection);
   if (!selection.count) return;
-  const button = $("#library-bulk-sync");
   button.disabled = true;
   button.setAttribute("aria-busy", "true");
   showResult(libraryResult, "正在检查所选内容…");
@@ -1815,7 +2102,7 @@ async function syncSelectedContent() {
           : `已完成本地提交，但推送失败：${result.push?.error || "未知错误"}`,
         result.skipped.length ? `${result.skipped.length} 条草稿未参与同步。` : "",
         result.compareUrl ? `下一步创建并合并 PR：${result.compareUrl}` : "",
-        "Cloudflare 部署完成后，列表会自动显示为“云端已发布”。",
+        "Cloudflare 部署完成并通过线上核验后，列表会自动显示为“已上线”。",
       ].filter(Boolean).join("\n"),
     );
   } catch (error) {
@@ -1824,6 +2111,24 @@ async function syncSelectedContent() {
     button.disabled = false;
     button.removeAttribute("aria-busy");
     updateLibrarySelection();
+  }
+}
+
+async function syncCurrentContent() {
+  if (!activeContent) return;
+  clearLibrarySelection();
+  setLibraryFileSelected(librarySelection, activeContent.file, true);
+  librarySelectedItems.set(activeContent.file, {
+    type: activeContent.type,
+    file: activeContent.file,
+  });
+  try {
+    await syncSelectedContent(librarySyncCurrent);
+  } finally {
+    if (!libraryBatchMode) {
+      clearLibrarySelection();
+      updateLibrarySelection();
+    }
   }
 }
 
@@ -1965,9 +2270,9 @@ async function restoreLastTrashedDrafts() {
 }
 
 contentList.addEventListener("click", (event) => {
-  const button = event.target.closest("[data-content-open]");
-  const row = button?.closest("[data-content-file]");
-  if (button && row) selectContent(row.dataset.contentType, row.dataset.contentFile);
+  if (event.target.closest("[data-content-select], #library-select-page")) return;
+  const row = event.target.closest("[data-content-file]");
+  if (row) selectContent(row.dataset.contentType, row.dataset.contentFile);
 });
 
 contentList.addEventListener("change", (event) => {
@@ -2015,6 +2320,14 @@ for (const button of $$("[data-library-view]")) {
 }
 
 $("#library-refresh").addEventListener("click", loadLibrary);
+$("#library-batch-toggle").addEventListener("click", () => setLibraryBatchMode(!libraryBatchMode));
+$("#library-task-action").addEventListener("click", (event) => {
+  const action = event.currentTarget.dataset.libraryTaskAction;
+  if (!["pending", "draft"].includes(action)) return;
+  resetLibraryNavigation();
+  setLibraryStatus(action === "draft" ? "draft" : "local");
+  loadLibrary();
+});
 $("#library-audit").addEventListener("click", openContentAudit);
 $("#article-open-assets").addEventListener("click", () => openAssetLibrary("insert"));
 $("#article-cover-assets").addEventListener("click", () => openAssetLibrary("cover"));
@@ -2145,9 +2458,17 @@ $("#library-bulk-edit").addEventListener("click", () => {
   $("#batch-edit-summary").textContent = `${summarizeLibrarySelection(librarySelection).label}。只会修改勾选的字段。`;
   batchEditDialog.showModal();
 });
-$("#library-bulk-sync").addEventListener("click", syncSelectedContent);
+$("#library-bulk-sync").addEventListener("click", (event) => syncSelectedContent(event.currentTarget));
 $("#library-bulk-trash").addEventListener("click", trashSelectedContent);
 $("#library-undo-trash").addEventListener("click", restoreLastTrashedDrafts);
+$("#library-dismiss-feedback").addEventListener("click", () => clearResult(libraryResult));
+$("#library-close-detail").addEventListener("click", closeLibraryInspector);
+libraryInspector.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") closeLibraryInspector();
+});
+libraryInspectorDialogQuery.addEventListener("change", () => {
+  if (!libraryInspector.hidden) syncLibraryInspectorMode();
+});
 $("#batch-edit-close").addEventListener("click", () => batchEditDialog.close());
 $("#batch-edit-cancel").addEventListener("click", () => batchEditDialog.close());
 batchEditDialog.addEventListener("click", (event) => {
@@ -2171,6 +2492,7 @@ $("#library-page-numbers").addEventListener("click", (event) => {
   loadLibrary();
 });
 libraryEdit.addEventListener("click", () => openActiveContent());
+librarySyncCurrent.addEventListener("click", syncCurrentContent);
 libraryTransition.addEventListener("click", () => {
   if (!activeContent || activeContent.type !== "article") return;
   openActiveContent(!Boolean(activeContent.data.draft));
@@ -2339,6 +2661,7 @@ async function loadStatus() {
     preview.dataset.state = sitePreviewAvailable ? "ready" : "offline";
     preview.textContent = sitePreviewAvailable ? "站点预览运行中" : "站点预览未运行";
     $("#open-site-preview").disabled = !sitePreviewAvailable;
+    $("#workspace-open-site-preview").disabled = !sitePreviewAvailable;
     const publicPending = Number(status.publicationCounts?.local || 0);
     const syncSummary = $("#content-sync-summary");
     syncSummary.dataset.state = publicPending ? "attention" : "ready";
@@ -2403,6 +2726,7 @@ setLibraryStatus(libraryStatus);
 renderLibraryView();
 updateArticlePreview();
 updateImagePreview();
+setWorkspaceNavigationOpen(false);
 loadStatus();
 
 window.addEventListener("beforeunload", (event) => {

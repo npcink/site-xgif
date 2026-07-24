@@ -4,61 +4,107 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>XGIF 本地发布助手</title>
-    <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/styles.css?v=20260724-title-ai" />
   </head>
   <body>
-    <header class="topbar">
-      <div>
-        <p class="eyebrow">XGIF Local Publisher</p>
-        <h1>本地发布助手</h1>
-      </div>
-      <div class="topbar-tools">
-        <div class="publisher-health" id="publisher-health" data-state="checking" aria-live="polite">
-          <span class="health-dot" aria-hidden="true"></span>
-          <span>
-            <strong id="publisher-health-label">正在检查本地环境</strong>
-            <small id="publisher-health-detail">发布台、站点预览与待同步内容</small>
-          </span>
-        </div>
-        <details class="status-details" id="status-details">
-          <summary>系统详情与工具</summary>
-          <div class="system-status-panel">
-            <div class="service-status">
-              <span class="service-pill" id="publisher-service">管理端检查中</span>
-              <span class="service-pill" id="site-preview-service">站点预览检查中</span>
-              <span class="service-pill" id="content-sync-summary">正在检查内容</span>
-            </div>
-            <div class="system-actions">
-              <button type="button" id="open-pending-content">查看待同步</button>
-              <button type="button" id="open-sync-history">同步记录</button>
-              <button type="button" id="system-create-backup">创建安全备份</button>
-              <button type="button" id="system-run-recovery">运行恢复演练</button>
-              <button type="button" id="refresh-services">刷新状态</button>
-              <button type="button" id="open-site-preview" disabled>打开站点预览</button>
-            </div>
-            <section class="recovery-dashboard" aria-labelledby="recovery-dashboard-title">
-              <div class="recovery-dashboard-heading">
-                <strong id="recovery-dashboard-title">数据安全状态</strong>
-                <button type="button" id="recovery-dashboard-refresh">刷新</button>
-              </div>
-              <div class="recovery-dashboard-grid" id="recovery-dashboard-grid">
-                <p>展开后读取备份与恢复状态。</p>
-              </div>
-              <p class="recovery-dashboard-result" id="recovery-dashboard-result" role="status"></p>
-            </section>
-            <div class="status" id="status">读取状态中...</div>
+    <div class="app-frame" id="app-frame">
+      <aside class="workspace-sidebar" id="workspace-sidebar" aria-label="发布助手导航">
+        <header class="sidebar-brand">
+          <div>
+            <p class="eyebrow">XGIF</p>
+            <strong>本地发布助手</strong>
+            <small>内容发布工作台</small>
           </div>
-        </details>
-      </div>
-    </header>
+          <button class="sidebar-close" id="workspace-nav-close" type="button" aria-label="关闭导航菜单">关闭</button>
+        </header>
 
-    <main class="shell">
-      <nav class="tabs" aria-label="发布类型">
-        <button class="tab active" data-tab="article" type="button">发布文章</button>
-        <button class="tab" data-tab="image" type="button">发布图片</button>
-        <button class="tab" data-tab="import" type="button">批量导入</button>
-        <button class="tab" data-tab="library" type="button">内容管理</button>
-      </nav>
+        <nav class="workspace-navigation" aria-label="工作台功能">
+          <section class="workspace-nav-section is-current" data-nav-section="content">
+            <p>内容</p>
+            <div>
+              <button class="tab" data-tab="library" type="button">内容库</button>
+              <button class="tab active" data-tab="article" type="button" aria-current="page">新建文章</button>
+              <button class="tab" data-tab="image" type="button">新建图片</button>
+              <button class="tab" data-tab="import" type="button">导入内容</button>
+            </div>
+          </section>
+
+          <section class="workspace-nav-section">
+            <p>管理</p>
+            <div>
+              <button type="button" data-nav-action="content-audit">内容体检与标签</button>
+              <button type="button" data-nav-action="trash">回收站</button>
+              <button type="button" data-nav-action="sync-history">同步记录</button>
+            </div>
+          </section>
+
+          <section class="workspace-nav-section">
+            <p>系统</p>
+            <div>
+              <button type="button" data-nav-action="system-status">系统状态与恢复</button>
+              <button type="button" data-nav-action="site-preview" id="workspace-open-site-preview" disabled>打开站点预览</button>
+            </div>
+          </section>
+        </nav>
+
+        <footer class="sidebar-footer">
+          <span>LOCAL ONLY</span>
+          <small>内容和配置仅在本机处理</small>
+        </footer>
+      </aside>
+
+      <button class="sidebar-scrim" id="workspace-nav-scrim" type="button" aria-label="关闭导航菜单" tabindex="-1"></button>
+
+      <div class="app-workspace">
+        <header class="topbar">
+          <div class="workspace-page-context">
+            <button class="workspace-nav-toggle" id="workspace-nav-toggle" type="button" aria-controls="workspace-sidebar" aria-expanded="false">菜单</button>
+            <div>
+              <p class="eyebrow">WORKSPACE</p>
+              <h1 id="workspace-page-title">新建文章</h1>
+            </div>
+          </div>
+          <div class="topbar-tools">
+            <div class="publisher-health" id="publisher-health" data-state="checking" aria-live="polite">
+              <span class="health-dot" aria-hidden="true"></span>
+              <span>
+                <strong id="publisher-health-label">正在检查本地环境</strong>
+                <small id="publisher-health-detail">发布台、站点预览与待同步内容</small>
+              </span>
+            </div>
+            <details class="status-details" id="status-details">
+              <summary>系统详情与工具</summary>
+              <div class="system-status-panel">
+                <div class="service-status">
+                  <span class="service-pill" id="publisher-service">管理端检查中</span>
+                  <span class="service-pill" id="site-preview-service">站点预览检查中</span>
+                  <span class="service-pill" id="content-sync-summary">正在检查内容</span>
+                </div>
+                <div class="system-actions">
+                  <button type="button" id="open-pending-content">查看待同步</button>
+                  <button type="button" id="open-sync-history">同步记录</button>
+                  <button type="button" id="system-create-backup">创建安全备份</button>
+                  <button type="button" id="system-run-recovery">运行恢复演练</button>
+                  <button type="button" id="refresh-services">刷新状态</button>
+                  <button type="button" id="open-site-preview" disabled>打开站点预览</button>
+                </div>
+                <section class="recovery-dashboard" aria-labelledby="recovery-dashboard-title">
+                  <div class="recovery-dashboard-heading">
+                    <strong id="recovery-dashboard-title">数据安全状态</strong>
+                    <button type="button" id="recovery-dashboard-refresh">刷新</button>
+                  </div>
+                  <div class="recovery-dashboard-grid" id="recovery-dashboard-grid">
+                    <p>展开后读取备份与恢复状态。</p>
+                  </div>
+                  <p class="recovery-dashboard-result" id="recovery-dashboard-result" role="status"></p>
+                </section>
+                <div class="status" id="status">读取状态中...</div>
+              </div>
+            </details>
+          </div>
+        </header>
+
+        <main class="shell">
 
       <section class="panel active" id="article-panel">
         <form id="article-form" class="editor">
@@ -114,14 +160,32 @@
           <details class="editor-details" id="article-details">
             <summary><span>文章详细资料</span><small>标题、摘要、标签与发布信息</small></summary>
             <div class="form-grid article-details-grid">
-              <label>
-                标题
-                <input name="title" required placeholder="文章标题" />
-              </label>
+              <div class="form-field title-suggestion-field">
+                <span class="field-label-row">
+                  <label for="article-title">标题</label>
+                  <button
+                    class="title-ai-action"
+                    id="article-title-ai"
+                    type="button"
+                    aria-controls="article-title-suggestions"
+                    aria-describedby="article-title-ai-status"
+                    disabled
+                  >AI 换标题</button>
+                </span>
+                <input id="article-title" name="title" required placeholder="文章标题" />
+                <p class="title-ai-status" id="article-title-ai-status" role="status" aria-live="polite"></p>
+              </div>
               <label>
                 发布日期
                 <input name="pubDate" type="date" />
               </label>
+              <section class="title-suggestion-panel span-2" id="article-title-suggestions" aria-labelledby="article-title-suggestion-heading" hidden>
+                <div>
+                  <strong id="article-title-suggestion-heading">选择一个候选标题</strong>
+                  <small>只替换标题，不改摘要、标签和正文。</small>
+                </div>
+                <div class="title-candidate-list" id="article-title-candidate-list"></div>
+              </section>
               <label class="span-2">
                 摘要
                 <textarea name="summary" required rows="3" placeholder="一句到两句说明这篇文章讲什么"></textarea>
@@ -472,18 +536,34 @@
           </div>
           <pre class="result" id="flomo-result" hidden></pre>
           <div class="import-complete-actions" id="flomo-complete-actions" hidden>
-            <button class="primary" id="flomo-review-drafts" type="button">前往内容管理查看草稿</button>
+            <button class="primary" id="flomo-review-drafts" type="button">前往内容库查看草稿</button>
           </div>
         </div>
       </section>
 
       <section class="panel library-panel" id="library-panel">
         <div class="library-main">
+          <header class="library-heading">
+            <div>
+              <p class="eyebrow">CONTENT LIBRARY</p>
+              <h2>内容库</h2>
+              <p id="library-task-summary">正在读取内容状态…</p>
+            </div>
+            <button type="button" id="library-batch-toggle" aria-pressed="false">批量管理</button>
+          </header>
+          <section class="library-task-banner" id="library-task-banner" data-state="checking" aria-live="polite">
+            <div>
+              <span id="library-task-kicker">正在检查</span>
+              <strong id="library-task-title">读取发布任务…</strong>
+              <p id="library-task-description">正在核对草稿、本地内容与线上版本。</p>
+            </div>
+            <button class="primary" type="button" id="library-task-action" hidden></button>
+          </section>
           <div class="library-status-tabs" aria-label="按发布状态筛选">
             <button class="active" type="button" data-library-status="all" aria-pressed="true">全部 <span id="library-count-all">0</span></button>
             <button type="button" data-library-status="draft" aria-pressed="false">草稿 <span id="library-count-draft">0</span></button>
-            <button type="button" data-library-status="local" aria-pressed="false">待同步 <span id="library-count-local">0</span></button>
-            <button type="button" data-library-status="online" aria-pressed="false">云端 <span id="library-count-online">0</span></button>
+            <button type="button" data-library-status="local" aria-pressed="false">待完成 <span id="library-count-local">0</span></button>
+            <button type="button" data-library-status="online" aria-pressed="false">已上线 <span id="library-count-online">0</span></button>
           </div>
           <div class="library-toolbar">
             <label class="library-search">
@@ -498,25 +578,25 @@
                 <option value="image">图片</option>
               </select>
             </label>
-            <label>
-              <span class="sr-only">排序方式</span>
-              <select id="library-sort" aria-label="排序方式">
-                <option value="newest">最新日期</option>
-                <option value="oldest">最早日期</option>
-                <option value="title">按标题</option>
-              </select>
-            </label>
-            <label>
-              <span class="sr-only">每页数量</span>
-              <select id="library-page-size" aria-label="每页数量">
-                <option value="15">每页 15 条</option>
-                <option value="30">每页 30 条</option>
-                <option value="50">每页 50 条</option>
-              </select>
-            </label>
             <details class="library-tools-more">
-              <summary>管理工具</summary>
+              <summary>筛选与工具</summary>
               <div>
+                <label>
+                  <span>排序</span>
+                  <select id="library-sort" aria-label="排序方式">
+                    <option value="newest">最新日期</option>
+                    <option value="oldest">最早日期</option>
+                    <option value="title">按标题</option>
+                  </select>
+                </label>
+                <label>
+                  <span>每页数量</span>
+                  <select id="library-page-size" aria-label="每页数量">
+                    <option value="15">每页 15 条</option>
+                    <option value="30">每页 30 条</option>
+                    <option value="50">每页 50 条</option>
+                  </select>
+                </label>
                 <button type="button" id="library-audit">内容体检</button>
                 <button type="button" id="library-refresh">刷新列表</button>
                 <button type="button" id="library-open-trash">回收站 <span id="library-trash-count">0</span></button>
@@ -527,9 +607,9 @@
               </div>
             </details>
           </div>
-          <div class="library-selection-bar" id="library-selection-bar">
+          <div class="library-selection-bar" id="library-selection-bar" hidden>
             <div class="library-selection-copy">
-              <p id="library-selection-summary" aria-live="polite">未选择内容</p>
+              <p id="library-selection-summary" aria-live="polite">批量模式：尚未选择</p>
               <button class="text-action" type="button" id="library-select-filtered" hidden></button>
             </div>
             <div class="library-bulk-actions">
@@ -543,10 +623,16 @@
                   <button class="danger" type="button" id="library-bulk-trash" disabled>移至回收站</button>
                 </div>
               </details>
-              <button type="button" id="library-undo-trash" hidden>撤销删除</button>
               <button type="button" id="library-clear-selection" disabled>清除选择</button>
             </div>
             <p id="library-page-summary">正在读取内容…</p>
+          </div>
+          <div class="library-feedback" id="library-feedback" hidden role="status" aria-live="polite">
+            <pre id="library-result" hidden></pre>
+            <div>
+              <button type="button" id="library-undo-trash" hidden>撤销删除</button>
+              <button type="button" id="library-dismiss-feedback">关闭</button>
+            </div>
           </div>
           <div class="content-list" id="content-list" data-view="compact"></div>
           <nav class="library-pagination" id="library-pagination" aria-label="内容分页" hidden>
@@ -556,19 +642,24 @@
           </nav>
         </div>
         <aside class="library-inspector" id="library-inspector" hidden>
-          <p class="eyebrow">内容详情</p>
+          <div class="library-inspector-heading">
+            <p class="eyebrow">当前内容</p>
+            <button type="button" id="library-close-detail" aria-label="关闭内容详情">关闭</button>
+          </div>
           <div id="library-detail" class="library-empty">从左侧选择一条内容。</div>
           <div class="library-actions" id="library-actions" hidden>
             <button type="button" id="library-edit">打开编辑</button>
             <button type="button" id="library-transition" hidden>复核并发布</button>
+            <button type="button" id="library-sync-current" hidden>同步当前内容</button>
             <button type="button" id="library-preview" hidden>真实预览</button>
             <button type="button" id="library-open" hidden>在网站打开</button>
-            <button type="button" id="retry-push" hidden>重试远程推送</button>
+            <button type="button" id="retry-push" hidden>重新同步</button>
           </div>
-          <pre class="result" id="library-result" hidden></pre>
         </aside>
       </section>
-    </main>
+        </main>
+      </div>
+    </div>
 
     <dialog class="trash-dialog content-audit-dialog" id="content-audit-dialog">
       <div class="trash-dialog-heading">
@@ -705,6 +796,6 @@
       <div class="asset-library-list" id="asset-library-list"></div>
     </dialog>
 
-    <script src="/app.js" type="module"></script>
+    <script src="/app.js?v=20260724-title-ai" type="module"></script>
   </body>
 </html>

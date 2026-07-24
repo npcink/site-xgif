@@ -104,6 +104,19 @@ try {
     body: "{}",
   });
   assert.equal(validCsrf.status, 404);
+
+  const emptyTitleSuggestions = await call({
+    method: "POST",
+    pathname: "/api/ai/article-title-suggestions",
+    headers: {
+      "content-type": "application/json",
+      "x-xgif-csrf": csrf,
+      origin: `http://127.0.0.1:${port}`,
+    },
+    body: "{}",
+  });
+  assert.equal(emptyTitleSuggestions.status, 400);
+  assert.match(emptyTitleSuggestions.json().error, /正文、摘要或来源链接/);
   console.log("本地发布器 HTTP 集成检查通过。");
 } finally {
   child.kill("SIGTERM");
