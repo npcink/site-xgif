@@ -14,18 +14,23 @@ async function fixture() {
   const imagesDir = path.join(repoRoot, "site", "src", "content", "images");
   const trashDir = path.join(workflowRoot, "trash", "content");
   const migrationsDir = path.join(workflowRoot, "db", "migrations");
-  const sourceMigration = new URL("../db/migrations/001-initial.sql", import.meta.url);
+  const sourceMigrations = [
+    new URL("../db/migrations/001-initial.sql", import.meta.url),
+    new URL("../db/migrations/002-content-query-fields.sql", import.meta.url),
+  ];
   await Promise.all([
     mkdir(articlesDir, { recursive: true }),
     mkdir(imagesDir, { recursive: true }),
     mkdir(trashDir, { recursive: true }),
     mkdir(migrationsDir, { recursive: true }),
   ]);
-  await writeFile(
-    path.join(migrationsDir, "001-initial.sql"),
-    await readFile(sourceMigration, "utf8"),
-    "utf8",
-  );
+  for (const sourceMigration of sourceMigrations) {
+    await writeFile(
+      path.join(migrationsDir, path.basename(sourceMigration.pathname)),
+      await readFile(sourceMigration, "utf8"),
+      "utf8",
+    );
+  }
   return { repoRoot, workflowRoot, articlesDir, trashDir, migrationsDir };
 }
 
@@ -115,5 +120,46 @@ test("operation history can filter sync records and tolerates damaged details", 
   assert.deepEqual(records[0].details, {});
   assert.equal(records[1].details.branch, "codex/safe-content");
   assert.equal(records[1].details.count, 8);
+  store.close();
+});
+
+test("content index supports incremental refresh and filtered ordering", async () => {
+  const dirs = await fixture();
+  await writeFile(path.join(dirs.articlesDir, "20260724-ab12.md"), `---
+title: "第二篇"
+contentId: "20260724-ab12"
+summary: "包含独特搜索词"
+source: "xgif.cn"
+tags: ["生活"]
+pubDate: 2026-07-24
+draft: false
+---
+
+正文片段
+`);
+  const store = new LocalDataStore(dirs);
+  await store.initialize();
+  const initial = store.listContentIndex({ type: "article", query: "独特搜索词" });
+  assert.equal(initial.length, 1);
+  assert.equal(initial[0].contentId, "20260724-ab12");
+  assert.equal(initial[0].bodyExcerpt, "正文片段");
+
+  await writeFile(path.join(dirs.articlesDir, "20260724-ab12.md"), `---
+title: "已修改标题"
+contentId: "20260724-ab12"
+summary: "新的摘要"
+source: "xgif.cn"
+tags: ["生活"]
+pubDate: 2026-07-24
+draft: true
+---
+
+更新后的正文
+`);
+  const sync = await store.syncContentIndex();
+  assert.equal(sync.changed, 1);
+  const refreshed = store.listContentIndex({ type: "article", query: "新的摘要" });
+  assert.equal(refreshed[0].title, "已修改标题");
+  assert.equal(refreshed[0].draft, true);
   store.close();
 });

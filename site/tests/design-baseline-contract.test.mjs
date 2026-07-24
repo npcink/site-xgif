@@ -66,6 +66,7 @@ test("visual baseline keeps the desktop search and honest update layout contract
 test("production assets define a defensive Cloudflare header policy", async () => {
   const headers = await read("public/_headers");
   assert.match(headers, /Content-Security-Policy:/);
+  assert.doesNotMatch(headers, /unsafe-inline/);
   assert.match(headers, /frame-ancestors 'none'/);
   assert.match(headers, /Strict-Transport-Security:/);
   assert.match(headers, /X-Content-Type-Options: nosniff/);

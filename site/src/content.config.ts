@@ -50,6 +50,8 @@ const images = defineCollection({
     contentId,
     description: z.string(),
     image: imagePath,
+    width: z.number().int().positive().optional(),
+    height: z.number().int().positive().optional(),
     source: z.string(),
     sourceKind: imageSourceKind.default("original"),
     sourceUrl: httpUrl.optional(),

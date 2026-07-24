@@ -44,7 +44,7 @@ const popularTags = ["AI", "互联网", "打工", "无语", "反转", "群聊", 
       <div class="feature-copy">
         <span class="mini-label">READ · {featured.data.readTime.toUpperCase()}</span>
         <h2>{featured.data.title}</h2>
-        <a href={contentHref("articles", featured)} data-detail-link>读摘要 <span>→</span></a>
+        <a href={contentHref("articles", featured)} data-detail-link>阅读全文 <span>→</span></a>
       </div>
     </div>
   </section>
@@ -62,7 +62,7 @@ const popularTags = ["AI", "互联网", "打工", "无语", "反转", "群聊", 
         <p class="section-kicker">DISCOVER / 发现</p>
         <h2>今天有什么好东西？</h2>
       </div>
-      <p>从摘要快速了解，也用一张图说完复杂情绪。</p>
+      <p>先从编辑摘要快速了解，也可以继续阅读完整正文。</p>
     </div>
 
     <div class="search-panel" data-home-discovery>
@@ -73,7 +73,7 @@ const popularTags = ["AI", "互联网", "打工", "无语", "反转", "群聊", 
       </label>
       <div class="view-tabs" role="group" aria-label="内容类型">
         <button class="active" type="button" data-home-view="all" aria-pressed="true">全部</button>
-        <button type="button" data-home-view="articles" aria-pressed="false">文章摘要</button>
+        <button type="button" data-home-view="articles" aria-pressed="false">文章</button>
         <button type="button" data-home-view="images" aria-pressed="false">图片 / GIF</button>
       </div>
     </div>
@@ -81,7 +81,7 @@ const popularTags = ["AI", "互联网", "打工", "无语", "反转", "群聊", 
 
     <div class="content-section" id="articles" data-home-section="articles">
       <div class="content-title">
-        <h2>文章摘要 <sup>{String(articles.length).padStart(2, "0")}</sup></h2>
+        <h2>文章 <sup>{String(articles.length).padStart(2, "0")}</sup></h2>
         <a href="/articles/">查看全部文章 →</a>
       </div>
       <div class="article-grid">
@@ -127,11 +127,11 @@ const popularTags = ["AI", "互联网", "打工", "无语", "反转", "群聊", 
     <div>
       <p class="section-kicker">EDITORIAL UPDATE</p>
       <h2>不用订阅，也能随时回来继续看。</h2>
-      <p>当前站点不收集邮箱。新内容会直接进入文章摘要和图片索引。</p>
+      <p>当前站点不收集邮箱。新内容会直接进入文章和图片索引。</p>
     </div>
     <div class="newsletter-placeholder">
       <span>无需注册 · 不采集联系方式</span>
-      <a href="/articles/">浏览全部文章摘要 <span>→</span></a>
+      <a href="/articles/">浏览全部文章 <span>→</span></a>
     </div>
   </section>
   <script is:inline src="/scripts/home-discovery.js"></script>

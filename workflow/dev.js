@@ -12,6 +12,7 @@ import {
 import { request } from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { publisherSourceVersion } from "./runtime-version.js";
 
 const workflowRoot = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(workflowRoot, "..");
@@ -21,20 +22,47 @@ const runtimeRoot = path.join(workflowRoot, ".runtime");
 const publisherPidFile = path.join(runtimeRoot, "publisher.json");
 const publisherLog = path.join(runtimeRoot, "publisher.log");
 const previewLog = path.join(runtimeRoot, "preview.log");
-const publisherUrl = "http://127.0.0.1:8787/api/status";
+const publisherUrl = "http://127.0.0.1:8787/api/health";
 const previewUrl = "http://127.0.0.1:4321/";
+const expectedPublisherVersion = publisherSourceVersion(workflowRoot);
 
 function probe(url, timeoutMs = 900) {
   return new Promise((resolve) => {
     const req = request(url, { method: "GET" }, (res) => {
       res.resume();
-      resolve(Boolean(res.statusCode && res.statusCode < 500));
+      resolve(Boolean(res.statusCode && res.statusCode >= 200 && res.statusCode < 300));
     });
     req.setTimeout(timeoutMs, () => {
       req.destroy();
       resolve(false);
     });
     req.on("error", () => resolve(false));
+    req.end();
+  });
+}
+
+function probePublisher(timeoutMs = 900) {
+  return new Promise((resolve) => {
+    const req = request(publisherUrl, { method: "GET" }, (res) => {
+      const chunks = [];
+      res.on("data", (chunk) => chunks.push(chunk));
+      res.on("end", () => {
+        try {
+          const body = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+          resolve({
+            healthy: res.statusCode === 200 && body.service === "xgif-local-publisher" && body.ok === true,
+            runtimeVersion: String(body.runtimeVersion || ""),
+          });
+        } catch {
+          resolve({ healthy: false, runtimeVersion: "" });
+        }
+      });
+    });
+    req.setTimeout(timeoutMs, () => {
+      req.destroy();
+      resolve({ healthy: false, runtimeVersion: "" });
+    });
+    req.on("error", () => resolve({ healthy: false, runtimeVersion: "" }));
     req.end();
   });
 }
@@ -99,12 +127,25 @@ async function run(command, args, cwd) {
 }
 
 async function startServices() {
-  let publisherRunning = await probe(publisherUrl);
+  let publisherState = await probePublisher();
+  let publisherRunning = publisherState.healthy;
   let previewRunning = await probe(previewUrl);
+
+  if (publisherRunning && publisherState.runtimeVersion !== expectedPublisherVersion) {
+    console.log("检测到本地发布助手代码已更新，正在自动重启。");
+    await stopPublisher();
+    publisherState = { healthy: false, runtimeVersion: "" };
+    publisherRunning = false;
+  }
 
   if (publisherRunning) {
     console.log("本地发布助手已在 127.0.0.1:8787 运行，继续复用。");
   } else {
+    const stalePid = readPublisherPid();
+    if (stalePid && processExists(stalePid)) {
+      console.log("检测到旧版本地发布助手进程，正在停止。");
+      await stopPublisher();
+    }
     const pid = startDetached(
       "本地发布助手",
       process.execPath,
@@ -112,8 +153,21 @@ async function startServices() {
       workflowRoot,
       publisherLog,
     );
-    writeFileSync(publisherPidFile, `${JSON.stringify({ pid, startedAt: new Date().toISOString() }, null, 2)}\n`);
-    publisherRunning = await waitFor(publisherUrl, true);
+    writeFileSync(
+      publisherPidFile,
+      `${JSON.stringify({
+        pid,
+        startedAt: new Date().toISOString(),
+        runtimeVersion: expectedPublisherVersion,
+      }, null, 2)}\n`,
+    );
+    const deadline = Date.now() + 15_000;
+    while (Date.now() < deadline) {
+      publisherState = await probePublisher();
+      if (publisherState.healthy && publisherState.runtimeVersion === expectedPublisherVersion) break;
+      await delay(250);
+    }
+    publisherRunning = publisherState.healthy && publisherState.runtimeVersion === expectedPublisherVersion;
   }
 
   if (previewRunning) {
@@ -142,20 +196,23 @@ async function startServices() {
 }
 
 async function stopPublisher() {
-  if (!(await probe(publisherUrl))) {
-    removePublisherPid();
-    console.log("本地发布助手未运行。");
-    return;
-  }
-
   const pid = readPublisherPid();
   if (!pid || !processExists(pid)) {
-    console.error("本地发布助手正在运行，但没有可验证的 PID；为避免误杀进程，未自动停止。");
+    const state = await probePublisher();
+    if (state.healthy) {
+      console.error("本地发布助手正在运行，但没有可验证的 PID；为避免误杀进程，未自动停止。");
+      process.exitCode = 1;
+    } else {
+      removePublisherPid();
+      console.log("本地发布助手未运行。");
+    }
     return;
   }
 
   process.kill(pid, "SIGTERM");
-  if (await waitFor(publisherUrl, false, 5_000)) {
+  const deadline = Date.now() + 5_000;
+  while (Date.now() < deadline && processExists(pid)) await delay(100);
+  if (!processExists(pid)) {
     removePublisherPid();
     console.log("本地发布助手已停止。");
   } else {
@@ -179,10 +236,16 @@ async function stopPreview() {
 }
 
 async function showStatus() {
-  const [publisherRunning, previewRunning] = await Promise.all([probe(publisherUrl), probe(previewUrl)]);
-  console.log(`管理端：${publisherRunning ? "可用" : "不可用"} http://127.0.0.1:8787`);
+  const [publisherState, previewRunning] = await Promise.all([probePublisher(), probe(previewUrl)]);
+  const publisherCurrent = publisherState.healthy && publisherState.runtimeVersion === expectedPublisherVersion;
+  const publisherLabel = !publisherState.healthy
+    ? "不可用"
+    : publisherCurrent
+      ? "可用"
+      : "运行版本已过期";
+  console.log(`管理端：${publisherLabel} http://127.0.0.1:8787`);
   console.log(`站点预览：${previewRunning ? "可用" : "不可用"} http://127.0.0.1:4321`);
-  if (!publisherRunning || !previewRunning) process.exitCode = 1;
+  if (!publisherCurrent || !previewRunning) process.exitCode = 1;
 }
 
 const command = process.argv[2] || "start";

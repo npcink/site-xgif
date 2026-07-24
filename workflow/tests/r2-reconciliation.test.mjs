@@ -48,6 +48,8 @@ test("R2 reconciliation reports a consistent ledger without mutating it", async 
     ledgerWithoutReference: 0,
     duplicateLedgerUrls: 0,
     invalidLedgerLines: 0,
+    remoteUnavailable: 0,
+    privateBackupIssues: 0,
   });
 });
 
@@ -67,4 +69,28 @@ test("R2 reconciliation exposes recoverable partial publication states", async (
   assert.equal(report.ok, false);
   assert.equal(report.counts.referencedWithoutLedger, 1);
   assert.equal(report.counts.ledgerWithoutReference, 1);
+});
+
+test("R2 reconciliation verifies remote objects and private source bytes when requested", async () => {
+  const dirs = await fixture();
+  const hash = "a".repeat(64);
+  const publicUrl = `https://img.xgif.cn/memes/${hash}.webp`;
+  const privateBackupDirectory = path.join(dirs.repoRoot, "workflow", "private-sources", "r2-assets");
+  await mkdir(privateBackupDirectory, { recursive: true });
+  await writeFile(path.join(dirs.imageDirectory, "20260723-ab12.md"), image(publicUrl), "utf8");
+  await writeFile(
+    dirs.ledgerPath,
+    `${JSON.stringify({ publicUrl, objectKey: `memes/${hash}.webp`, sha256: hash })}\n`,
+    "utf8",
+  );
+  const report = await reconcileR2Assets({
+    ...dirs,
+    privateBackupDirectory,
+    verifyRemote: true,
+    verifyPrivateBackups: true,
+    fetchImpl: async () => ({ ok: false, status: 404 }),
+  });
+  assert.equal(report.ok, false);
+  assert.equal(report.counts.remoteUnavailable, 1);
+  assert.equal(report.counts.privateBackupIssues, 1);
 });

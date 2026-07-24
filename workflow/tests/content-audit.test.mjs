@@ -138,14 +138,14 @@ test("content audit blocks a legacy external-article disclosure placeholder", as
   assert.match(item.blockers.join(" "), /恢复完整正文/);
 });
 
-test("content audit blocks unsafe markup imported from an external article", async () => {
+test("content audit blocks all raw HTML imported from an external article", async () => {
   const dirs = await fixture();
   await writeFile(
     path.join(dirs.articlesDir, "20260723-0007.md"),
     article({
       contentId: "20260723-0007",
       title: "危险外部正文",
-      body: "这是一段导入正文。<script>alert('xss')</script> 后续文字不能让危险标签绕过公开内容体检。",
+      body: "这是一段导入正文。<strong>看似无害的 HTML</strong> 也必须先转成 Markdown。",
     }),
     "utf8",
   );
@@ -153,7 +153,7 @@ test("content audit blocks unsafe markup imported from an external article", asy
   const report = await auditContentLibrary({ repoRoot: dirs.repoRoot });
   const item = report.items.find((entry) => entry.title === "危险外部正文");
   assert.equal(item.status, "draft");
-  assert.match(item.blockers.join(" "), /危险协议/);
+  assert.match(item.blockers.join(" "), /原始 HTML/);
 });
 
 test("content document parser keeps public and internal notes separate", () => {

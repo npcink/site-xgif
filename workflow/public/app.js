@@ -13,7 +13,18 @@ import {
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 
-const today = new Date().toISOString().slice(0, 10);
+function localCalendarDate(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en", {
+    timeZone: "Asia/Shanghai",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+const today = localCalendarDate();
 const articleForm = $("#article-form");
 const imageForm = $("#image-form");
 const articleResult = $("#article-result");
@@ -85,13 +96,40 @@ try {
 
 for (const input of $$("input[type=\"date\"]")) input.value = today;
 
-async function api(path, payload) {
+let csrfTokenPromise = null;
+
+async function getCsrfToken({ refresh = false } = {}) {
+  if (refresh) csrfTokenPromise = null;
+  if (!csrfTokenPromise) {
+    csrfTokenPromise = fetch("/api/session", { cache: "no-store" })
+      .then(async (response) => {
+        const data = await response.json();
+        if (!response.ok || !data.csrfToken) throw new Error(data.error || "无法建立本地发布会话。");
+        return data.csrfToken;
+      })
+      .catch((error) => {
+        csrfTokenPromise = null;
+        throw error;
+      });
+  }
+  return csrfTokenPromise;
+}
+
+async function apiRequest(path, payload, { retrySession = true } = {}) {
+  const csrfToken = payload ? await getCsrfToken() : "";
   const response = await fetch(path, {
     method: payload ? "POST" : "GET",
-    headers: payload ? { "content-type": "application/json" } : undefined,
+    headers: payload
+      ? { "content-type": "application/json", "x-xgif-csrf": csrfToken }
+      : undefined,
     body: payload ? JSON.stringify(payload) : undefined,
+    cache: "no-store",
   });
   const data = await response.json();
+  if (payload && response.status === 403 && retrySession) {
+    await getCsrfToken({ refresh: true });
+    return apiRequest(path, payload, { retrySession: false });
+  }
   if (!response.ok) {
     const detail = data.detail ? `\n${data.detail}` : "";
     throw new Error(`${data.error || "请求失败"}${detail}`);
@@ -99,6 +137,9 @@ async function api(path, payload) {
   return data;
 }
 
+async function api(path, payload) {
+  return apiRequest(path, payload);
+}
 function formData(form) {
   const data = Object.fromEntries(new FormData(form).entries());
   for (const checkbox of $$('input[type="checkbox"]', form)) data[checkbox.name] = checkbox.checked;

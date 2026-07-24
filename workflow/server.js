@@ -20,38 +20,18 @@ import { LocalContentBackup } from "./local-content-backup.js";
 import { LocalDataStore } from "./local-data-store.js";
 import { ensureR2Asset, getR2StorageConfig } from "./r2-storage.js";
 import { reconcileR2Assets } from "./r2-reconciliation.js";
+import { localRequestSecurityError } from "./local-request-security.js";
+import { publisherSourceVersion } from "./runtime-version.js";
+import { calendarDate } from "./calendar-date.js";
+import { saveR2PrivateBackup } from "./r2-private-backup.js";
+import { loadLocalEnv } from "./local-env.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..");
 const siteRoot = path.join(repoRoot, "site");
 const publicDir = path.join(__dirname, "public");
 
-async function loadLocalEnv() {
-  const envPath = path.join(__dirname, ".env");
-  let source = "";
-
-  try {
-    source = await readFile(envPath, "utf8");
-  } catch {
-    return;
-  }
-
-  for (const line of source.split(/\r?\n/)) {
-    const match = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/);
-    if (!match || process.env[match[1]] !== undefined) continue;
-
-    let value = match[2];
-    const isQuoted = (value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"));
-    if (isQuoted) {
-      value = value.slice(1, -1);
-    } else {
-      value = value.replace(/\s+#.*$/, "").trim();
-    }
-    process.env[match[1]] = value;
-  }
-}
-
-await loadLocalEnv();
+await loadLocalEnv(__dirname);
 
 const target = {
   articles: path.join(siteRoot, "src", "content", "articles"),
@@ -60,10 +40,18 @@ const target = {
   userProvidedLedger: path.join(__dirname, "records", "user-provided-assets.jsonl"),
   flomoImportLedger: path.join(__dirname, "records", "flomo-imports.jsonl"),
   r2AssetLedger: path.join(__dirname, "records", "r2-assets.jsonl"),
+  r2PrivateAssets: path.join(__dirname, "private-sources", "r2-assets"),
   trashContent: path.join(__dirname, "trash", "content"),
   trashLedger: path.join(__dirname, "trash", "manifest.jsonl"),
 };
-const localDataStore = new LocalDataStore({ repoRoot, workflowRoot: __dirname });
+const publisherTestMode = process.env.XGIF_PUBLISHER_TEST_MODE === "true";
+const localDataStore = new LocalDataStore({
+  repoRoot,
+  workflowRoot: __dirname,
+  ...(process.env.XGIF_LOCAL_DATABASE_PATH
+    ? { databasePath: path.resolve(process.env.XGIF_LOCAL_DATABASE_PATH) }
+    : {}),
+});
 const localContentBackup = new LocalContentBackup({ repoRoot, workflowRoot: __dirname });
 
 const port = Number(process.env.PORT || 8787);
@@ -79,6 +67,9 @@ const publicSiteUrl = new URL("https://www.xgif.cn");
 const r2Storage = getR2StorageConfig({ env: process.env, siteRoot });
 const livePublicationCache = new Map();
 const livePublicationCacheTtlMs = 60_000;
+const runtimeStartedAt = new Date().toISOString();
+const runtimeVersion = publisherSourceVersion(__dirname);
+const csrfToken = randomUUID();
 
 const mimeTypes = new Map([
   [".html", "text/html; charset=utf-8"],
@@ -145,7 +136,7 @@ function runGit(args) {
 }
 
 function todayIso() {
-  return new Date().toISOString().slice(0, 10);
+  return calendarDate();
 }
 
 function normalizeList(value) {
@@ -1420,7 +1411,10 @@ function buildLegacyImageMarkdown(payload) {
   const scenes = normalizeList(payload.scenes);
   const date = payload.pubDate || todayIso();
 
-  return `---\ntitle: ${yamlString(payload.title)}\ncontentId: ${yamlString(payload.contentId)}\ndescription: ${yamlString(payload.description)}\nimage: ${yamlString(payload.image)}\nsource: ${yamlString(payload.source || "本地上传")}\ntags: ${yamlArray(tags)}\ncategory: ${yamlString(payload.category || "表情包")}\nmood: ${yamlArray(mood)}\nscenes: ${yamlArray(scenes)}\npubDate: ${date}\npublic: ${payload.public !== false}\nratio: ${yamlString(payload.ratio || "square")}\ndraft: ${Boolean(payload.draft)}\n---\n\n${markdownBody(payload.body)}`;
+  const dimensions = Number(payload.width) > 0 && Number(payload.height) > 0
+    ? `width: ${Math.round(Number(payload.width))}\nheight: ${Math.round(Number(payload.height))}\n`
+    : "";
+  return `---\ntitle: ${yamlString(payload.title)}\ncontentId: ${yamlString(payload.contentId)}\ndescription: ${yamlString(payload.description)}\nimage: ${yamlString(payload.image)}\n${dimensions}source: ${yamlString(payload.source || "本地上传")}\ntags: ${yamlArray(tags)}\ncategory: ${yamlString(payload.category || "表情包")}\nmood: ${yamlArray(mood)}\nscenes: ${yamlArray(scenes)}\npubDate: ${date}\npublic: ${payload.public !== false}\nratio: ${yamlString(payload.ratio || "square")}\ndraft: ${Boolean(payload.draft)}\n---\n\n${markdownBody(payload.body)}`;
 }
 
 function buildImageMarkdown(payload) {
@@ -2220,6 +2214,22 @@ async function handleApi(req, res) {
   const requestUrl = new URL(req.url, `http://localhost:${port}`);
   const pathname = requestUrl.pathname;
 
+  if (pathname === "/api/health" && req.method === "GET") {
+    sendJson(res, 200, {
+      ok: true,
+      service: "xgif-local-publisher",
+      runtimeVersion,
+      startedAt: runtimeStartedAt,
+      pid: process.pid,
+    });
+    return;
+  }
+
+  if (pathname === "/api/session" && req.method === "GET") {
+    sendJson(res, 200, { csrfToken, runtimeVersion });
+    return;
+  }
+
   if (pathname === "/api/status" && req.method === "GET") {
     const [git, sitePreview, contentSafety, localContentHistory, publicationItems] = await Promise.all([
       getGitStatus(),
@@ -2270,7 +2280,11 @@ async function handleApi(req, res) {
   }
 
   if (pathname === "/api/r2/reconcile" && req.method === "GET") {
-    sendJson(res, 200, await reconcileR2Assets({ repoRoot }));
+    sendJson(res, 200, await reconcileR2Assets({
+      repoRoot,
+      verifyRemote: true,
+      verifyPrivateBackups: true,
+    }));
     return;
   }
 
@@ -2330,9 +2344,9 @@ async function handleApi(req, res) {
   if (pathname === "/api/content" && req.method === "GET") {
     let indexWarning = "";
     try {
-      await localDataStore.rebuildContentIndex();
+      await localDataStore.syncContentIndex();
     } catch (error) {
-      indexWarning = `SQLite 索引刷新失败，当前列表直接读取 Markdown：${error.message}`;
+      indexWarning = `SQLite 增量索引刷新失败，当前使用最近一次可用索引：${error.message}`;
     }
     const type = requestUrl.searchParams.get("type") || "all";
     const query = normalizeText(requestUrl.searchParams.get("query"));
@@ -2341,16 +2355,18 @@ async function handleApi(req, res) {
     const requestedPage = Math.max(1, Number.parseInt(requestUrl.searchParams.get("page") || "1", 10) || 1);
     const requestedPageSize = Number.parseInt(requestUrl.searchParams.get("pageSize") || "15", 10) || 15;
     const pageSize = [15, 30, 50].includes(requestedPageSize) ? requestedPageSize : 15;
-    const searchableItems = (await getContentPublicationStates(await listContent(type))).filter((item) => {
-      const text = normalizeText([item.title, item.summary, item.source, item.tags.join(" ")].join(" "));
-      return !query || text.includes(query);
-    });
+    const indexedItems = localDataStore.listContentIndex({ type, query, sort }).map((item) => ({
+      ...item,
+      publicUrl: publicContentUrl(item.type, item.contentId),
+      previewUrl: previewContentUrl(item.type, item.contentId),
+    }));
+    const searchableItems = await getContentPublicationStates(indexedItems);
     const counts = contentStatusCounts(searchableItems);
     const filteredItems = searchableItems.filter((item) => {
       if (status === "all") return true;
       return item.publication?.state === status;
     });
-    const sortedItems = sortManagedContent(filteredItems, sort);
+    const sortedItems = filteredItems;
     const total = sortedItems.length;
     const pages = Math.max(1, Math.ceil(total / pageSize));
     const page = Math.min(requestedPage, pages);
@@ -2579,6 +2595,8 @@ async function handleApi(req, res) {
     const entryMarkdown = buildImageMarkdown({
       ...payload,
       image: publicImagePath,
+      width: asset.width,
+      height: asset.height,
     });
     // R2 ledger is intentionally written before the public Markdown entry.
     // If a later local write fails, the read-only reconciliation report exposes
@@ -2586,6 +2604,13 @@ async function handleApi(req, res) {
     const r2LedgerPath = r2Upload ? await recordR2Asset({ asset, entryPath, upload: r2Upload }) : "";
     let ledgerPath = "";
     try {
+      if (r2Upload) {
+        await saveR2PrivateBackup({
+          asset,
+          objectKey: r2Upload.objectKey,
+          directory: target.r2PrivateAssets,
+        });
+      }
       ledgerPath = await recordUserProvidedAsset({
         payload,
         asset,
@@ -2661,7 +2686,13 @@ async function serveStatic(req, res) {
 
 const storageStatus = await localDataStore.initialize();
 let contentBackupStatus;
-try {
+if (publisherTestMode) {
+  contentBackupStatus = {
+    ready: true,
+    gitDir: "disabled-in-http-integration-test",
+    files: 0,
+  };
+} else try {
   contentBackupStatus = await localContentBackup.snapshot("Publisher startup safety snapshot");
 } catch (error) {
   contentBackupStatus = {
@@ -2678,6 +2709,17 @@ if (storageStatus.recovery?.recovered) {
 
 const server = createServer(async (req, res) => {
   try {
+    const securityError = localRequestSecurityError({
+      method: req.method,
+      headers: req.headers,
+      port,
+      csrfToken,
+    });
+    if (securityError) {
+      sendJson(res, securityError.statusCode, { error: securityError.message });
+      return;
+    }
+
     if (req.url?.startsWith("/api/")) {
       await handleApi(req, res);
       return;

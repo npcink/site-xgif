@@ -17,8 +17,9 @@
 ```bash
 cd site && npm run dev
 cd site && npm test
+cd site && npm run test:production
 cd workflow && npm start
 cd workflow && npm test
 ```
 
-本地验证站点后，再由发布台提交并推送仓库变更。
+`npm start` 会同时启动管理器与 Astro 预览，并自动替换已经过期的本地发布器进程。本地验证站点后，再由发布台提交并推送仓库变更。

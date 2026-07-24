@@ -69,6 +69,10 @@ Cloudflare Worker 只上传 `site/dist` 静态资源，不包含 Worker 运行�
 
 发布台使用本地 SQLite 保存内容索引、回收站索引和操作历史，但 Markdown、R2 与 Git 仍是权威数据。数据库不进入 Git，损坏时先隔离再从内容文件和回收站旁车自动重建；数据库备份使用 SQLite Backup API。未发布内容同时进入白名单限定的本机私有 Git 历史，避免被公开仓库意外暴露。详见 [`site/docs/decisions/ADR-007-local-sqlite-index.md`](../site/docs/decisions/ADR-007-local-sqlite-index.md)。
 
+### 10. 系统加固与生产证据链
+
+本地发布器新增源码版本健康检查、Host/Origin/JSON/CSRF 防护和真实 HTTP 集成测试；SQLite 内容列表改为增量索引与 SQL 查询。R2 除台账外增加真实远端核验、按哈希保存的私有原始字节和 30 天孤立对象观察期。静态站生成 `/build.json`，构建后检查站内断链，GitHub 每日核验真实生产站点与防盗链。外部文章正文只接受纯文本和 Markdown。详见 [`ADR-011`](../site/docs/decisions/ADR-011-system-hardening-and-production-evidence.md)。
+
 ## 当前开发原则
 
 1. **保持简单。** 网站的核心是分享内容，而不是建设复杂后台。没有真实重复痛点的功能不提前开发。
@@ -84,6 +88,7 @@ Cloudflare Worker 只上传 `site/dist` 静态资源，不包含 Worker 运行�
 ```bash
 cd site && npm run dev
 cd site && npm test
+cd site && npm run test:production
 cd workflow && npm start
 cd workflow && npm test
 ```

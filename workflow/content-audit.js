@@ -15,12 +15,7 @@ const internalNotePatterns = [
   /内部导入/iu,
 ];
 
-const unsafeArticleMarkupPatterns = [
-  /<\s*\/?\s*(?:script|iframe|object|embed|style|form|input|button|svg|math|link|meta)\b/iu,
-  /\bon[a-z]+\s*=/iu,
-  /(?:javascript|vbscript)\s*:/iu,
-  /data\s*:\s*text\/html/iu,
-];
+const rawArticleHtml = /<(?!https?:\/\/)\s*(?:\/?\s*[A-Za-z][^>]*|!--[\s\S]*?--)>/iu;
 
 function portablePath(value) {
   return String(value || "").split(path.sep).join("/");
@@ -111,8 +106,8 @@ function auditArticle(item) {
   if (!String(data.title || "").trim()) item.blockers.push("缺少标题。");
   if (!String(data.summary || "").trim()) item.blockers.push("缺少摘要。");
   if (!body.trim()) item.blockers.push("缺少正文。");
-  if (unsafeArticleMarkupPatterns.some((pattern) => pattern.test(body))) {
-    item.blockers.push("正文包含不允许公开渲染的脚本、嵌入内容或危险协议。");
+  if (rawArticleHtml.test(body)) {
+    item.blockers.push("正文包含原始 HTML；导入文章只能使用纯文本和 Markdown。");
   }
   if (!Array.isArray(data.tags) || data.tags.length === 0) item.blockers.push("缺少标签。");
   if (Array.isArray(data.tags) && data.tags.some((tag) => !CANONICAL_TAGS.includes(tag))) {

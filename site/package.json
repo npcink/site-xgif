@@ -12,7 +12,9 @@
     "build": "astro check && astro build",
     "preview": "astro preview",
     "check": "astro check",
-    "test": "npm run build && node --test tests/*.test.mjs",
+    "test": "npm run build && node --test tests/*.test.mjs && npm run test:links",
+    "test:links": "node scripts/check-links.mjs",
+    "test:production": "node scripts/production-smoke.mjs",
     "test:visual": "playwright test --config playwright.config.mjs",
     "test:visual:update": "playwright test --config playwright.config.mjs --update-snapshots",
     "test:visual:linux": "sh scripts/run-visual-baseline.sh",
@@ -28,6 +30,7 @@
   "devDependencies": {
     "@astrojs/check": "0.9.6",
     "@playwright/test": "^1.61.1",
+    "@types/node": "^22.20.1",
     "typescript": "5.9.3",
     "wrangler": "4.113.0"
   },

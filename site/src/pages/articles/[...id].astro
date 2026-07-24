@@ -21,8 +21,13 @@ const jsonLd = {
   headline: article.data.title,
   description: article.data.summary,
   datePublished: article.data.pubDate.toISOString(),
-  author: { "@type": "Organization", name: article.data.source },
-  ...(article.data.sourceUrl ? { isBasedOn: article.data.sourceUrl } : {}),
+  publisher: { "@type": "Organization", name: "xgif.cn", url: Astro.site?.href || "https://www.xgif.cn/" },
+  ...(article.data.sourceKind === "original"
+    ? { author: { "@type": "Organization", name: "xgif.cn" } }
+    : {}),
+  ...(article.data.sourceUrl
+    ? { isBasedOn: article.data.sourceUrl, citation: article.data.sourceUrl }
+    : {}),
   mainEntityOfPage: new URL(canonicalPath, Astro.site).href,
 };
 ---
