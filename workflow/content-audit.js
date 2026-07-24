@@ -3,7 +3,7 @@ import { access, readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import {
   isExternalArticle,
-  isPublicArticleDisclosure,
+  isLegacyArticleDisclosure,
 } from "./article-publication.js";
 import { isContentId } from "./content-id.js";
 import { CANONICAL_TAGS } from "./content-taxonomy.js";
@@ -13,6 +13,13 @@ const internalNotePatterns = [
   /请在公开前复核/iu,
   /来源待确认/iu,
   /内部导入/iu,
+];
+
+const unsafeArticleMarkupPatterns = [
+  /<\s*\/?\s*(?:script|iframe|object|embed|style|form|input|button|svg|math|link|meta)\b/iu,
+  /\bon[a-z]+\s*=/iu,
+  /(?:javascript|vbscript)\s*:/iu,
+  /data\s*:\s*text\/html/iu,
 ];
 
 function portablePath(value) {
@@ -101,10 +108,12 @@ function createItem(type, file, parsed, repoRoot) {
 
 function auditArticle(item) {
   const { data, body, file, sourceKind, sourceUrl } = item;
-  const externalPublic = isExternalArticle(data) && !item.draft;
   if (!String(data.title || "").trim()) item.blockers.push("缺少标题。");
   if (!String(data.summary || "").trim()) item.blockers.push("缺少摘要。");
   if (!body.trim()) item.blockers.push("缺少正文。");
+  if (unsafeArticleMarkupPatterns.some((pattern) => pattern.test(body))) {
+    item.blockers.push("正文包含不允许公开渲染的脚本、嵌入内容或危险协议。");
+  }
   if (!Array.isArray(data.tags) || data.tags.length === 0) item.blockers.push("缺少标签。");
   if (Array.isArray(data.tags) && data.tags.some((tag) => !CANONICAL_TAGS.includes(tag))) {
     item.blockers.push("包含未纳入规范词表的标签。");
@@ -112,8 +121,8 @@ function auditArticle(item) {
   if (["publication", "editorial"].includes(sourceKind) && !sourceUrl) {
     item.blockers.push("外部来源文章缺少来源链接。");
   }
-  if (externalPublic && !isPublicArticleDisclosure(body)) {
-    item.blockers.push("外部来源公开文章仍含来源正文，必须迁移到私有来源库。");
+  if (isExternalArticle(data) && !item.draft && isLegacyArticleDisclosure(body)) {
+    item.blockers.push("外部来源公开文章仍是旧摘要占位，必须从私有来源库恢复完整正文。");
   }
   if (sourceUrl && !isValidHttpUrl(sourceUrl)) {
     item.blockers.push("来源链接不是有效的 HTTP(S) 地址。");
@@ -133,7 +142,7 @@ function auditArticle(item) {
   const summaryLength = String(data.summary || "").replace(/\s+/gu, "").length;
   if (summaryLength > 0 && summaryLength < 24) item.warnings.push("摘要过短，可能不足以说明内容重点。");
   if (summaryLength > 180) item.warnings.push("摘要过长，建议压缩到 180 字以内。");
-  if (!externalPublic && normalizedBody(body).length < 80) {
+  if (normalizedBody(body).length < 80) {
     item.warnings.push("正文较短，需要确认是否为完整内容。");
   }
   const urls = bodyUrls(body).filter((url) => url !== sourceUrl);
@@ -179,7 +188,7 @@ function finalize(items) {
       group.push(item);
       sourceGroups.set(item.sourceUrl, group);
     }
-    if (!isPublicArticleDisclosure(item.body)) {
+    if (!isLegacyArticleDisclosure(item.body)) {
       const group = contentGroups.get(item.contentHash) || [];
       group.push(item);
       contentGroups.set(item.contentHash, group);

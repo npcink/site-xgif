@@ -15,7 +15,7 @@ npm run dev
 
 ## 新增文章
 
-复制 `src/content/articles/` 中任意 Markdown 文件，修改 frontmatter 和正文。原创内容可以在公开 Markdown 保存正文；外部来源内容应通过本地发布助手编辑，公开 Markdown 只保存摘要说明，完整导入正文留在 `workflow/private-sources/`：
+复制 `src/content/articles/` 中任意 Markdown 文件，修改 frontmatter 和正文。原创和外部来源文章都会把完整正文写入公开 Markdown；外部来源文章还会在 `workflow/private-sources/` 保留一份本地备份：
 
 ```md
 ---
@@ -33,7 +33,7 @@ featured: false
 draft: false
 ---
 
-原创文章正文；外部来源文章只写“不转载全文”的公开说明。
+文章完整正文。
 ```
 
 `editorNote` 会显示在文章卡片或详情页，适合解释“为什么值得看”；`internalNote` 仅供本地发布助手复核来源和导入批次。旧 `note` 字段只为兼容历史内容保留，新内容不要继续使用。
