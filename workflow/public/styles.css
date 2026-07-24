@@ -577,7 +577,7 @@ h1 {
 .connection-grid {
   border: 1px solid var(--line);
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
 }
 
 .connection-grid article {
@@ -601,6 +601,14 @@ h1 {
 
 .connection-grid strong {
   font-size: 13px;
+}
+
+.connection-grid article[data-state="ready"] strong {
+  color: var(--accent);
+}
+
+.connection-grid article[data-state="attention"] strong {
+  color: #8a6d12;
 }
 
 .connection-grid a {

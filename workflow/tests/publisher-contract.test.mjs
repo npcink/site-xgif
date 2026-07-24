@@ -110,6 +110,9 @@ test("publisher exposes local public URLs and keeps empty result panels hidden",
   assert.match(html, /id="asset-library-dialog"/);
   assert.match(html, /id="recovery-dashboard-grid"/);
   assert.match(html, /id="system-run-recovery"/);
+  assert.match(html, /id="connection-public-git"/);
+  assert.match(html, /id="connection-private-git"/);
+  assert.match(html, /id="private-content-sync"/);
   assert.match(html, /id="article-cover-assets"/);
   assert.match(html, /data-system-view="sync"/);
   assert.match(html, /id="sync-history-list"/);
@@ -206,6 +209,7 @@ test("publisher exposes local public URLs and keeps empty result panels hidden",
   assert.match(app, /\/api\/tags\/governance/);
   assert.match(app, /\/api\/assets/);
   assert.match(app, /\/api\/storage\/dashboard/);
+  assert.match(app, /\/api\/storage\/content-history\/sync/);
   assert.match(app, /openAssetLibrary\("cover"\)/);
   assert.match(app, /\/api\/history\?action=sync_content/);
   assert.match(app, /id="library-select-page"/);
@@ -300,6 +304,7 @@ test("draft publishing uses explicit states, protected-branch guards, and mandat
   assert.match(server, /editorNote/);
   assert.match(server, /internalNote/);
   assert.match(server, /\/api\/storage\/backup/);
+  assert.match(server, /\/api\/storage\/content-history\/sync/);
   assert.match(server, /\/api\/trash/);
   assert.match(server, /\/api\/content\/batch/);
   assert.match(server, /\/api\/content\/duplicate/);

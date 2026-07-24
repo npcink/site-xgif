@@ -1714,6 +1714,22 @@ function recoveryState(label, value, detail, ok) {
     </div>`;
 }
 
+function privateContentGitState(contentHistory) {
+  const history = contentHistory || {};
+  const offsite = history.offsite || {};
+  const repository = offsite.repository || "未配置远端";
+  const version = offsite.commit ? offsite.commit.slice(0, 10) : "无远端版本";
+  return {
+    ready: Boolean(history.ready && offsite.ok),
+    label: offsite.ok ? "已同步" : offsite.configured ? "待重试" : "未配置",
+    detail: history.ready
+      ? `${history.files || 0} 个文件 · ${repository} · ${version} · ${
+          offsite.syncedAt ? formatStatusDate(offsite.syncedAt) : offsite.error || "等待首次同步"
+        }`
+      : history.error || "尚未创建本机私有内容快照",
+  };
+}
+
 async function loadRecoveryDashboard() {
   const grid = $("#recovery-dashboard-grid");
   grid.innerHTML = "<p>正在读取备份与恢复状态…</p>";
@@ -1724,6 +1740,7 @@ async function loadRecoveryDashboard() {
     const r2Issues = Object.entries(report.r2.counts || {})
       .filter(([name, count]) => !["references", "ledgerRows"].includes(name) && Number(count) > 0)
       .reduce((sum, [, count]) => sum + Number(count), 0);
+    const privateGit = privateContentGitState(report.contentHistory);
     grid.innerHTML = [
       recoveryState(
         "SQLite 备份",
@@ -1732,10 +1749,10 @@ async function loadRecoveryDashboard() {
         Boolean(latest),
       ),
       recoveryState(
-        "私有内容 Git",
-        report.contentHistory.ready ? `${report.contentHistory.files} 个文件` : "待创建",
-        report.contentHistory.ready ? `最近：${formatStatusDate(report.contentHistory.committedAt)}` : "未找到可用内容快照",
-        report.contentHistory.ready,
+        "私有内容 GitHub",
+        privateGit.label,
+        privateGit.detail,
+        privateGit.ready,
       ),
       recoveryState(
         "恢复演练",
@@ -1752,6 +1769,25 @@ async function loadRecoveryDashboard() {
     ].join("");
   } catch (error) {
     grid.innerHTML = `<p>${escapeHtml(error.message)}</p>`;
+  }
+}
+
+async function syncPrivateContentGit() {
+  const button = $("#private-content-sync");
+  const resultNode = $("#recovery-dashboard-result");
+  button.disabled = true;
+  resultNode.textContent = "正在记录草稿、回收站与恢复副本，并同步私有内容 GitHub…";
+  try {
+    const result = await api("/api/storage/content-history/sync", {});
+    const state = privateContentGitState(result.contentHistory);
+    resultNode.textContent = result.ok
+      ? `私有内容 GitHub 已同步：${state.detail}`
+      : `本机快照已保留，但远端同步需要重试：${result.error || state.detail}`;
+    await Promise.all([loadRecoveryDashboard(), loadStatus()]);
+  } catch (error) {
+    resultNode.textContent = `私有内容 GitHub 同步失败：${error.message}`;
+  } finally {
+    button.disabled = false;
   }
 }
 
@@ -2876,6 +2912,7 @@ $("#storage-backup").addEventListener("click", (event) =>
   createSafetyBackup(event.currentTarget, $("#storage-backup-result")));
 $("#system-create-backup").addEventListener("click", (event) =>
   createSafetyBackup(event.currentTarget, $("#recovery-dashboard-result")));
+$("#private-content-sync").addEventListener("click", syncPrivateContentGit);
 $("#system-run-recovery").addEventListener("click", runRecoveryVerification);
 $("#recovery-dashboard-refresh").addEventListener("click", loadRecoveryDashboard);
 $("#open-system-status").addEventListener("click", () => switchTab("system"));
@@ -3218,9 +3255,16 @@ async function loadStatus() {
     $("#connection-ai-detail").textContent = status.ai?.available
       ? `${status.ai.model}，${aiEndpoint}`
       : "需要 API 密钥与模型名称，不会在页面显示密钥";
-    $("#connection-git").textContent = status.git?.canPush
+    $("#connection-public-git").textContent = status.git?.canPush
       ? `${status.branch} · 远程已配置`
       : `${status.branch} · 远程未配置`;
+    $("#connection-public-git-detail").textContent = status.contentSafety?.ok
+      ? `公开内容 ${status.contentSafety.currentVersionInGit}/${status.contentSafety.total} 已进入公开 Git；${status.contentSafety.privateContent || 0} 条私有内容不在此仓库`
+      : status.contentSafety?.error || "公开内容 Git 状态待检查";
+    const privateGit = privateContentGitState(status.localContentHistory);
+    $("#connection-private-git").textContent = privateGit.label;
+    $("#connection-private-git").parentElement.dataset.state = privateGit.ready ? "ready" : "attention";
+    $("#connection-private-git-detail").textContent = privateGit.detail;
     const prLink = $("#connection-pr-link");
     prLink.hidden = !status.gitCompareUrl;
     if (status.gitCompareUrl) prLink.href = status.gitCompareUrl;
@@ -3238,9 +3282,9 @@ async function loadStatus() {
     const remote = status.git?.canPush ? "远程：已配置" : "远程：未配置";
     const localIndex = status.localData?.ok ? "索引：正常" : "索引：需重启恢复";
     const gitContent = status.contentSafety?.ok
-      ? `内容 Git：${status.contentSafety.currentVersionInGit}/${status.contentSafety.total}`
-      : "内容 Git：待检查";
-    const privateHistory = status.localContentHistory?.ready ? "私有快照：正常" : "私有快照：待创建";
+      ? `公开 Git：${status.contentSafety.currentVersionInGit}/${status.contentSafety.total}`
+      : "公开 Git：待检查";
+    const privateHistory = privateGit.ready ? "私有 GitHub：已同步" : `私有 GitHub：${privateGit.label}`;
     $("#status").textContent = `仓库：${status.repoRoot} · 分支：${status.branch} · ${ai} · ${remote} · ${localIndex} · ${gitContent} · ${privateHistory}`;
     updateTrashCount(status.localData?.trash || 0);
     const publisher = $("#publisher-service");

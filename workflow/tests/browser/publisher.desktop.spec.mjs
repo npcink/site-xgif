@@ -21,6 +21,15 @@ test("system status is a dedicated workspace instead of a floating popover", asy
   await expect(page.locator("#recommendation-mode")).not.toHaveText("检查中");
   await expect(page.locator("#recommendation-refresh")).toBeEnabled();
   await expect(page.locator("#connection-ai-detail")).not.toContainText("undefined");
+  await expect(page.getByText("公开代码 GitHub", { exact: true })).toBeVisible();
+  await expect(page.getByText("私有内容 GitHub", { exact: true })).toBeVisible();
+  await expect(page.locator("#private-content-sync")).toBeEnabled();
+  await expect(page.locator("#connection-private-git-detail")).not.toContainText("undefined");
+  await expect
+    .poll(() =>
+      page.locator(".connection-grid").evaluate((element) => element.scrollWidth <= element.clientWidth)
+    )
+    .toBe(true);
 });
 
 test("workspace page titles are not repeated inside their content", async ({ page }) => {
