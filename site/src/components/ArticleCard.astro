@@ -11,7 +11,7 @@ const { article, index = 0 } = Astro.props;
 const accents = ["coral", "sage", "blue", "yellow"];
 const accent = accents[index % accents.length];
 const editorNote = publicArticleNote(article.data);
-const href = contentHref("articles", article);
+const href = contentHref(article);
 ---
 
 <article
@@ -24,14 +24,14 @@ const href = contentHref("articles", article);
     <time datetime={article.data.pubDate.toISOString()}>{formatShortDate(article.data.pubDate)}</time>
   </div>
   <div class="article-number">{String(index + 1).padStart(2, "0")}</div>
-  <h3><a href={href} data-detail-link>{article.data.title}</a></h3>
+  <h3><a href={href} data-detail-link data-detail-kind="article">{article.data.title}</a></h3>
   <p>{article.data.summary}</p>
   {editorNote && <blockquote>{editorNote}</blockquote>}
   <div class="card-tags">
-    {article.data.tags.map((tag) => <a href={`/tags/${encodeURIComponent(tag)}/`}>#{tag}</a>)}
+    {article.data.tags.map((tag) => <a href={`/tags/${encodeURIComponent(tag)}`}>#{tag}</a>)}
   </div>
   <div class="article-footer">
     <span>{article.data.readTime}</span>
-    <a href={href} data-detail-link>读完整摘要 <span aria-hidden="true">→</span></a>
+    <a href={href} data-detail-link data-detail-kind="article">读完整摘要 <span aria-hidden="true">→</span></a>
   </div>
 </article>

@@ -2,6 +2,7 @@
 import { getCollection } from "astro:content";
 import ArticleCard from "../../components/ArticleCard.astro";
 import ImageCard from "../../components/ImageCard.astro";
+import { pageTitle } from "../../config/site";
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import { allTags, sortByDate } from "../../lib/content";
 
@@ -22,9 +23,9 @@ const images = sortByDate(
 );
 ---
 
-<BaseLayout title={`#${tag} — xgif.cn`} description={`浏览与 ${tag} 相关的文章、编辑摘要和图片。`}>
+<BaseLayout title={pageTitle(`#${tag}`)} description={`浏览与 ${tag} 相关的文章、编辑摘要和图片。`}>
   <section class="tag-detail-hero">
-    <a class="back-link" href="/tags/">← 全部标签</a>
+    <a class="back-link" href="/tags">← 全部标签</a>
     <p class="section-kicker">TAG / 聚合</p>
     <h1>#{tag}</h1>
     <p>{articles.length} 篇文章 · {images.length} 张图片</p>

@@ -21,7 +21,7 @@ test("article schema and publisher preserve optional cover metadata", async () =
 test("article pages use the cover for presentation and generate a heading-based table of contents", async () => {
   const [detail, route, preview, styles] = await Promise.all([
     read("src/components/ArticleDetailPage.astro"),
-    read("src/pages/articles/[...id].astro"),
+    read("src/pages/[id].astro"),
     read("src/pages/preview/articles/[...id].astro"),
     read("src/styles/global.css"),
   ]);
@@ -29,7 +29,8 @@ test("article pages use the cover for presentation and generate a heading-based 
   assert.match(detail, /class="article-cover"/u);
   assert.match(detail, /class="article-toc"/u);
   assert.match(detail, /heading\.depth === 2 \|\| heading\.depth === 3/u);
-  assert.match(route, /image=\{article\.data\.coverImage\}/u);
+  assert.match(route, /socialImage = article\.data\.coverImage/u);
+  assert.match(route, /image=\{socialImage\}/u);
   assert.match(route, /image: new URL\(article\.data\.coverImage, siteUrl\)\.href/u);
   assert.match(preview, /image=\{article\.data\.coverImage\}/u);
   assert.match(styles, /\.article-cover/u);

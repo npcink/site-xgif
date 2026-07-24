@@ -1,0 +1,79 @@
+---
+import { getCollection, render, type CollectionEntry } from "astro:content";
+import ArticleCard from "./ArticleCard.astro";
+import FavoriteButton from "./FavoriteButton.astro";
+import { contentHref } from "../lib/content";
+
+interface Props {
+  item: CollectionEntry<"images">;
+}
+
+const { item } = Astro.props;
+const canonicalPath = contentHref(item);
+const { Content } = await render(item);
+const allArticles = (await getCollection("articles")).filter((entry) => !entry.data.draft);
+const relatedArticles = allArticles
+  .filter((entry) => entry.data.tags.some((tag) => item.data.tags.includes(tag)))
+  .slice(0, 2);
+const isUserProvided = item.data.sourceKind === "user_provided";
+const isUnknownSource = item.data.sourceKind === "unknown";
+const imageAspectRatio =
+  item.data.width && item.data.height
+    ? `${item.data.width} / ${item.data.height}`
+    : undefined;
+---
+
+<article class="detail-page image-detail" data-detail-content data-detail-kind="image">
+  <a class="back-link" href="/images">← 返回图片库</a>
+  <div class="image-detail-grid">
+    <figure
+      class:list={[`ratio-${item.data.ratio}`]}
+      style={imageAspectRatio ? `--image-aspect-ratio: ${imageAspectRatio}` : undefined}
+    >
+      <img
+        src={item.data.image}
+        alt={item.data.title}
+        width={item.data.width}
+        height={item.data.height}
+      />
+    </figure>
+    <div class="image-detail-copy">
+      <p class="section-kicker">REACTION / 图片详情</p>
+      <h1>{item.data.title}</h1>
+      <p class="detail-summary">{item.data.description}</p>
+      <dl>
+        <div><dt>分类</dt><dd>{item.data.category}</dd></div>
+        <div><dt>情绪</dt><dd>{item.data.mood.join(" / ") || "未分类"}</dd></div>
+        <div><dt>场景</dt><dd>{item.data.scenes.join(" / ") || "通用"}</dd></div>
+      </dl>
+      <div class="card-tags">
+        {item.data.tags.map((tag) => <a href={`/tags/${encodeURIComponent(tag)}`}>#{tag}</a>)}
+      </div>
+      <div class="image-detail-actions">
+        <FavoriteButton
+          contentId={item.data.contentId}
+          kind="image"
+          title={item.data.title}
+          href={canonicalPath}
+        />
+      </div>
+      <div class="prose image-note"><Content /></div>
+      <p class="image-source">
+        {isUserProvided
+          ? "图片来源：用户提供 · 已确认可公开发布"
+          : isUnknownSource
+            ? <><span>图片来源：群聊转存 · 原作者与授权信息待核实</span> · <a href="/rights">权利人投诉与下架</a></>
+            : `图片来源备注：${item.data.source}`}
+      </p>
+    </div>
+  </div>
+</article>
+
+{relatedArticles.length > 0 && (
+  <section class="related-section">
+    <div class="content-title"><h2>相关文章</h2><a href="/articles">更多文章 →</a></div>
+    <div class="article-grid">
+      {relatedArticles.map((article, index) => <ArticleCard article={article} index={index} />)}
+    </div>
+  </section>
+)}

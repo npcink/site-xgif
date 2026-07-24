@@ -1,7 +1,14 @@
 ---
 import { getCollection, render, type CollectionEntry } from "astro:content";
+import ArticleRecommendations from "./ArticleRecommendations.astro";
+import FavoriteButton from "./FavoriteButton.astro";
 import ImageCard from "./ImageCard.astro";
-import { contentHref, formatShortDate, publicArticleNote } from "../lib/content";
+import {
+  contentHref,
+  formatShortDate,
+  publicArticleNote,
+  selectArticleRecommendations,
+} from "../lib/content";
 
 interface Props {
   article: CollectionEntry<"articles">;
@@ -11,7 +18,11 @@ interface Props {
 const { article, preview = false } = Astro.props;
 const { Content, headings } = await render(article);
 const tableOfContents = headings.filter((heading) => heading.depth === 2 || heading.depth === 3);
-const allImages = (await getCollection("images")).filter((entry) => !entry.data.draft && entry.data.public);
+const [allArticles, allImages] = await Promise.all([
+  getCollection("articles"),
+  getCollection("images").then((entries) => entries.filter((entry) => !entry.data.draft && entry.data.public)),
+]);
+const recommendedArticles = selectArticleRecommendations(article, allArticles);
 const relatedImages = allImages
   .filter((entry) => entry.data.tags.some((tag) => article.data.tags.includes(tag)))
   .slice(0, 3);
@@ -22,7 +33,7 @@ const sourceLabel = {
   unknown: "来源待确认",
 }[article.data.sourceKind];
 const editorNote = publicArticleNote(article.data);
-const articleHref = contentHref("articles", article);
+const articleHref = contentHref(article);
 ---
 
 {preview && (
@@ -34,7 +45,7 @@ const articleHref = contentHref("articles", article);
 
 <article class="detail-page article-detail" data-detail-content data-detail-kind="article">
   <header class="detail-header">
-    <a class="back-link" href="/articles/">← 返回文章列表</a>
+    <a class="back-link" href="/articles">← 返回文章列表</a>
     <div class="detail-meta">
       <span>{article.data.source}</span>
       <time datetime={article.data.pubDate.toISOString()}>{formatShortDate(article.data.pubDate)}</time>
@@ -43,9 +54,27 @@ const articleHref = contentHref("articles", article);
     <h1>{article.data.title}</h1>
     <p class="detail-summary">{article.data.summary}</p>
     <div class="card-tags">
-      {article.data.tags.map((tag) => <a href={`/tags/${encodeURIComponent(tag)}/`}>#{tag}</a>)}
+      {article.data.tags.map((tag) => <a href={`/tags/${encodeURIComponent(tag)}`}>#{tag}</a>)}
     </div>
+    {!preview && (
+      <div class="detail-favorite-standalone">
+        <FavoriteButton
+          contentId={article.data.contentId}
+          kind="article"
+          title={article.data.title}
+          href={articleHref}
+        />
+      </div>
+    )}
     <div class="dialog-article-actions">
+      {!preview && (
+        <FavoriteButton
+          contentId={article.data.contentId}
+          kind="article"
+          title={article.data.title}
+          href={articleHref}
+        />
+      )}
       {article.data.sourceUrl && (
         <a class="primary-button" href={article.data.sourceUrl} target="_blank" rel="noreferrer">
           {sourceLabel} <span>↗</span>
@@ -87,11 +116,13 @@ const articleHref = contentHref("articles", article);
     </aside>
     <div class="prose"><Content /></div>
   </div>
+
+  <ArticleRecommendations articles={recommendedArticles} />
 </article>
 
 {relatedImages.length > 0 && (
   <section class="related-section">
-    <div class="content-title"><h2>相关图片 / 表情包</h2><a href="/images/">更多图片 →</a></div>
+    <div class="content-title"><h2>相关图片 / 表情包</h2><a href="/images">更多图片 →</a></div>
     <div class="masonry-grid compact-grid">
       {relatedImages.map((item) => <ImageCard item={item} />)}
     </div>

@@ -4,22 +4,27 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("image dialog keeps the archived Next two-column design contract", async () => {
+test("image detail surfaces keep the two-column layout without cropping source images", async () => {
   const [dialog, page, styles] = await Promise.all([
     read("src/components/DetailDialog.astro"),
-    read("src/pages/images/[...id].astro"),
+    read("src/components/ImageDetailPage.astro"),
     read("src/styles/global.css"),
   ]);
 
   assert.match(dialog, /<b aria-hidden="true">×<\/b>/);
   assert.doesNotMatch(dialog, /<span>关闭<\/span>/);
   assert.match(page, /class="image-source"/);
+  assert.match(page, /--image-aspect-ratio: \$\{imageAspectRatio\}/);
   assert.match(styles, /grid-template-columns: minmax\(0, 1\.15fr\) minmax\(0, \.85fr\)/);
   assert.match(styles, /\.detail-dialog-body \.image-detail-grid \{[\s\S]*align-items: stretch;/);
   assert.match(styles, /\.detail-dialog-body \.image-detail-grid \{[\s\S]*height: 520px;/);
-  assert.match(styles, /\.detail-dialog-body \.image-detail figure img \{[^}]*min-height: 0;/);
+  assert.match(styles, /\.detail-dialog-body \.image-detail figure img \{[^}]*min-height: 0;[^}]*object-fit: contain;/);
   assert.match(styles, /\.detail-dialog\[data-detail-kind="image"\] \.image-detail figure\.ratio-wide/);
   assert.match(styles, /figure\.ratio-square \{ aspect-ratio: auto; \}/);
+  assert.match(styles, /\.image-detail figure\.ratio-square \{ aspect-ratio: var\(--image-aspect-ratio, 1\); \}/);
+  assert.match(styles, /\.image-detail figure img \{[^}]*height: 100%;[^}]*object-fit: contain;/);
+  assert.match(styles, /\.image-detail-copy h1 \{[^}]*font-size: clamp\(46px, 4vw, 64px\);/);
+  assert.match(styles, /\.image-detail-copy \.detail-summary \{[^}]*font-size: clamp\(18px, 1\.25vw, 20px\);/);
   assert.match(styles, /\.detail-dialog\[data-detail-kind="image"\] \{[\s\S]*inset-block: auto;/);
   assert.match(styles, /\.detail-dialog\[data-detail-kind="image"\] \.detail-dialog-body \{ min-height: 0; \}/);
 });
@@ -116,7 +121,7 @@ test("article archive keeps filtering, URL state, and bounded pagination togethe
 
 test("article and tag routes retain their direct-reading and discovery hierarchy", async () => {
   const [article, articleDetail, tagIndex, tagDetail] = await Promise.all([
-    read("src/pages/articles/[...id].astro"),
+    read("src/pages/[id].astro"),
     read("src/components/ArticleDetailPage.astro"),
     read("src/pages/tags/index.astro"),
     read("src/pages/tags/[tag].astro"),
@@ -134,7 +139,7 @@ test("article and tag routes retain their direct-reading and discovery hierarchy
   assert.match(tagDetail, /class="masonry-grid"/);
 });
 
-test("article dialogs remain quick previews while direct pages retain source-backed summaries", async () => {
+test("article dialogs support complete reading while direct pages retain source-backed summaries", async () => {
   const [articlePage, previewPage, styles] = await Promise.all([
     read("src/components/ArticleDetailPage.astro"),
     read("src/pages/preview/articles/[...id].astro"),
@@ -147,6 +152,10 @@ test("article dialogs remain quick previews while direct pages retain source-bac
   assert.match(previewPage, /noindex/);
   assert.match(previewPage, /ArticleDetailPage \{article\} preview/);
   assert.match(styles, /\.local-preview-notice/);
-  assert.match(styles, /\[data-detail-kind="article"\] \.detail-grid \{ display: none; \}/);
-  assert.match(styles, /\[data-detail-kind="article"\] \.dialog-article-actions \{ display: flex;/);
+  assert.match(styles, /\[data-detail-kind="article"\] \.detail-grid \{[\s\S]*display: block;/);
+  assert.match(styles, /\[data-detail-kind="article"\] \.detail-grid aside \{ display: none; \}/);
+  assert.match(styles, /\[data-detail-kind="article"\] \.detail-header \{[\s\S]*display: grid;/);
+  assert.match(styles, /\[data-detail-kind="article"\] \.detail-summary \{ display: none; \}/);
+  assert.match(styles, /\[data-detail-kind="article"\] \.card-tags \{[\s\S]*grid-column: 1;/);
+  assert.match(styles, /\[data-detail-kind="article"\] \.dialog-article-actions \{[\s\S]*display: flex;/);
 });

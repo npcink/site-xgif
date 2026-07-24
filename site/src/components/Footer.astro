@@ -1,16 +1,15 @@
+---
+import { siteConfig } from "../config/site";
+---
+
 <footer>
-  <div class="footer-brand">xgif<span>.cn</span></div>
+  <div class="footer-brand">{siteConfig.brand.base}<span>{siteConfig.brand.suffix}</span></div>
   <p>有趣的信息，被认真地整理。</p>
   <div class="footer-links">
-    <a href="/articles/">文章</a>
-    <a href="/images/">图片</a>
-    <a href="/tags/">标签</a>
-    <a href="/about/">关于</a>
-    <a href="/rights/">版权与更正</a>
-    <a href="/privacy/">隐私</a>
+    {siteConfig.footerNavigation.map((link) => <a href={link.href}>{link.label}</a>)}
   </div>
   <div class="footer-bottom">
-    <span>© {new Date().getFullYear()} xgif.cn</span>
+    <span>© {new Date().getFullYear()} {siteConfig.name}</span>
     <span>AI 辅助整理 · 人工确认发布</span>
   </div>
 </footer>

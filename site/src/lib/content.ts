@@ -13,11 +13,53 @@ export function formatShortDate(date: Date) {
     .replace("/", ".");
 }
 
-export function contentHref(
-  kind: "articles" | "images",
-  entry: { data: { contentId: string } },
+export function contentHref(entry: { data: { contentId: string } }) {
+  return `/${entry.data.contentId}`;
+}
+
+function stableRecommendationRank(seed: string, value: string) {
+  let hash = 2166136261;
+  for (const character of `${seed}:${value}`) {
+    hash ^= character.charCodeAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+export function selectArticleRecommendations(
+  article: CollectionEntry<"articles">,
+  articles: CollectionEntry<"articles">[],
+  limit = 3,
 ) {
-  return `/${kind}/${entry.data.contentId}/`;
+  const candidates = articles.filter(
+    (candidate) => !candidate.data.draft && candidate.data.contentId !== article.data.contentId,
+  );
+  const sharedTagCount = (candidate: CollectionEntry<"articles">) =>
+    candidate.data.tags.filter((tag) => article.data.tags.includes(tag)).length;
+  const related = candidates
+    .map((candidate) => ({ candidate, sharedTags: sharedTagCount(candidate) }))
+    .filter(({ sharedTags }) => sharedTags > 0)
+    .sort(
+      (a, b) =>
+        b.sharedTags - a.sharedTags ||
+        b.candidate.data.pubDate.valueOf() - a.candidate.data.pubDate.valueOf() ||
+        a.candidate.data.contentId.localeCompare(b.candidate.data.contentId),
+    )
+    .slice(0, Math.min(2, limit))
+    .map(({ candidate }) => candidate);
+  const selectedIds = new Set(related.map((candidate) => candidate.data.contentId));
+  const byStableSurprise = (a: CollectionEntry<"articles">, b: CollectionEntry<"articles">) =>
+    stableRecommendationRank(article.data.contentId, a.data.contentId) -
+      stableRecommendationRank(article.data.contentId, b.data.contentId) ||
+    a.data.contentId.localeCompare(b.data.contentId);
+  const surprise = candidates
+    .filter((candidate) => !selectedIds.has(candidate.data.contentId) && sharedTagCount(candidate) === 0)
+    .sort(byStableSurprise);
+  const fallback = candidates
+    .filter((candidate) => !selectedIds.has(candidate.data.contentId) && sharedTagCount(candidate) > 0)
+    .sort(byStableSurprise);
+
+  return [...related, ...surprise, ...fallback].slice(0, limit);
 }
 
 const internalArticleNotePatterns = [

@@ -15,7 +15,7 @@
     return;
   }
 
-  const detailPath = /^\/(articles|images)\/.+\/$/;
+  const detailPath = /^\/\d{8}-[a-z0-9]{4}$/;
   const cache = new Map();
   const initialTitle = document.title;
   let activeRequest = null;
@@ -87,7 +87,7 @@
     window.requestAnimationFrame(() => dialog.classList.add("is-ready"));
   };
 
-  const openDetail = async (url) => {
+  const openDetail = async (url, kindHint = null) => {
     if (!isDetailUrl(url)) return;
 
     if (closeTimer) {
@@ -99,7 +99,11 @@
     activeRequest = request;
     isCloseRequested = false;
 
-    dialog.dataset.detailKind = url.pathname.startsWith("/articles/") ? "article" : "image";
+    if (kindHint === "article" || kindHint === "image") {
+      dialog.dataset.detailKind = kindHint;
+    } else {
+      delete dialog.dataset.detailKind;
+    }
     revealDialog();
     setLoading(true);
     shell.scrollTop = 0;
@@ -160,7 +164,8 @@
     if (isCloseRequested) return;
     isCloseRequested = true;
     if (history.state?.detailDialog) {
-      history.back();
+      const detailDepth = Number(history.state.detailDialogDepth) || 1;
+      history.go(-detailDepth);
       return;
     }
     closeDetail();
@@ -187,6 +192,24 @@
     if (!isDetailUrl(url)) return;
 
     event.preventDefault();
+    const kindHint = trigger.dataset.detailKind;
+    if (dialog.open && history.state?.detailDialog) {
+      const detailDepth = Number(history.state.detailDialogDepth) || 1;
+      history.pushState(
+        {
+          ...history.state,
+          detailDialog: true,
+          detailDialogUrl: url.href,
+          detailDialogDepth: detailDepth + 1,
+          detailDialogKind: kindHint,
+        },
+        "",
+        `${url.pathname}${url.search}${url.hash}`,
+      );
+      openDetail(url, kindHint);
+      return;
+    }
+
     lastTrigger = trigger;
     const baseState = {
       ...history.state,
@@ -200,11 +223,13 @@
         detailDialog: true,
         detailDialogUrl: url.href,
         detailDialogBaseTitle: baseState.detailDialogBaseTitle,
+        detailDialogDepth: 1,
+        detailDialogKind: kindHint,
       },
       "",
       `${url.pathname}${url.search}${url.hash}`,
     );
-    openDetail(url);
+    openDetail(url, kindHint);
   });
 
   closeButton?.addEventListener("click", requestClose);
@@ -218,7 +243,7 @@
 
   window.addEventListener("popstate", (event) => {
     if (event.state?.detailDialog) {
-      openDetail(new URL(window.location.href));
+      openDetail(new URL(window.location.href), event.state.detailDialogKind);
       return;
     }
     closeDetail({

@@ -50,7 +50,7 @@ license: "Unsplash License"
 licenseUrl: "https://unsplash.com/license"
 ```
 
-微信群、QQ 群等渠道转存且无法确认作者与授权的表情包使用 `sourceKind: "unknown"`，`source` 固定写为“群聊转存（来源待核实）”，不得虚构作者、来源链接或授权。公开详情页会显示来源待核实状态，并链接到 `/rights/` 的投诉与下架说明。
+微信群、QQ 群等渠道转存且无法确认作者与授权的表情包使用 `sourceKind: "unknown"`，`source` 固定写为“群聊转存（来源待核实）”，不得虚构作者、来源链接或授权。公开详情页会显示来源待核实状态，并链接到 `/rights` 的投诉与下架说明。
 
 `sourceKind` 的含义：`original` 是原始文章链接；`publication` 是媒体或专题来源页；`editorial` 是本站编辑手记。不要把媒体首页标成原文。
 
@@ -63,6 +63,15 @@ npm run build
 Astro 会把纯静态部署产物输出到 `dist/`。
 
 `npm test` 会运行构建、详情交互契约、sitemap、来源与图片授权元数据检查，并扫描构建产物中的站内断链。`/build.json` 会记录当前构建对应的 Git commit 与构建时间，便于区分“源码已推送”和“线上已经运行该版本”。
+
+## 站点配置与 RSS
+
+站点名称、正式域名、默认描述、导航、页脚链接和 RSS 参数统一放在
+`src/config/site.ts`。页面模板、sitemap、robots 和结构化数据应读取这份配置，
+不要再次硬编码正式域名或品牌名称。
+
+文章 RSS 位于 `/rss.xml`，只包含公开文章的摘要、标签与原始来源，不发布草稿或
+完整正文。RSS 条数上限由站点配置控制；页面 `<head>` 与页脚都提供订阅入口。
 
 真实线上巡检可单独执行：
 
@@ -106,7 +115,7 @@ npm run check:deploy
 
 ## 详情弹窗与 URL
 
-文章和图片卡片始终保留真实详情链接，例如 `/articles/20260723-k7m2/` 和 `/images/20260723-p4x8/`。公开路径来自 frontmatter 的不可变 `contentId`，标题和发布日期之后可以调整，但不能重新生成 ID。完整决策见 [ADR-008](docs/decisions/ADR-008-stable-content-ids.md)。
+文章和图片卡片始终保留真实详情链接，两类内容共用根级地址，例如 `/20260723-k7m2`。`/articles` 和 `/images` 只作为分类索引，不再出现在详情地址中。除网站根目录 `/` 外，公开页面 URL 统一不带尾斜杠。公开路径来自 frontmatter 的全局唯一、不可变 `contentId`，标题和发布日期之后可以调整，但不能重新生成 ID。完整决策见 [ADR-008](docs/decisions/ADR-008-stable-content-ids.md)。
 
 在支持 JavaScript 的浏览器中，站点会在当前页面上打开详情弹窗，并使用 History API 同步修改地址栏：
 

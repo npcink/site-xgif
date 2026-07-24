@@ -5,21 +5,21 @@ import test from "node:test";
 const readOutput = (path) => readFile(new URL(`../dist/${path}`, import.meta.url), "utf8");
 
 async function detailOutputs(kind) {
-  const root = new URL(`../dist/${kind}/`, import.meta.url);
+  const root = new URL("../dist/", import.meta.url);
   const entries = await readdir(root, { withFileTypes: true });
   const outputs = await Promise.all(
     entries
-      .filter((entry) => entry.isDirectory())
+      .filter((entry) => entry.isDirectory() && /^\d{8}-[a-z0-9]{4}$/u.test(entry.name))
       .map(async (entry) => {
         try {
-          return await readOutput(`${kind}/${entry.name}/index.html`);
+          return await readOutput(`${entry.name}/index.html`);
         } catch (error) {
           if (error?.code === "ENOENT") return null;
           throw error;
         }
       }),
   );
-  return outputs.filter(Boolean);
+  return outputs.filter((output) => output?.includes(`data-detail-kind="${kind}"`));
 }
 
 test("home renders progressive detail links and a shared dialog", async () => {
@@ -28,12 +28,17 @@ test("home renders progressive detail links and a shared dialog", async () => {
   assert.match(home, /data-detail-link/);
   assert.match(home, /data-detail-dialog/);
   assert.match(home, /\/scripts\/detail-dialog\.js/);
+  assert.doesNotMatch(
+    home,
+    /href="\/(?!")[^"#?]+\/"/u,
+    "公开页面链接不得带尾斜杠",
+  );
 });
 
 test("article and image routes expose extractable detail content", async () => {
   const [articles, images] = await Promise.all([
-    detailOutputs("articles"),
-    detailOutputs("images"),
+    detailOutputs("article"),
+    detailOutputs("image"),
   ]);
   const article = articles[0];
   const image = images[0];
@@ -42,20 +47,27 @@ test("article and image routes expose extractable detail content", async () => {
   assert.ok(image, "构建结果至少应包含一张公开图片");
   assert.match(article, /data-detail-content/);
   assert.match(article, /data-detail-kind="article"/);
+  assert.match(article, /class="article-recommendations"/);
+  assert.equal(
+    (article.match(/class="article-recommendation"/g) || []).length,
+    3,
+    "公开文章末尾应提供三篇继续阅读内容",
+  );
+  assert.match(article, /class="article-recommendation"[^>]*data-detail-link/);
   assert.match(image, /data-detail-content/);
   assert.match(image, /data-detail-kind="image"/);
 });
 
 test("unknown-source images expose a direct rights and takedown route", async () => {
   const page = await readFile(
-    new URL("../src/pages/images/[...id].astro", import.meta.url),
+    new URL("../src/components/ImageDetailPage.astro", import.meta.url),
     "utf8",
   );
   const rights = await readFile(new URL("../src/pages/rights.astro", import.meta.url), "utf8");
 
   assert.match(page, /sourceKind === "unknown"/);
   assert.match(page, /权利人投诉与下架/);
-  assert.match(page, /href="\/rights\/"/);
+  assert.match(page, /href="\/rights"/);
   assert.match(rights, /1355471563@qq\.com/);
   assert.match(rights, /微信群或 QQ 群转存/);
 });
@@ -68,22 +80,30 @@ test("dialog controller owns history navigation and failure fallback", async () 
 
   assert.match(controller, /history\.pushState/);
   assert.match(controller, /popstate/);
-  assert.match(controller, /history\.back\(\)/);
+  assert.match(controller, /detailDialogDepth/);
+  assert.match(controller, /history\.go\(-detailDepth\)/);
   assert.match(controller, /window\.location\.assign/);
-  assert.ok(controller.includes("const detailPath = /^\\/(articles|images)\\/.+\\/$/;"));
+  assert.ok(controller.includes("const detailPath = /^\\/\\d{8}-[a-z0-9]{4}$/;"));
 });
 
 test("sitemap exposes public content and legal pages", async () => {
   const sitemap = await readOutput("sitemap.xml");
 
-  assert.match(sitemap, /https:\/\/www\.xgif\.cn\/articles\/\d{8}-[a-z0-9]{4}\//);
-  assert.match(sitemap, /https:\/\/www\.xgif\.cn\/images\/\d{8}-[a-z0-9]{4}\//);
-  assert.match(sitemap, /https:\/\/www\.xgif\.cn\/rights\//);
+  assert.match(sitemap, /https:\/\/www\.xgif\.cn\/\d{8}-[a-z0-9]{4}<\/loc>/);
+  assert.doesNotMatch(sitemap, /https:\/\/www\.xgif\.cn\/(?:articles|images)\/\d{8}-[a-z0-9]{4}/);
+  assert.match(sitemap, /https:\/\/www\.xgif\.cn\/rights<\/loc>/);
+});
+
+test("legacy typed detail routes are not emitted", async () => {
+  await Promise.all([
+    assert.rejects(() => readOutput("articles/20260710-vfks/index.html"), /ENOENT/),
+    assert.rejects(() => readOutput("images/20260707-6s1n/index.html"), /ENOENT/),
+  ]);
 });
 
 test("article details publish structured data and honest source labels", async () => {
   const [articles, component] = await Promise.all([
-    detailOutputs("articles"),
+    detailOutputs("article"),
     readFile(new URL("../src/components/ArticleDetailPage.astro", import.meta.url), "utf8"),
   ]);
 

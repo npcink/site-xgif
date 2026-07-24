@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const readBuiltArticle = (id) =>
-  readFile(new URL(`../dist/articles/${id}/index.html`, import.meta.url), "utf8");
+  readFile(new URL(`../dist/${id}/index.html`, import.meta.url), "utf8");
 
 test("public pages hide private import reminders but retain reader-facing editorial notes", async () => {
   const [imported, editorial] = await Promise.all([

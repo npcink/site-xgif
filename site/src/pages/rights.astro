@@ -1,8 +1,9 @@
 ---
+import { pageTitle, siteConfig } from "../config/site";
 import BaseLayout from "../layouts/BaseLayout.astro";
 ---
 
-<BaseLayout title="版权与更正 — xgif.cn" description="xgif.cn 的来源、授权和内容更正说明。">
+<BaseLayout title={pageTitle("版权与更正")} description={`${siteConfig.name} 的来源、授权和内容更正说明。`}>
   <section class="legal-page">
     <p class="section-kicker">RIGHTS / 版权与更正</p>
     <h1>尊重权利，<br />收到投诉及时处理。</h1>
