@@ -349,7 +349,10 @@ async function refreshLocalIndexes(action, details = {}) {
     warnings.push(`内容文件已经保存，但本地 SQLite 索引刷新失败：${error.message}`);
   }
   try {
-    await localContentBackup.snapshot(`Content change: ${action || "update"}`);
+    const snapshot = await localContentBackup.snapshot(`Content change: ${action || "update"}`);
+    if (snapshot.offsite?.configured && !snapshot.offsite.ok) {
+      warnings.push(`内容文件和本机私有 Git 已保存，但私有内容 GitHub 尚未同步：${snapshot.offsite.error || "请稍后重试。"}`);
+    }
   } catch (error) {
     warnings.push(`内容文件已经保存，但本地私有 Git 快照失败：${error.message}`);
   }
@@ -748,6 +751,12 @@ async function getGitStatus() {
 
 async function getContentGitSafety() {
   const items = await listContent("all");
+  const publicItems = items.filter(
+    (item) => !item.draft && (item.type !== "image" || item.public),
+  );
+  const privateItems = items.filter(
+    (item) => item.draft || (item.type === "image" && !item.public),
+  );
   const contentDirectories = [
     path.relative(repoRoot, target.articles),
     path.relative(repoRoot, target.imageEntries),
@@ -759,18 +768,17 @@ async function getContentGitSafety() {
     ]);
     const tracked = parseGitPathSet(trackedResult.stdout);
     const changed = parseGitStatusPathSet(statusResult.stdout);
-    const currentVersionInGit = items.filter((item) => tracked.has(item.file) && !changed.has(item.file));
-    const pending = items.filter((item) => !tracked.has(item.file) || changed.has(item.file));
-    const draftPending = pending.filter((item) => item.draft || (item.type === "image" && !item.public));
+    const currentVersionInGit = publicItems.filter((item) => tracked.has(item.file) && !changed.has(item.file));
+    const pending = publicItems.filter((item) => !tracked.has(item.file) || changed.has(item.file));
     return {
       ok: true,
-      total: items.length,
+      total: publicItems.length,
       currentVersionInGit: currentVersionInGit.length,
       pending: pending.length,
-      draftPending: draftPending.length,
-      publicPending: Math.max(0, pending.length - draftPending.length),
+      publicPending: pending.length,
+      privateContent: privateItems.length,
       warning: pending.length
-        ? `${pending.length} 条内容的当前版本尚未进入 Git。`
+        ? `${pending.length} 条公开内容的当前版本尚未进入公开 Git。`
         : "",
     };
   } catch (error) {
@@ -2758,6 +2766,19 @@ async function handleApi(req, res) {
       backup: path.relative(repoRoot, backupPath),
       contentHistory,
       status: localDataStore.getStatus(),
+    });
+    return;
+  }
+
+  if (pathname === "/api/storage/content-history/sync" && req.method === "POST") {
+    await readJson(req);
+    const contentHistory = await localContentBackup.snapshot("Manual private content GitHub sync");
+    sendJson(res, 200, {
+      ok: Boolean(contentHistory.ready && contentHistory.offsite?.ok),
+      contentHistory,
+      error: contentHistory.offsite?.ok
+        ? ""
+        : contentHistory.offsite?.error || "私有内容 GitHub 同步失败。",
     });
     return;
   }

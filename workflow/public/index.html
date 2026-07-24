@@ -769,9 +769,15 @@
               <small id="connection-ai-detail">不会显示 API 密钥</small>
             </article>
             <article>
-              <span>Git 与 PR</span>
-              <strong id="connection-git">检查中</strong>
+              <span>公开代码 GitHub</span>
+              <strong id="connection-public-git">检查中</strong>
+              <small id="connection-public-git-detail">只包含程序与已公开内容</small>
               <a id="connection-pr-link" href="#" target="_blank" rel="noopener" hidden>打开 PR 预览</a>
+            </article>
+            <article>
+              <span>私有内容 GitHub</span>
+              <strong id="connection-private-git">检查中</strong>
+              <small id="connection-private-git-detail">草稿、回收站与恢复副本</small>
             </article>
             <article>
               <span>图片存储</span>
@@ -835,6 +841,7 @@
             </div>
             <div class="system-actions">
               <button type="button" id="system-create-backup">创建安全备份</button>
+              <button type="button" id="private-content-sync">同步私有内容 GitHub</button>
               <button type="button" id="system-run-recovery">运行恢复演练</button>
             </div>
           </div>

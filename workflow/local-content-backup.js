@@ -16,6 +16,33 @@ function run(command, args, cwd) {
   });
 }
 
+function remoteIdentity(remote) {
+  const value = String(remote || "").trim();
+  const sshMatch = value.match(/^git@([^:]+):(.+?)(?:\.git)?$/);
+  if (sshMatch) {
+    return {
+      provider: sshMatch[1].toLowerCase() === "github.com" ? "github" : "git",
+      repository: sshMatch[2].replace(/\.git$/, ""),
+    };
+  }
+  try {
+    const url = new URL(value);
+    return {
+      provider: url.hostname.toLowerCase() === "github.com" ? "github" : "git",
+      repository: url.pathname.replace(/^\/|\.git$/g, ""),
+    };
+  } catch {
+    return { provider: "git", repository: "已配置私有远端" };
+  }
+}
+
+function safeGitError(error) {
+  return String(error?.stderr || error?.stdout || error?.message || "私有远程推送失败。")
+    .replace(/https?:\/\/[^@\s]+@/gi, "https://")
+    .replace(/\b(?:gh[opusr]_[A-Za-z0-9_]+|github_pat_[A-Za-z0-9_]+)\b/g, "[redacted]")
+    .trim();
+}
+
 async function exists(filePath) {
   return stat(filePath).then(() => true).catch(() => false);
 }
@@ -57,12 +84,18 @@ export class LocalContentBackup {
     await this.ensureRepository();
     await run("git", this.gitArgs(["add", "-A", "-f", "--", ...this.paths]), this.repoRoot);
     const staged = await run("git", this.gitArgs(["diff", "--cached", "--name-only"]), this.repoRoot);
+    let changed = false;
     if (!staged.stdout.trim()) {
+      const push = await this.pushOffsite();
+      const status = await this.status();
       return {
         ok: true,
-        changed: false,
-        ...(await this.status()),
-        offsite: await this.pushOffsite(),
+        changed,
+        ...status,
+        offsite: {
+          ...status.offsite,
+          error: push.error || status.offsite.error,
+        },
       };
     }
     await run("git", [
@@ -70,11 +103,17 @@ export class LocalContentBackup {
       "-c", "user.email=local-backup@xgif.invalid",
       ...this.gitArgs(["commit", "-m", message]),
     ], this.repoRoot);
+    changed = true;
+    const push = await this.pushOffsite();
+    const status = await this.status();
     return {
       ok: true,
-      changed: true,
-      ...(await this.status()),
-      offsite: await this.pushOffsite(),
+      changed,
+      ...status,
+      offsite: {
+        ...status.offsite,
+        error: push.error || status.offsite.error,
+      },
     };
   }
 
@@ -83,19 +122,55 @@ export class LocalContentBackup {
     try {
       remote = (await run("git", this.gitArgs(["remote", "get-url", "--push", "origin"]), this.repoRoot)).stdout.trim();
     } catch {
-      return { configured: false, ok: false, remote: "", error: "" };
+      return { configured: false, ok: false, error: "" };
     }
     try {
       await run("git", this.gitArgs(["push", "origin", "history"]), this.repoRoot);
-      return { configured: true, ok: true, remote, error: "" };
+      return { configured: true, ok: true, error: "" };
     } catch (error) {
       return {
         configured: true,
         ok: false,
-        remote,
-        error: String(error.stderr || error.stdout || error.message || "私有远程推送失败。").trim(),
+        error: safeGitError(error),
       };
     }
+  }
+
+  async offsiteStatus({ commit = "", committedAt = "" } = {}) {
+    let remote = "";
+    try {
+      remote = (await run("git", this.gitArgs(["remote", "get-url", "--push", "origin"]), this.repoRoot)).stdout.trim();
+    } catch {
+      return {
+        configured: false,
+        ok: false,
+        provider: "",
+        repository: "",
+        branch: "history",
+        commit: "",
+        syncedAt: "",
+        error: "尚未配置私有内容远端。",
+      };
+    }
+    const identity = remoteIdentity(remote);
+    let remoteCommit = "";
+    let remoteCommittedAt = "";
+    try {
+      remoteCommit = (await run("git", this.gitArgs(["rev-parse", "--verify", "refs/remotes/origin/history"]), this.repoRoot)).stdout.trim();
+      remoteCommittedAt = (await run("git", this.gitArgs(["log", "-1", "--format=%cI", "refs/remotes/origin/history"]), this.repoRoot)).stdout.trim();
+    } catch {
+      // The first successful push will create the remote-tracking ref.
+    }
+    const synchronized = Boolean(commit && remoteCommit && commit === remoteCommit);
+    return {
+      configured: true,
+      ok: synchronized,
+      ...identity,
+      branch: "history",
+      commit: remoteCommit,
+      syncedAt: synchronized ? (remoteCommittedAt || committedAt) : "",
+      error: synchronized ? "" : "本机私有快照尚未同步到远端，请重试。",
+    };
   }
 
   async status() {
@@ -106,12 +181,16 @@ export class LocalContentBackup {
         run("git", this.gitArgs(["log", "-1", "--format=%cI"]), this.repoRoot),
         run("git", this.gitArgs(["ls-tree", "-r", "--name-only", "HEAD"]), this.repoRoot),
       ]);
-      return {
+      const result = {
         ready: true,
         gitDir: path.relative(this.repoRoot, this.gitDir),
         commit: commit.stdout.trim(),
         committedAt: committedAt.stdout.trim(),
         files: count.stdout.split(/\r?\n/).filter(Boolean).length,
+      };
+      return {
+        ...result,
+        offsite: await this.offsiteStatus(result),
       };
     } catch {
       return {
@@ -120,6 +199,16 @@ export class LocalContentBackup {
         commit: "",
         committedAt: "",
         files: 0,
+        offsite: {
+          configured: false,
+          ok: false,
+          provider: "",
+          repository: "",
+          branch: "history",
+          commit: "",
+          syncedAt: "",
+          error: "尚未创建本机私有内容快照。",
+        },
       };
     }
   }
