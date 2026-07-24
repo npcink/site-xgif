@@ -13,9 +13,10 @@ XGIF 是一个单人维护的轻内容站，当前生产闭环已经完成：
 - 内容：公开 Markdown + Git
 - 管理：只在本机运行的发布助手
 - 索引：本机可重建 SQLite
+- 私有恢复：`npcink/site-xgif-private-content` 的 `history` 分支
 - 生产证据：GitHub checks、Cloudflare build、`/build.json` 和每日生产巡检
 
-本阶段完整历史、问题和经验见 [开发复盘](DEVELOPMENT_RETROSPECTIVE_2026-07-24.md)。
+本阶段完整历史、问题和经验见 [开发复盘](DEVELOPMENT_RETROSPECTIVE_2026-07-24.md)；发布助手的详细产品复盘见 [本地发布助手阶段复盘](../../workflow/docs/LOCAL_PUBLISHER_RETROSPECTIVE_2026-07-24.md)。
 
 ## 2. 不可破坏的架构边界
 
@@ -29,10 +30,14 @@ XGIF 是一个单人维护的轻内容站，当前生产闭环已经完成：
 | `workflow/.runtime/xgif.sqlite3` | 可删除重建的本地索引 |
 | `workflow/private-sources/` | 草稿、外部正文和 R2 字节的私有恢复副本 |
 | `workflow/backups/content-history.git` | 白名单限定的私有内容历史 |
+| `npcink/site-xgif` | 公开程序、文档、公开内容、PR 与生产部署历史 |
+| `npcink/site-xgif-private-content` | 白名单内容、草稿、回收站、私有来源和恢复台账的异机历史 |
 
 禁止把 `workflow/`、`.env`、SQLite、私有来源正文或本地日志部署到 Cloudflare。
 
 不要新增 D1、Vectorize、在线 CMS、Worker 上传 API或多用户后台，除非单人本地模式已被真实需求证明不足，并先写新 ADR。
+
+不要因为主仓库 `git status` 能看到草稿，就把草稿加入公开提交。公开发布与私有恢复的完整决策见 [ADR-013](decisions/ADR-013-public-code-private-content-github-boundary.md)。
 
 ## 3. 内容契约
 
@@ -85,6 +90,8 @@ npm run r2:cleanup
 ```
 
 `r2:cleanup` 默认只观察。孤立对象连续无引用满 30 天、远端正常且私有字节完整后，才允许用完整对象键一次删除一个。
+
+管理端“系统状态与恢复”分别显示公开代码 GitHub 和私有内容 GitHub。点击“同步私有内容 GitHub”只更新白名单内容快照及其私有远端，不会提交公开仓库或触发部署。
 
 ## 5. 内容发布状态
 
@@ -153,7 +160,7 @@ macOS 与 Linux 字体栅格不同。视觉截图以 `npm run test:visual:linux`
 
 ## 8. 恢复顺序
 
-1. 确认公开 Markdown、图片字节和私有内容 Git；
+1. 确认公开 Markdown、图片字节和私有内容 Git；本机快照与私有远端 `history` 提交应一致；
 2. 从 Markdown 与回收站旁车重建 SQLite；
 3. 运行 R2 对账与私有字节核验；
 4. 运行站点构建和测试；
