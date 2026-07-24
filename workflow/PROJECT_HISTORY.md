@@ -2,7 +2,7 @@
 
 ## 项目定位
 
-XGIF 是一个轻量静态内容站，用于分享文章片段与表情包。站点不追求成为完整 CMS；内容以 Markdown 与图片文件保存在 Git 仓库中，本地发布台只是帮助维护这些文件的工具。
+XGIF 是一个轻量静态内容站，用于分享文章与表情包。站点不追求成为完整 CMS；内容以 Markdown 与图片元数据保存在 Git 仓库中，本地发布台只是帮助维护这些文件的工具，新图片字节可以存入 R2。
 
 当前最小闭环是：
 
@@ -10,6 +10,7 @@ XGIF 是一个轻量静态内容站，用于分享文章片段与表情包。站
 写文章或选择表情包
 → 本地预览
 → 本地发布台生成内容文件
+→ 内容分支与 Pull Request
 → GitHub CI 验证
 → Cloudflare Workers Static Assets 部署静态站点
 ```
@@ -72,6 +73,12 @@ Cloudflare Worker 只上传 `site/dist` 静态资源，不包含 Worker 运行�
 ### 10. 系统加固与生产证据链
 
 本地发布器新增源码版本健康检查、Host/Origin/JSON/CSRF 防护和真实 HTTP 集成测试；SQLite 内容列表改为增量索引与 SQL 查询。R2 除台账外增加真实远端核验、按哈希保存的私有原始字节和 30 天孤立对象观察期。静态站生成 `/build.json`，构建后检查站内断链，GitHub 每日核验真实生产站点与防盗链。外部文章正文只接受纯文本和 Markdown。详见 [`ADR-011`](../site/docs/decisions/ADR-011-system-hardening-and-production-evidence.md)。
+
+### 11. 裸域跳转与阶段收尾
+
+`xgif.cn` 已通过 Cloudflare 代理 DNS 和 Single Redirect 永久跳转到 `https://www.xgif.cn`。HTTP 与 HTTPS 均返回 301，原路径和查询参数完整保留；强制生产巡检已通过。至此，站点部署、本地发布、flomo 导入、内容管理、SQLite 恢复、R2 存储与备份、稳定 ID、公开全文治理和生产证据链形成完整闭环。
+
+本阶段详细历史、失败纠正和可复用经验见 [`site/docs/DEVELOPMENT_RETROSPECTIVE_2026-07-24.md`](../site/docs/DEVELOPMENT_RETROSPECTIVE_2026-07-24.md)。
 
 ## 当前开发原则
 

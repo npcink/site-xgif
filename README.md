@@ -6,7 +6,12 @@
 - [`workflow/`](workflow/README.md)：仅本机运行的发布台；它将内容写入 `site/`，并从仓库根提交 Git。
 - [`old/`](old/next-design-baseline/README.md)：保留的 Next.js 模板与视觉基线，不参与构建或发布。
 
-项目的历史、边界与后续开发原则见 [`workflow/PROJECT_HISTORY.md`](workflow/PROJECT_HISTORY.md)。
+项目资料：
+
+- 当前交接与运行手册：[`site/docs/PROJECT_HANDOFF.md`](site/docs/PROJECT_HANDOFF.md)
+- 阶段开发复盘与经验：[`site/docs/DEVELOPMENT_RETROSPECTIVE_2026-07-24.md`](site/docs/DEVELOPMENT_RETROSPECTIVE_2026-07-24.md)
+- 历史与长期原则：[`workflow/PROJECT_HISTORY.md`](workflow/PROJECT_HISTORY.md)
+- 架构决策：[`site/docs/decisions/`](site/docs/decisions/)
 
 ## 根目录约定
 
