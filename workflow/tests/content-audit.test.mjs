@@ -168,3 +168,22 @@ internalNote: "仅后台可见"
   assert.equal(parsed.data.editorNote, "公开说明");
   assert.equal(parsed.data.internalNote, "仅后台可见");
 });
+
+test("content audit warns about long Markdown paragraphs without blocking publication", async () => {
+  const dirs = await fixture();
+  const longParagraph = `这是一段连续叙事，${"内容需要适当分段以便阅读。".repeat(18)}`;
+  await writeFile(
+    path.join(dirs.articlesDir, "20260723-0008.md"),
+    article({
+      contentId: "20260723-0008",
+      title: "长段落提醒",
+      body: `${longParagraph}\n\n第二段长度合理，用来确认审计按 Markdown 空行识别段落。`,
+    }),
+    "utf8",
+  );
+
+  const report = await auditContentLibrary({ repoRoot: dirs.repoRoot });
+  const item = report.items.find((entry) => entry.title === "长段落提醒");
+  assert.equal(item.status, "review");
+  assert.match(item.warnings.join(" "), /1 个超过 180 字的长段落/);
+});

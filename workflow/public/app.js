@@ -1,4 +1,5 @@
 import { importItemMatchesFilter, summarizeImportSelection } from "./import-selection.js";
+import { renderMarkdownPreview } from "./markdown-preview.js";
 import {
   clearLibrarySelectionState,
   createLibrarySelection,
@@ -50,9 +51,12 @@ const trashList = $("#trash-list");
 const batchEditDialog = $("#batch-edit-dialog");
 const batchEditForm = $("#batch-edit-form");
 const contentAuditDialog = $("#content-audit-dialog");
+const assetLibraryDialog = $("#asset-library-dialog");
 const syncHistoryDialog = $("#sync-history-dialog");
 const articlePublishOptions = $("#article-publish-options");
 const articleRealPreview = $("#article-real-preview");
+const articleNextAction = $("#article-next-action");
+const librarySelectionBar = $("#library-selection-bar");
 const flomoFileInput = $("#flomo-file");
 const flomoReview = $("#flomo-review");
 const flomoStats = $("#flomo-stats");
@@ -67,6 +71,7 @@ let selectedImage = null;
 let activeContent = null;
 let flomoFileData = "";
 let flomoInspection = null;
+const flomoAiBodies = new Map();
 let flomoImportFilter = "all";
 let flomoAiBusy = false;
 let flomoImportBusy = false;
@@ -86,6 +91,9 @@ const recycleSelectedIds = new Set();
 const librarySelection = createLibrarySelection();
 const librarySelectedItems = new Map();
 let lastTrashedItems = [];
+let tagMergePlan = null;
+let assetLibraryItems = [];
+let assetPickerMode = "insert";
 
 try {
   const storedTrash = JSON.parse(localStorage.getItem("xgif-last-trashed-items") || "[]");
@@ -169,21 +177,10 @@ function renderTags(tags) {
   return list(tags).map((tag) => `<span>#${escapeHtml(tag)}</span>`).join("");
 }
 
-function renderMarkdownPreview(value) {
-  const blocks = String(value || "").trim().split(/\n\s*\n/).filter(Boolean);
-  if (!blocks.length) return '<p class="empty-copy">正文内容会在这里显示。</p>';
-  return blocks.map((block) => {
-    const text = escapeHtml(block.trim()).replace(/\n/g, "<br />");
-    if (text.startsWith("## ")) return `<h2>${text.slice(3)}</h2>`;
-    if (text.startsWith("# ")) return `<h2>${text.slice(2)}</h2>`;
-    if (text.startsWith("&gt; ")) return `<blockquote>${text.slice(5)}</blockquote>`;
-    return `<p>${text}</p>`;
-  }).join("");
-}
-
 function updateArticlePreview() {
   const data = formData(articleForm);
   $("#article-preview").innerHTML = `
+    ${data.coverImage ? `<img class="article-preview-cover" src="${escapeHtml(data.coverImage)}" alt="" />` : ""}
     <div class="meta"><span>${escapeHtml(data.source || "来源")}</span><span>${escapeHtml(data.pubDate || today)}</span><span>${escapeHtml(data.readTime || "1 分钟")}</span></div>
     <h2>${escapeHtml(data.title || "文章标题")}</h2>
     <p class="summary">${escapeHtml(data.summary || "文章摘要会显示在这里。")}</p>
@@ -196,6 +193,7 @@ function updateArticlePreview() {
       <p class="summary">${escapeHtml(data.summary || "文章摘要会显示在这里。")}</p>
       <div class="tags">${renderTags(data.tags)}</div>
     </header>
+    ${data.coverImage ? `<img class="article-page-preview-cover" src="${escapeHtml(data.coverImage)}" alt="${escapeHtml(data.coverAlt || data.title || "文章封面")}" />` : ""}
     <div class="article-prose">${renderMarkdownPreview(data.body)}</div>`;
   updateArticleReview(data);
 }
@@ -311,6 +309,39 @@ function saveLocalDraft(form) {
   localStorage.setItem(draftKey(form), JSON.stringify({ savedAt: Date.now(), data }));
 }
 
+function formStateNode(form) {
+  return form === articleForm ? $("#article-editor-state") : $("#image-editor-state");
+}
+
+function isFormDirty(form) {
+  return form.dataset.dirty === "true";
+}
+
+function updateFormSaveState(form, message = "") {
+  const stateNode = formStateNode(form);
+  if (message) {
+    stateNode.textContent = message;
+    return;
+  }
+  if (isFormDirty(form)) {
+    stateNode.textContent = "有未保存到 Markdown 的修改 · 已在浏览器临时暂存";
+  } else if (form.dataset.editFile) {
+    stateNode.textContent = "已保存到 Markdown";
+  } else {
+    stateNode.textContent = "";
+  }
+}
+
+function markFormDirty(form) {
+  form.dataset.dirty = "true";
+  updateFormSaveState(form);
+}
+
+function markFormClean(form, message = "") {
+  form.dataset.dirty = "false";
+  updateFormSaveState(form, message);
+}
+
 function setFormValues(form, data) {
   for (const [key, value] of Object.entries(data || {})) {
     const field = form.elements.namedItem(key);
@@ -333,7 +364,8 @@ function restoreLocalDraft(form, stateNode) {
     }
     setFormValues(form, stored.data);
     setPublishMode(form, stored.data.publishMode || (stored.data.draft ? "draft" : "publish"));
-    stateNode.textContent = "已恢复未发布的本地暂存内容。";
+    form.dataset.dirty = "true";
+    stateNode.textContent = "已恢复浏览器临时暂存 · 尚未保存到 Markdown";
   } catch {
     localStorage.removeItem(draftKey(form));
   }
@@ -341,12 +373,13 @@ function restoreLocalDraft(form, stateNode) {
 
 function setEditing(form, item) {
   form.dataset.editFile = item?.file || "";
-  const state = form === articleForm ? $("#article-editor-state") : $("#image-editor-state");
-  state.textContent = item ? `正在编辑：${item.file}` : "";
+  markFormClean(form, item ? `已保存到 Markdown · ${item.file}` : "");
   if (item) setPublishMode(form, item.draft ? "draft" : "publish");
   if (form === articleForm) {
     form.dataset.originalDraft = item ? String(Boolean(item.draft)) : "";
     form.dataset.previewUrl = item?.previewUrl || "";
+    form.dataset.previewed = "false";
+    form.dataset.publicationState = item?.publicationState || (item?.draft ? "draft" : "local");
     syncArticleActionState();
   } else {
     syncImageActionState();
@@ -358,6 +391,8 @@ function syncArticleActionState() {
   const editing = Boolean(articleForm.dataset.editFile);
   const originalDraft = articleForm.dataset.originalDraft === "true";
   const draft = $('[name="draft"]', articleForm).checked;
+  const dirty = isFormDirty(articleForm);
+  const previewed = articleForm.dataset.previewed === "true";
   const isPublishingDraft = editing && originalDraft && !draft;
   const isReturningToDraft = editing && !originalDraft && draft;
 
@@ -366,6 +401,40 @@ function syncArticleActionState() {
   else if (editing && draft) submit.textContent = "保存草稿修改";
   else if (editing) submit.textContent = "检查并保存修改";
   else submit.textContent = draft ? "保存草稿" : "检查并发布文章";
+
+  let nextAction = draft ? "save" : "publish";
+  let nextTitle = draft ? "保存草稿" : "发布到本地";
+  let nextDescription = draft
+    ? "先保存到 Markdown，再使用真实站点模板预览。"
+    : "通过质量检查后进入本地公开站点，云端仍不会立即变化。";
+
+  if (editing && !dirty && originalDraft && !previewed) {
+    nextAction = "preview";
+    nextTitle = "真实预览";
+    nextDescription = sitePreviewAvailable
+      ? "使用与线上相同的 Astro 模板检查已保存版本。"
+      : "站点预览尚未运行，请先在“系统详情与工具”中检查服务。";
+  } else if (editing && !dirty && originalDraft && previewed) {
+    nextAction = "publish";
+    nextTitle = "发布到本地";
+    nextDescription = "预览完成后执行质量检查，并把文章加入本地公开站点。";
+  } else if (editing && !dirty && !originalDraft) {
+    nextAction = "sync";
+    nextTitle = "前往待同步";
+    nextDescription = "本地内容已保存；下一步选择内容分支并进入 PR 与云端发布流程。";
+  }
+
+  articleNextAction.dataset.action = nextAction;
+  articleNextAction.textContent = nextTitle;
+  articleNextAction.disabled = nextAction === "preview" && (!articleForm.dataset.previewUrl || !sitePreviewAvailable);
+  $("#article-next-step-title").textContent = nextTitle;
+  $("#article-next-step-description").textContent = nextDescription;
+
+  const stageIndex = { save: 0, preview: 1, publish: 2, sync: 3 }[nextAction] ?? 0;
+  for (const [index, step] of $$("[data-journey-stage]", $("#article-publish-journey")).entries()) {
+    step.classList.toggle("done", index < stageIndex);
+    step.classList.toggle("current", index === stageIndex);
+  }
 
   articlePublishOptions.hidden = !isPublishingDraft;
   $("#article-original-date").textContent = `沿用 ${$('[name="pubDate"]', articleForm).value || "草稿中的收藏日期"}`;
@@ -391,17 +460,26 @@ function switchTab(name) {
   $$(".tab").forEach((item) => item.classList.toggle("active", item.dataset.tab === name));
   $$(".panel").forEach((item) => item.classList.toggle("active", item.id === `${name}-panel`));
   if (name === "library") loadLibrary();
+  return true;
 }
 
-function applyArticleSuggestion(suggestion) {
+function applyArticleSuggestion(suggestion, expectedBody) {
   for (const field of ["title", "summary", "tags", "readTime", "editorNote", "source"]) {
     const input = $(`[name="${field}"]`, articleForm);
     const value = Array.isArray(suggestion[field]) ? suggestion[field].join(", ") : suggestion[field];
     if (input && value) input.value = value;
   }
+  let paragraphFormatting = suggestion.paragraphFormatting || "unchanged";
+  const bodyInput = $('[name="body"]', articleForm);
+  if (paragraphFormatting === "applied") {
+    if (bodyInput.value === expectedBody) bodyInput.value = suggestion.body;
+    else paragraphFormatting = "stale";
+  }
   articleDetails.open = false;
   updateArticlePreview();
+  markFormDirty(articleForm);
   saveLocalDraft(articleForm);
+  return paragraphFormatting;
 }
 
 function applyImageSuggestion(suggestion) {
@@ -412,6 +490,7 @@ function applyImageSuggestion(suggestion) {
   }
   imageDetails.open = false;
   updateImagePreview();
+  markFormDirty(imageForm);
   saveLocalDraft(imageForm);
 }
 
@@ -468,6 +547,7 @@ function renderFlomoStats(stats) {
 
 function renderFlomoInspection(inspection) {
   flomoInspection = inspection;
+  flomoAiBodies.clear();
   renderFlomoStats(inspection.stats);
   const renderItem = (item) => {
     const duplicate = item.duplicate
@@ -512,7 +592,7 @@ function renderFlomoInspection(inspection) {
               <label>来源链接<input type="url" data-import-field="sourceUrl" value="${escapeHtml(item.sourceUrl)}" placeholder="https://example.com/article" /></label>
               <label>来源名称<input data-import-field="source" value="${escapeHtml(item.source)}" placeholder="例如：煎蛋" /></label>
             </div>
-            <details class="import-body"><summary>查看导入正文</summary><pre>${escapeHtml(item.body)}</pre></details>
+            <details class="import-body"><summary>查看导入正文</summary><pre data-import-body>${escapeHtml(item.body)}</pre></details>
           </div>
         </details>
       </article>`;
@@ -584,6 +664,7 @@ function collectImportOverrides() {
   return Object.fromEntries($$("[data-import-hash]", flomoList).map((item) => {
     const value = {};
     for (const field of $$('[data-import-field]', item)) value[field.dataset.importField] = field.value;
+    if (flomoAiBodies.has(item.dataset.importHash)) value.body = flomoAiBodies.get(item.dataset.importHash);
     return [item.dataset.importHash, value];
   }));
 }
@@ -628,7 +709,21 @@ async function organizeImportItem(item, overrides = collectImportOverrides()) {
     }
     if (suggestion.title) $("[data-import-title]", card).textContent = suggestion.title;
     if (suggestion.summary) $("[data-import-preview]", card).textContent = suggestion.summary;
-    setFlomoAiStatus(item, "done", "AI 已整理，请复核。");
+    const paragraphFormatting = suggestion.paragraphFormatting || "unchanged";
+    if (paragraphFormatting === "applied") {
+      flomoAiBodies.set(item.contentHash, suggestion.body);
+      $("[data-import-body]", card).textContent = suggestion.body;
+    } else {
+      flomoAiBodies.delete(item.contentHash);
+    }
+    const paragraphMessage = paragraphFormatting === "applied"
+      ? "长段落已整理，正文字符未改动。"
+      : paragraphFormatting === "rejected"
+        ? "段落结果涉及正文字符改动，已保留原文。"
+        : paragraphFormatting === "too_long"
+          ? "正文超过 12,000 字，本次只整理元数据。"
+          : "原有段落保持不变。";
+    setFlomoAiStatus(item, "done", `AI 已整理，请复核。${paragraphMessage}`);
     return true;
   } catch (error) {
     setFlomoAiStatus(item, "failed", `整理失败：${error.message}`);
@@ -639,7 +734,7 @@ async function organizeImportItem(item, overrides = collectImportOverrides()) {
 async function aiOrganizeSelectedImports() {
   const items = selectedImportItems();
   if (!items.length) throw new Error("请先选择需要 AI 整理的内容。");
-  if (!window.confirm(`将把选中的 ${items.length} 条正文发送给当前配置的 AI 服务，用于生成标题、摘要和标签。是否继续？`)) return;
+  if (!window.confirm(`将把选中的 ${items.length} 条正文发送给当前配置的 AI 服务，用于生成标题、摘要和标签，并在必要时仅通过新增空行整理长段落。是否继续？`)) return;
   const overrides = collectImportOverrides();
   let completed = 0;
   let failed = 0;
@@ -734,6 +829,7 @@ function updateLibrarySelection() {
   const summary = summarizeLibrarySelection(librarySelection);
   const selectedCount = summary.count;
   librarySelectionSummary.textContent = summary.label;
+  librarySelectionBar.classList.toggle("has-selection", selectedCount > 0);
   $("#library-bulk-publish").disabled = selectedCount === 0;
   $("#library-bulk-draft").disabled = selectedCount === 0;
   $("#library-bulk-edit").disabled = selectedCount === 0;
@@ -784,9 +880,9 @@ function renderLibraryTable(items) {
         <tr>
           <th class="content-select-cell"><input id="library-select-page" type="checkbox" aria-label="选择当前页全部内容" /></th>
           <th scope="col">标题</th>
-          <th scope="col">类型 / 状态</th>
+          <th scope="col">状态</th>
           <th scope="col">日期</th>
-          <th scope="col">来源</th>
+          <th scope="col">标签</th>
         </tr>
       </thead>
       <tbody>
@@ -796,6 +892,7 @@ function renderLibraryTable(items) {
           if (selected) librarySelectedItems.set(item.file, item);
           const typeLabel = item.type === "article" ? "文章" : "图片";
           const summary = item.summary || item.bodyExcerpt || "暂无摘要";
+          const tags = list(item.tags).slice(0, 2);
           return `
             <tr class="content-item${active ? " active" : ""}" data-content-file="${escapeHtml(item.file)}" data-content-type="${item.type}">
               <td class="content-select-cell">
@@ -803,14 +900,14 @@ function renderLibraryTable(items) {
               </td>
               <td class="content-title-cell">
                 <button class="content-title-button" type="button" data-content-open="${escapeHtml(item.file)}" ${active ? 'aria-current="true"' : ""}>${escapeHtml(item.title)}</button>
+                <span class="content-item-meta">${typeLabel} · ${escapeHtml(item.source || "未标注来源")}</span>
                 <span class="content-item-summary">${escapeHtml(summary)}</span>
               </td>
               <td>
-                <span class="content-type-label">${typeLabel}</span>
                 <span class="workflow-state compact" data-state="${escapeHtml(item.publication?.state || "unknown")}">${escapeHtml(item.publication?.label || "状态待确认")}</span>
               </td>
               <td class="content-date-cell">${escapeHtml(item.pubDate || "未定")}</td>
-              <td class="content-source-cell">${escapeHtml(item.source || "未标注")}</td>
+              <td class="content-tags-cell">${tags.length ? tags.map((tag) => `<span>${escapeHtml(tag)}</span>`).join("") : "—"}</td>
             </tr>`;
         }).join("")}
       </tbody>
@@ -909,7 +1006,10 @@ async function openContentAudit() {
   $("#content-audit-list").innerHTML = '<p class="library-empty">正在读取体检结果…</p>';
   contentAuditDialog.showModal();
   try {
-    const report = await api("/api/content/audit");
+    const [report] = await Promise.all([
+      api("/api/content/audit"),
+      loadTagGovernance(),
+    ]);
     $("#content-audit-summary").textContent =
       `可直接上线 ${report.counts.ready} 条 · 需要确认 ${report.counts.review} 条 · 建议退回草稿 ${report.counts.draft} 条`;
     $("#content-audit-list").innerHTML = [
@@ -920,6 +1020,81 @@ async function openContentAudit() {
   } catch (error) {
     $("#content-audit-summary").textContent = `体检失败：${error.message}`;
     $("#content-audit-list").innerHTML = "";
+  }
+}
+
+function renderTagGovernance(report) {
+  $("#tag-governance-summary").textContent =
+    `${report.counts.tags} 个使用中标签 · ${report.counts.nonCanonical} 个不在规范词表 · 覆盖 ${report.counts.content} 条内容`;
+  $("#tag-merge-source").innerHTML = report.tags
+    .map((tag) => `<option value="${escapeHtml(tag.name)}">${escapeHtml(tag.name)}（${tag.total}）</option>`)
+    .join("");
+  $("#tag-merge-target").innerHTML = report.canonicalTags
+    .map((tag) => `<option value="${escapeHtml(tag)}">${escapeHtml(tag)}</option>`)
+    .join("");
+  $("#tag-governance-list").innerHTML = report.tags.length
+    ? report.tags.map((tag) => `
+      <div class="tag-governance-row" data-state="${tag.canonical ? "canonical" : "attention"}">
+        <strong>#${escapeHtml(tag.name)}</strong>
+        <span>${tag.total} 条 · 文章 ${tag.articles} · 图片 ${tag.images}</span>
+        <small>${tag.canonical ? "规范标签" : "需要合并到规范词表"}${tag.similar.length ? ` · 近似：${escapeHtml(tag.similar.join("、"))}` : ""}</small>
+      </div>`).join("")
+    : '<p class="library-empty">内容库中还没有标签。</p>';
+  tagMergePlan = null;
+  $("#tag-merge-plan").hidden = true;
+}
+
+async function loadTagGovernance() {
+  $("#tag-governance-summary").textContent = "正在读取标签使用情况…";
+  const report = await api("/api/tags/governance");
+  renderTagGovernance(report);
+  return report;
+}
+
+async function previewTagMerge() {
+  const fromTag = $("#tag-merge-source").value;
+  const toTag = $("#tag-merge-target").value;
+  const planNode = $("#tag-merge-plan");
+  try {
+    tagMergePlan = await api("/api/tags/merge", { fromTag, toTag, apply: false });
+    planNode.hidden = false;
+    planNode.innerHTML = `
+      <div>
+        <strong>${tagMergePlan.count} 条内容将发生变化</strong>
+        <span>${escapeHtml(tagMergePlan.fromTag)} → ${escapeHtml(tagMergePlan.toTag)}</span>
+      </div>
+      ${tagMergePlan.affected.length
+        ? `<ul>${tagMergePlan.affected.slice(0, 12).map((item) => `<li>${escapeHtml(item.title)} <code>${escapeHtml(item.file)}</code></li>`).join("")}</ul>`
+        : '<p>没有内容使用这个标签。</p>'}
+      <button class="primary" type="button" id="tag-merge-apply" ${tagMergePlan.count ? "" : "disabled"}>确认并应用合并</button>`;
+    $("#tag-merge-apply")?.addEventListener("click", applyTagMerge);
+  } catch (error) {
+    tagMergePlan = null;
+    planNode.hidden = false;
+    planNode.innerHTML = `<p>${escapeHtml(error.message)}</p>`;
+  }
+}
+
+async function applyTagMerge() {
+  if (!tagMergePlan?.count) return;
+  if (!window.confirm(
+    `将修改 ${tagMergePlan.count} 条 Markdown，把“${tagMergePlan.fromTag}”合并到“${tagMergePlan.toTag}”。是否继续？`,
+  )) return;
+  const button = $("#tag-merge-apply");
+  button.disabled = true;
+  button.textContent = "正在合并…";
+  try {
+    const result = await api("/api/tags/merge", {
+      fromTag: tagMergePlan.fromTag,
+      toTag: tagMergePlan.toTag,
+      apply: true,
+      confirmation: tagMergePlan.confirmation,
+    });
+    $("#tag-merge-plan").innerHTML =
+      `<p>已更新 ${result.changedFiles.length} 条内容。${escapeHtml(result.indexWarning || "索引与私有快照已刷新。")}</p>`;
+    await Promise.all([loadTagGovernance(), loadLibrary()]);
+  } catch (error) {
+    $("#tag-merge-plan").innerHTML = `<p>${escapeHtml(error.message)}</p>`;
   }
 }
 
@@ -940,6 +1115,161 @@ async function openSyncHistory() {
   } catch (error) {
     $("#sync-history-list").innerHTML = `<p class="library-empty">${escapeHtml(error.message)}</p>`;
   }
+}
+
+function assetSearchText(item) {
+  return [item.title, item.description, item.source, ...item.tags].join(" ").toLocaleLowerCase("zh-CN");
+}
+
+function renderAssetLibrary() {
+  const query = $("#asset-library-query").value.trim().toLocaleLowerCase("zh-CN");
+  const items = assetLibraryItems.filter((item) => !query || assetSearchText(item).includes(query));
+  $("#asset-library-list").innerHTML = items.length
+    ? items.map((item) => `
+      <article class="asset-library-item" data-state="${item.backup.ok && !item.draft ? "ready" : "attention"}">
+        <img src="${escapeHtml(item.image)}" alt="" loading="lazy" />
+        <div>
+          <strong>${escapeHtml(item.title)}</strong>
+          <p>${escapeHtml(item.description || item.source || "暂无说明")}</p>
+          <div class="tags">${renderTags(item.tags)}</div>
+          <small>${item.storage === "r2" ? "R2" : item.storage === "local" ? "本地文件" : "外部地址"} · ${escapeHtml(item.backup.label)}${item.license ? ` · ${escapeHtml(item.license)}` : ""}</small>
+        </div>
+        <button type="button" data-asset-select="${escapeHtml(item.contentId)}">${assetPickerMode === "cover" ? "设为封面" : "插入正文"}</button>
+      </article>`).join("")
+    : '<p class="library-empty">没有匹配的素材。</p>';
+}
+
+async function loadAssetLibrary({ refresh = false } = {}) {
+  if (!refresh && assetLibraryItems.length) {
+    renderAssetLibrary();
+    return;
+  }
+  $("#asset-library-list").innerHTML = '<p class="library-empty">正在读取素材目录…</p>';
+  const report = await api("/api/assets");
+  assetLibraryItems = report.items;
+  $("#asset-library-summary").textContent =
+    `${report.counts.total} 项素材 · ${report.counts.local} 项本地 · ${report.counts.r2} 项 R2 · ${report.counts.attention} 项需留意`;
+  renderAssetLibrary();
+}
+
+function formatStatusDate(value) {
+  if (!value) return "尚无记录";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString("zh-CN");
+}
+
+function recoveryState(label, value, detail, ok) {
+  return `
+    <div class="recovery-status-item" data-state="${ok ? "ready" : "attention"}">
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(value)}</strong>
+      <small>${escapeHtml(detail)}</small>
+    </div>`;
+}
+
+async function loadRecoveryDashboard() {
+  const grid = $("#recovery-dashboard-grid");
+  grid.innerHTML = "<p>正在读取备份与恢复状态…</p>";
+  try {
+    const report = await api("/api/storage/dashboard");
+    const latest = report.sqliteBackups.latest;
+    const drill = report.recoveryDrill;
+    const r2Issues = Object.entries(report.r2.counts || {})
+      .filter(([name, count]) => !["references", "ledgerRows"].includes(name) && Number(count) > 0)
+      .reduce((sum, [, count]) => sum + Number(count), 0);
+    grid.innerHTML = [
+      recoveryState(
+        "SQLite 备份",
+        `${report.sqliteBackups.count} 份`,
+        latest ? `最近：${formatStatusDate(latest.modifiedAt)}` : "尚未创建手动备份",
+        Boolean(latest),
+      ),
+      recoveryState(
+        "私有内容 Git",
+        report.contentHistory.ready ? `${report.contentHistory.files} 个文件` : "待创建",
+        report.contentHistory.ready ? `最近：${formatStatusDate(report.contentHistory.committedAt)}` : "未找到可用内容快照",
+        report.contentHistory.ready,
+      ),
+      recoveryState(
+        "恢复演练",
+        drill.ok ? "通过" : drill.neverRun ? "尚未运行" : "需要检查",
+        drill.completedAt ? `最近：${formatStatusDate(drill.completedAt)}` : (drill.error || "使用临时数据库验证损坏重建"),
+        drill.ok,
+      ),
+      recoveryState(
+        "R2 本地对账",
+        report.r2.ok ? "一致" : `${r2Issues} 项异常`,
+        `引用 ${report.r2.counts?.references || 0} · 台账 ${report.r2.counts?.ledgerRows || 0}`,
+        report.r2.ok,
+      ),
+    ].join("");
+  } catch (error) {
+    grid.innerHTML = `<p>${escapeHtml(error.message)}</p>`;
+  }
+}
+
+async function createSafetyBackup(button, resultNode) {
+  button.disabled = true;
+  resultNode.textContent = "正在创建 SQLite 与私有内容快照…";
+  try {
+    const result = await api("/api/storage/backup", {});
+    resultNode.textContent =
+      `备份完成：SQLite ${result.backup}；内容 Git ${result.contentHistory?.commit?.slice(0, 10) || "已检查"}`;
+    await loadRecoveryDashboard();
+  } catch (error) {
+    resultNode.textContent = `备份失败：${error.message}`;
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function runRecoveryVerification() {
+  const button = $("#system-run-recovery");
+  const resultNode = $("#recovery-dashboard-result");
+  button.disabled = true;
+  resultNode.textContent = "正在临时数据库中模拟损坏并验证自动重建…";
+  try {
+    const result = await api("/api/storage/recovery-drill", {});
+    resultNode.textContent =
+      `恢复演练通过：重建 ${result.content} 条内容、${result.trash} 条回收站记录；真实数据未被修改。`;
+    await loadRecoveryDashboard();
+  } catch (error) {
+    resultNode.textContent = `恢复演练失败：${error.message}`;
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function openAssetLibrary(mode = "insert") {
+  assetPickerMode = mode;
+  $("#asset-library-query").value = "";
+  assetLibraryDialog.showModal();
+  try {
+    await loadAssetLibrary();
+  } catch (error) {
+    $("#asset-library-list").innerHTML = `<p class="library-empty">${escapeHtml(error.message)}</p>`;
+  }
+}
+
+function selectReusableAsset(item) {
+  if (assetPickerMode === "cover") {
+    const cover = $('[name="coverImage"]', articleForm);
+    const coverAlt = $('[name="coverAlt"]', articleForm);
+    if (cover) cover.value = item.image;
+    if (coverAlt && !coverAlt.value) coverAlt.value = item.title;
+    cover?.dispatchEvent(new Event("input", { bubbles: true }));
+  } else {
+    const body = $('[name="body"]', articleForm);
+    const markdown = `![${item.title.replaceAll("]", "\\]")}](${item.image})`;
+    const before = body.value.slice(0, body.selectionStart);
+    const prefix = before && !before.endsWith("\n") ? "\n\n" : "";
+    const suffix = body.value.slice(body.selectionEnd) && !body.value.slice(body.selectionEnd).startsWith("\n")
+      ? "\n\n"
+      : "\n";
+    body.setRangeText(`${prefix}${markdown}${suffix}`, body.selectionStart, body.selectionEnd, "end");
+    body.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+  assetLibraryDialog.close();
 }
 
 function renderRecycleBin(items) {
@@ -1121,7 +1451,12 @@ function openActiveContent(nextDraft = null) {
     setPublishMode(articleForm, typeof nextDraft === "boolean" ? (nextDraft ? "draft" : "publish") : (data.draft ? "draft" : "publish"));
     syncArticleAttribution();
     articleDetails.open = true;
-    setEditing(articleForm, { file, draft: Boolean(data.draft), previewUrl });
+    setEditing(articleForm, {
+      file,
+      draft: Boolean(data.draft),
+      previewUrl,
+      publicationState: activeContent.publication?.state,
+    });
     updateArticlePreview();
     switchTab("article");
     if (typeof nextDraft === "boolean") {
@@ -1150,6 +1485,7 @@ for (const tab of $$(".tab")) tab.addEventListener("click", () => switchTab(tab.
 
 for (const input of $$("input, textarea, select", articleForm)) {
   input.addEventListener("input", () => {
+    markFormDirty(articleForm);
     syncPublishMode(articleForm);
     syncArticleAttribution();
     syncArticleActionState();
@@ -1158,6 +1494,7 @@ for (const input of $$("input, textarea, select", articleForm)) {
     saveLocalDraft(articleForm);
   });
   input.addEventListener("change", () => {
+    markFormDirty(articleForm);
     syncPublishMode(articleForm);
     syncArticleAttribution();
     syncArticleActionState();
@@ -1169,6 +1506,7 @@ for (const input of $$("input, textarea, select", articleForm)) {
 
 for (const input of $$("input, textarea, select", imageForm)) {
   input.addEventListener("input", () => {
+    markFormDirty(imageForm);
     syncPublishMode(imageForm);
     syncImageAttribution();
     syncImageActionState();
@@ -1176,6 +1514,7 @@ for (const input of $$("input, textarea, select", imageForm)) {
     saveLocalDraft(imageForm);
   });
   input.addEventListener("change", () => {
+    markFormDirty(imageForm);
     syncPublishMode(imageForm);
     syncImageAttribution();
     syncImageActionState();
@@ -1221,6 +1560,7 @@ $('input[name="file"]', imageForm).addEventListener("change", async (event) => {
     $('[name="ratio"]', imageForm).value = ratio;
     $("#image-editor-state").textContent = `已读取 ${dimensions.width} × ${dimensions.height} 像素，比例已设为“${ratio}”。`;
     imageForm.dataset.image = "";
+    markFormDirty(imageForm);
     syncAiAvailability();
     updateImagePreview();
     saveLocalDraft(imageForm);
@@ -1243,7 +1583,21 @@ $('[data-quality="image"]').addEventListener("click", async () => {
 $('[data-ai-fill="article"]').addEventListener("click", async (event) => {
   const button = event.currentTarget;
   button.disabled = true; button.textContent = "AI 整理中..."; showResult(articleResult, "正在生成可编辑建议...");
-  try { applyArticleSuggestion((await api("/api/ai/article-suggestion", formData(articleForm))).suggestion); showResult(articleResult, "AI 已填写建议内容。请检查后再发布。"); }
+  try {
+    const payload = formData(articleForm);
+    const suggestion = (await api("/api/ai/article-suggestion", payload)).suggestion;
+    const paragraphFormatting = applyArticleSuggestion(suggestion, payload.body);
+    const paragraphMessage = paragraphFormatting === "applied"
+      ? "不合理的长段落已整理；正文内容未改动。"
+      : paragraphFormatting === "rejected"
+        ? "AI 段落结果涉及正文字符改动，已自动丢弃并保留原文。"
+        : paragraphFormatting === "stale"
+          ? "整理期间正文有新的编辑，未覆盖当前正文。"
+          : paragraphFormatting === "too_long"
+            ? "正文超过 12,000 字，本次只整理了元数据，段落保持不变。"
+          : "原有段落保持不变。";
+    showResult(articleResult, `AI 已填写建议内容。${paragraphMessage}请检查后再发布。`);
+  }
   catch (error) { showError(articleResult, error); }
   finally { button.disabled = false; button.textContent = "AI 整理文章资料"; syncAiAvailability(); }
 });
@@ -1300,6 +1654,7 @@ articleForm.addEventListener("submit", async (event) => {
       file: result.file || articleForm.dataset.editFile,
       draft: Boolean(data.draft),
       previewUrl: result.previewUrl || articleForm.dataset.previewUrl,
+      publicationState: data.draft ? "draft" : "local",
     });
     showResult(articleResult, formatPublish(result));
     await loadLibrary();
@@ -1326,6 +1681,10 @@ imageForm.addEventListener("submit", async (event) => {
       ? await api("/api/content/update", { type: "image", file: imageForm.dataset.editFile, data: { ...data, image: imageForm.dataset.image } })
       : await api("/api/publish/image", { ...data, fileName: selectedImage?.name, fileData: selectedImage?.dataUrl });
     localStorage.removeItem(draftKey(imageForm));
+    setEditing(imageForm, {
+      file: result.file || imageForm.dataset.editFile,
+      draft: Boolean(data.draft),
+    });
     showResult(imageResult, formatPublish(result));
     await loadLibrary();
   } catch (error) { showError(imageResult, error); }
@@ -1657,6 +2016,22 @@ for (const button of $$("[data-library-view]")) {
 
 $("#library-refresh").addEventListener("click", loadLibrary);
 $("#library-audit").addEventListener("click", openContentAudit);
+$("#article-open-assets").addEventListener("click", () => openAssetLibrary("insert"));
+$("#article-cover-assets").addEventListener("click", () => openAssetLibrary("cover"));
+$("#asset-library-close").addEventListener("click", () => assetLibraryDialog.close());
+$("#asset-library-refresh").addEventListener("click", () => loadAssetLibrary({ refresh: true }));
+$("#asset-library-query").addEventListener("input", renderAssetLibrary);
+$("#asset-library-list").addEventListener("click", (event) => {
+  const button = event.target.closest("[data-asset-select]");
+  if (!button) return;
+  const item = assetLibraryItems.find((candidate) => candidate.contentId === button.dataset.assetSelect);
+  if (item) selectReusableAsset(item);
+});
+assetLibraryDialog.addEventListener("click", (event) => {
+  if (event.target === assetLibraryDialog) assetLibraryDialog.close();
+});
+$("#tag-governance-refresh").addEventListener("click", loadTagGovernance);
+$("#tag-merge-preview").addEventListener("click", previewTagMerge);
 $("#library-open-trash").addEventListener("click", openRecycleBin);
 $("#open-sync-history").addEventListener("click", openSyncHistory);
 $("#content-audit-close").addEventListener("click", () => contentAuditDialog.close());
@@ -1716,18 +2091,14 @@ $("#trash-restore-selected").addEventListener("click", async (event) => {
   }
 });
 $("#trash-purge-selected").addEventListener("click", purgeSelectedTrash);
-$("#storage-backup").addEventListener("click", async (event) => {
-  const button = event.currentTarget;
-  button.disabled = true;
-  $("#storage-backup-result").textContent = "正在创建一致性备份…";
-  try {
-    const result = await api("/api/storage/backup", {});
-    $("#storage-backup-result").textContent = `SQLite：${result.backup}；内容 Git：${result.contentHistory?.commit?.slice(0, 10) || "已检查"}`;
-  } catch (error) {
-    $("#storage-backup-result").textContent = `备份失败：${error.message}`;
-  } finally {
-    button.disabled = false;
-  }
+$("#storage-backup").addEventListener("click", (event) =>
+  createSafetyBackup(event.currentTarget, $("#storage-backup-result")));
+$("#system-create-backup").addEventListener("click", (event) =>
+  createSafetyBackup(event.currentTarget, $("#recovery-dashboard-result")));
+$("#system-run-recovery").addEventListener("click", runRecoveryVerification);
+$("#recovery-dashboard-refresh").addEventListener("click", loadRecoveryDashboard);
+$("#status-details").addEventListener("toggle", (event) => {
+  if (event.currentTarget.open) loadRecoveryDashboard();
 });
 $("#library-query").addEventListener("input", () => {
   clearTimeout(librarySearchTimer);
@@ -1812,9 +2183,33 @@ libraryOpen.addEventListener("click", () => {
   if (!activeContent?.publicUrl || libraryOpen.hidden) return;
   window.open(activeContent.publicUrl, "_blank", "noopener");
 });
-articleRealPreview.addEventListener("click", () => {
+
+function openArticleRealPreview() {
   if (!articleForm.dataset.previewUrl || articleRealPreview.disabled) return;
   window.open(articleForm.dataset.previewUrl, "_blank", "noopener");
+  articleForm.dataset.previewed = "true";
+  syncArticleActionState();
+}
+
+articleRealPreview.addEventListener("click", openArticleRealPreview);
+articleNextAction.addEventListener("click", () => {
+  const action = articleNextAction.dataset.action;
+  if (action === "preview") {
+    openArticleRealPreview();
+    return;
+  }
+  if (action === "sync") {
+    $("#library-type").value = "all";
+    $("#library-query").value = "";
+    resetLibraryNavigation();
+    setLibraryStatus("local");
+    switchTab("library", { force: true });
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    return;
+  }
+  setPublishMode(articleForm, action === "publish" ? "publish" : "draft");
+  syncArticleActionState();
+  articleForm.requestSubmit();
 });
 $("#open-site-preview").addEventListener("click", () => {
   if (!sitePreviewAvailable) return;
@@ -1830,9 +2225,10 @@ $("#retry-push").addEventListener("click", async () => {
   } catch (error) { showError(libraryResult, error); }
 });
 
-flomoFileInput.addEventListener("change", () => {
+  flomoFileInput.addEventListener("change", () => {
   flomoFileData = "";
   flomoInspection = null;
+  flomoAiBodies.clear();
   flomoImportFilter = "all";
   flomoOnlyUnselected.checked = false;
   flomoReview.hidden = true;
@@ -1948,6 +2344,20 @@ async function loadStatus() {
     syncSummary.dataset.state = publicPending ? "attention" : "ready";
     syncSummary.textContent = publicPending ? `${publicPending} 条公开内容待同步` : "公开内容已记录";
     $("#open-pending-content").textContent = publicPending ? `查看待同步（${publicPending}）` : "查看待同步";
+    const health = $("#publisher-health");
+    const healthLabel = $("#publisher-health-label");
+    const healthDetail = $("#publisher-health-detail");
+    health.dataset.state = !sitePreviewAvailable || publicPending ? "attention" : "ready";
+    if (!sitePreviewAvailable) {
+      healthLabel.textContent = "发布台可用，站点预览未运行";
+      healthDetail.textContent = "打开系统详情检查预览服务后再进行真实预览";
+    } else if (publicPending) {
+      healthLabel.textContent = `${publicPending} 条内容等待同步`;
+      healthDetail.textContent = "本地预览可用；云端仍以 PR、部署与线上核验为准";
+    } else {
+      healthLabel.textContent = "本地发布环境已就绪";
+      healthDetail.textContent = "发布台、站点预览与公开内容状态正常";
+    }
     for (const gitControl of $$('input[name="commit"], input[name="push"]')) {
       const description = $(".check-copy small", gitControl.closest("label"));
       description.dataset.defaultText ||= description.textContent;
@@ -1968,7 +2378,12 @@ async function loadStatus() {
       : "日期、比例、正文与版本控制";
     updateLibraryActions(activeContent);
     syncArticleActionState();
-  } catch { $("#status").textContent = "无法读取 Git 状态，但仍可生成本地内容文件。"; }
+  } catch {
+    $("#status").textContent = "无法读取 Git 状态，但仍可生成本地内容文件。";
+    $("#publisher-health").dataset.state = "error";
+    $("#publisher-health-label").textContent = "无法读取完整环境状态";
+    $("#publisher-health-detail").textContent = "可继续编辑；发布或同步前请展开系统详情重新检查";
+  }
 }
 
 restoreLocalDraft(articleForm, $("#article-editor-state"));
@@ -1989,3 +2404,9 @@ renderLibraryView();
 updateArticlePreview();
 updateImagePreview();
 loadStatus();
+
+window.addEventListener("beforeunload", (event) => {
+  if (!isFormDirty(articleForm) && !isFormDirty(imageForm)) return;
+  event.preventDefault();
+  event.returnValue = "";
+});

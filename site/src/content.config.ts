@@ -31,6 +31,8 @@ const articles = defineCollection({
     editorNote: z.string().optional(),
     internalNote: z.string().optional(),
     note: z.string().optional(),
+    coverImage: imagePath.optional(),
+    coverAlt: z.string().optional(),
     featured: z.boolean().default(false),
     draft: z.boolean().default(false),
   }).superRefine((data, context) => {

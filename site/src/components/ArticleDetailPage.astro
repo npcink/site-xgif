@@ -9,7 +9,8 @@ interface Props {
 }
 
 const { article, preview = false } = Astro.props;
-const { Content } = await render(article);
+const { Content, headings } = await render(article);
+const tableOfContents = headings.filter((heading) => heading.depth === 2 || heading.depth === 3);
 const allImages = (await getCollection("images")).filter((entry) => !entry.data.draft && entry.data.public);
 const relatedImages = allImages
   .filter((entry) => entry.data.tags.some((tag) => article.data.tags.includes(tag)))
@@ -54,15 +55,35 @@ const articleHref = contentHref("articles", article);
     </div>
   </header>
 
+  {article.data.coverImage && (
+    <figure class="article-cover">
+      <img src={article.data.coverImage} alt={article.data.coverAlt || article.data.title} />
+    </figure>
+  )}
+
   <div class="detail-grid">
     <aside>
-      <span class="section-kicker">{editorNote ? "EDITOR'S NOTE" : "SOURCE / 来源"}</span>
-      <p>{editorNote || "保留来源名称与原文链接，方便继续核对。"}</p>
-      {article.data.sourceUrl && (
-        <a class="primary-button" href={article.data.sourceUrl} target="_blank" rel="noreferrer">
-          {sourceLabel} <span>↗</span>
-        </a>
+      {tableOfContents.length > 0 && (
+        <nav class="article-toc" aria-label="文章目录">
+          <span class="section-kicker">CONTENTS / 目录</span>
+          <ol>
+            {tableOfContents.map((heading) => (
+              <li data-depth={heading.depth}>
+                <a href={`#${heading.slug}`}>{heading.text}</a>
+              </li>
+            ))}
+          </ol>
+        </nav>
       )}
+      <div class="article-source-note">
+        <span class="section-kicker">{editorNote ? "EDITOR'S NOTE" : "SOURCE / 来源"}</span>
+        <p>{editorNote || "保留来源名称与原文链接，方便继续核对。"}</p>
+        {article.data.sourceUrl && (
+          <a class="primary-button" href={article.data.sourceUrl} target="_blank" rel="noreferrer">
+            {sourceLabel} <span>↗</span>
+          </a>
+        )}
+      </div>
     </aside>
     <div class="prose"><Content /></div>
   </div>

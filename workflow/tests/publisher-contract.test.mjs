@@ -37,6 +37,8 @@ test("publisher exposes local public URLs and keeps empty result panels hidden",
   assert.match(launcher, /--host", "127\.0\.0\.1", "--port", "4321"/);
   assert.match(html, /id="publisher-service"/);
   assert.match(html, /id="site-preview-service"/);
+  assert.match(html, /id="publisher-health"/);
+  assert.match(html, /id="publisher-health-label"/);
   assert.match(html, /id="open-site-preview"/);
   assert.match(html, /id="library-open"/);
   assert.match(html, /id="library-preview"/);
@@ -69,6 +71,13 @@ test("publisher exposes local public URLs and keeps empty result panels hidden",
   assert.match(html, /id="storage-backup"/);
   assert.match(html, /id="library-audit"/);
   assert.match(html, /id="content-audit-dialog"/);
+  assert.match(html, /id="tag-governance-list"/);
+  assert.match(html, /id="tag-merge-preview"/);
+  assert.match(html, /id="article-open-assets"/);
+  assert.match(html, /id="asset-library-dialog"/);
+  assert.match(html, /id="recovery-dashboard-grid"/);
+  assert.match(html, /id="system-run-recovery"/);
+  assert.match(html, /id="article-cover-assets"/);
   assert.match(html, /id="open-sync-history"/);
   assert.match(html, /id="sync-history-dialog"/);
   assert.match(html, /aria-label="内容类型"/);
@@ -77,6 +86,10 @@ test("publisher exposes local public URLs and keeps empty result panels hidden",
   assert.match(html, /data-open-details="article"/);
   assert.match(html, /data-open-details="image"/);
   assert.match(html, /class="editor-actions"/);
+  assert.match(html, /id="article-publish-journey"/);
+  assert.match(html, /id="article-next-action"/);
+  assert.match(html, /id="article-next-step-title"/);
+  assert.match(html, /class="library-tools-more"/);
   assert.match(html, /class="advanced-settings"/);
   assert.match(html, /发布时会自动执行重复检查与质量检查/);
   assert.doesNotMatch(html, /data-check="article"/);
@@ -85,6 +98,10 @@ test("publisher exposes local public URLs and keeps empty result panels hidden",
   assert.match(app, /window\.open\(activeContent\.previewUrl/);
   assert.match(app, /function syncPublishMode/);
   assert.match(app, /function syncImageActionState/);
+  assert.match(app, /function markFormDirty/);
+  assert.match(app, /function markFormClean/);
+  assert.match(app, /beforeunload/);
+  assert.match(app, /articleNextAction\.addEventListener/);
   assert.match(app, /function renderLibraryTable/);
   assert.match(app, /function renderLibraryPagination/);
   assert.match(app, /createLibrarySelection/);
@@ -100,12 +117,20 @@ test("publisher exposes local public URLs and keeps empty result panels hidden",
   assert.match(app, /function purgeSelectedTrash/);
   assert.match(app, /\/api\/storage\/backup/);
   assert.match(app, /\/api\/content\/audit/);
+  assert.match(app, /\/api\/tags\/governance/);
+  assert.match(app, /\/api\/assets/);
+  assert.match(app, /\/api\/storage\/dashboard/);
+  assert.match(app, /openAssetLibrary\("cover"\)/);
   assert.match(app, /\/api\/history\?action=sync_content/);
   assert.match(app, /id="library-select-page"/);
   assert.match(css, /\.result\[hidden\]/);
   assert.match(css, /\.ai-review-card/);
   assert.match(css, /\.publish-mode-grid/);
   assert.match(css, /\.editor-actions/);
+  assert.match(css, /\.publish-journey/);
+  assert.match(css, /\.publisher-health/);
+  assert.match(css, /\.next-step-copy/);
+  assert.match(css, /\.library-tools-more/);
   assert.match(css, /\.panel\.active > \.preview/);
   assert.match(css, /\.content-table/);
   assert.match(css, /\.library-status-tabs/);
@@ -116,6 +141,9 @@ test("publisher exposes local public URLs and keeps empty result panels hidden",
   assert.match(css, /\.library-more-actions/);
   assert.match(css, /button\.danger/);
   assert.match(css, /\.trash-dialog/);
+  assert.match(css, /\.tag-governance/);
+  assert.match(css, /\.asset-library-item/);
+  assert.match(css, /\.recovery-dashboard/);
 });
 
 test("draft publishing uses explicit states, protected-branch guards, and mandatory quality checks", async () => {
@@ -136,6 +164,7 @@ test("draft publishing uses explicit states, protected-branch guards, and mandat
   assert.match(app, /api\/content\/deployment/);
   assert.match(server, /async function getFileWorkflowState/);
   assert.match(server, /async function verifyLiveContent/);
+  assert.match(server, /contentId: item\.contentId/);
   assert.match(server, /function normalizeComparableText/);
   assert.match(server, /\[\\p\{P\}\\p\{S\}\]/);
   assert.match(server, /线上已生效/);

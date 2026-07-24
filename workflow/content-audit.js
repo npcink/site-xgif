@@ -140,6 +140,13 @@ function auditArticle(item) {
   if (normalizedBody(body).length < 80) {
     item.warnings.push("正文较短，需要确认是否为完整内容。");
   }
+  const longParagraphs = String(body || "")
+    .split(/\n[ \t]*\n/gu)
+    .map((paragraph) => [...paragraph.replace(/\s/gu, "")].length)
+    .filter((length) => length > 180);
+  if (longParagraphs.length) {
+    item.warnings.push(`正文含 ${longParagraphs.length} 个超过 180 字的长段落（最长 ${Math.max(...longParagraphs)} 字），建议分段后再发布。`);
+  }
   const urls = bodyUrls(body).filter((url) => url !== sourceUrl);
   if (urls.length) item.warnings.push(`正文仍含 ${urls.length} 个未结构化链接，需要人工判断用途。`);
 

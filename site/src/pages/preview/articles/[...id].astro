@@ -1,6 +1,7 @@
 ---
 import { getCollection, type CollectionEntry } from "astro:content";
 import ArticleDetailPage from "../../../components/ArticleDetailPage.astro";
+import { pageTitle } from "../../../config/site";
 import BaseLayout from "../../../layouts/BaseLayout.astro";
 
 export async function getStaticPaths() {
@@ -17,8 +18,9 @@ const { article } = Astro.props;
 ---
 
 <BaseLayout
-  title={`本地预览：${article.data.title} — xgif.cn`}
+  title={pageTitle(`本地预览：${article.data.title}`)}
   description={article.data.summary}
+  image={article.data.coverImage}
   pageType="article"
   noindex
 >

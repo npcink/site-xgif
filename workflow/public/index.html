@@ -13,18 +13,41 @@
         <h1>本地发布助手</h1>
       </div>
       <div class="topbar-tools">
-        <div class="service-status" aria-live="polite">
-          <span class="service-pill" id="publisher-service">管理端检查中</span>
-          <span class="service-pill" id="site-preview-service">站点预览检查中</span>
-          <span class="service-pill" id="content-sync-summary">正在检查内容</span>
-          <button type="button" id="open-pending-content">查看待同步</button>
-          <button type="button" id="open-sync-history">同步记录</button>
-          <button type="button" id="refresh-services">刷新状态</button>
-          <button type="button" id="open-site-preview" disabled>打开站点预览</button>
+        <div class="publisher-health" id="publisher-health" data-state="checking" aria-live="polite">
+          <span class="health-dot" aria-hidden="true"></span>
+          <span>
+            <strong id="publisher-health-label">正在检查本地环境</strong>
+            <small id="publisher-health-detail">发布台、站点预览与待同步内容</small>
+          </span>
         </div>
-        <details class="status-details">
-          <summary>系统详情</summary>
-          <div class="status" id="status">读取状态中...</div>
+        <details class="status-details" id="status-details">
+          <summary>系统详情与工具</summary>
+          <div class="system-status-panel">
+            <div class="service-status">
+              <span class="service-pill" id="publisher-service">管理端检查中</span>
+              <span class="service-pill" id="site-preview-service">站点预览检查中</span>
+              <span class="service-pill" id="content-sync-summary">正在检查内容</span>
+            </div>
+            <div class="system-actions">
+              <button type="button" id="open-pending-content">查看待同步</button>
+              <button type="button" id="open-sync-history">同步记录</button>
+              <button type="button" id="system-create-backup">创建安全备份</button>
+              <button type="button" id="system-run-recovery">运行恢复演练</button>
+              <button type="button" id="refresh-services">刷新状态</button>
+              <button type="button" id="open-site-preview" disabled>打开站点预览</button>
+            </div>
+            <section class="recovery-dashboard" aria-labelledby="recovery-dashboard-title">
+              <div class="recovery-dashboard-heading">
+                <strong id="recovery-dashboard-title">数据安全状态</strong>
+                <button type="button" id="recovery-dashboard-refresh">刷新</button>
+              </div>
+              <div class="recovery-dashboard-grid" id="recovery-dashboard-grid">
+                <p>展开后读取备份与恢复状态。</p>
+              </div>
+              <p class="recovery-dashboard-result" id="recovery-dashboard-result" role="status"></p>
+            </section>
+            <div class="status" id="status">读取状态中...</div>
+          </div>
         </details>
       </div>
     </header>
@@ -39,6 +62,12 @@
 
       <section class="panel active" id="article-panel">
         <form id="article-form" class="editor">
+          <ol class="publish-journey" id="article-publish-journey" aria-label="文章发布流程">
+            <li data-journey-stage="draft"><span>1</span><strong>保存草稿</strong></li>
+            <li data-journey-stage="preview"><span>2</span><strong>真实预览</strong></li>
+            <li data-journey-stage="local"><span>3</span><strong>发布到本地</strong></li>
+            <li data-journey-stage="cloud"><span>4</span><strong>同步到云端</strong></li>
+          </ol>
           <div class="editor-heading">
             <div>
               <p class="eyebrow">文章信息</p>
@@ -63,10 +92,13 @@
               </label>
             </div>
             <div class="form-grid article-body-grid">
-              <label class="span-2">
-                正文
-                <textarea name="body" rows="8" placeholder="粘贴正文、摘录或自己的补充说明"></textarea>
-              </label>
+              <div class="form-field span-2">
+                <span class="field-label-row">
+                  <label for="article-body">正文</label>
+                  <button type="button" id="article-open-assets">选择已有素材</button>
+                </span>
+                <textarea id="article-body" name="body" rows="8" placeholder="粘贴正文、摘录或自己的补充说明"></textarea>
+              </div>
             </div>
           </section>
 
@@ -119,6 +151,17 @@
                 内部复核备注
                 <input name="internalNote" placeholder="仅本地后台可见，不会进入公开页面" />
               </label>
+              <div class="form-field span-2">
+                <span class="field-label-row">
+                  <label for="article-cover-image">文章封面</label>
+                  <button type="button" id="article-cover-assets">从素材库选择</button>
+                </span>
+                <input id="article-cover-image" name="coverImage" placeholder="/images/... 或 https://img.xgif.cn/..." />
+              </div>
+              <label class="span-2">
+                封面替代文字
+                <input name="coverAlt" placeholder="可选；留空时使用文章标题" />
+              </label>
             </div>
           </details>
 
@@ -140,12 +183,12 @@
             <legend>发布方式</legend>
             <div class="publish-mode-grid">
               <label>
-                <input type="radio" name="publishMode" value="publish" checked />
-                <span class="check-copy"><strong>立即发布</strong><small>检查通过后进入网站公开内容</small></span>
+                <input type="radio" name="publishMode" value="publish" />
+                <span class="check-copy"><strong>发布到本地</strong><small>检查通过后进入本地公开站点，之后再同步云端</small></span>
               </label>
               <label>
-                <input type="radio" name="publishMode" value="draft" />
-                <span class="check-copy"><strong>保存为草稿</strong><small>保留内容，稍后复核后再发布</small></span>
+                <input type="radio" name="publishMode" value="draft" checked />
+                <span class="check-copy"><strong>保存草稿</strong><small>先保存到 Markdown，再用真实模板预览</small></span>
               </label>
             </div>
             <input name="draft" type="checkbox" hidden />
@@ -183,11 +226,16 @@
             </div>
           </details>
 
-          <div class="editor-actions">
-            <p>发布时会自动执行重复检查与质量检查</p>
+          <div class="editor-actions next-step-bar" id="article-next-step">
+            <div class="next-step-copy">
+              <span>下一步</span>
+              <strong id="article-next-step-title">保存草稿</strong>
+              <small id="article-next-step-description">保存到 Markdown 后即可使用真实站点模板预览。</small>
+            </div>
             <div class="actions">
               <button type="button" data-quality="article">仅检查</button>
-              <button class="primary" type="submit">检查并发布文章</button>
+              <button class="primary" type="button" id="article-next-action" data-action="save">保存草稿</button>
+              <button type="submit" id="article-form-submit" hidden>提交文章</button>
             </div>
           </div>
         </form>
@@ -466,15 +514,20 @@
                 <option value="50">每页 50 条</option>
               </select>
             </label>
-            <button type="button" id="library-audit">内容体检</button>
-            <button type="button" id="library-refresh">刷新列表</button>
-            <button type="button" id="library-open-trash">回收站 <span id="library-trash-count">0</span></button>
-            <div class="library-view-toggle" aria-label="列表显示方式">
-              <button class="active" type="button" data-library-view="compact" aria-pressed="true">紧凑</button>
-              <button type="button" data-library-view="excerpt" aria-pressed="false">摘要</button>
-            </div>
+            <details class="library-tools-more">
+              <summary>管理工具</summary>
+              <div>
+                <button type="button" id="library-audit">内容体检</button>
+                <button type="button" id="library-refresh">刷新列表</button>
+                <button type="button" id="library-open-trash">回收站 <span id="library-trash-count">0</span></button>
+                <div class="library-view-toggle" aria-label="列表显示方式">
+                  <button class="active" type="button" data-library-view="compact" aria-pressed="true">紧凑</button>
+                  <button type="button" data-library-view="excerpt" aria-pressed="false">摘要</button>
+                </div>
+              </div>
+            </details>
           </div>
-          <div class="library-selection-bar">
+          <div class="library-selection-bar" id="library-selection-bar">
             <div class="library-selection-copy">
               <p id="library-selection-summary" aria-live="polite">未选择内容</p>
               <button class="text-action" type="button" id="library-select-filtered" hidden></button>
@@ -526,6 +579,30 @@
         </div>
         <button type="button" id="content-audit-close">关闭</button>
       </div>
+      <section class="tag-governance" aria-labelledby="tag-governance-title">
+        <div class="tag-governance-heading">
+          <div>
+            <p class="eyebrow">标签治理</p>
+            <h3 id="tag-governance-title">使用情况与安全合并</h3>
+            <p id="tag-governance-summary">正在读取标签使用情况…</p>
+          </div>
+          <button type="button" id="tag-governance-refresh">刷新标签</button>
+        </div>
+        <div class="tag-governance-controls">
+          <label>
+            来源标签
+            <select id="tag-merge-source" aria-label="需要合并的来源标签"></select>
+          </label>
+          <span aria-hidden="true">→</span>
+          <label>
+            规范标签
+            <select id="tag-merge-target" aria-label="合并后的规范标签"></select>
+          </label>
+          <button type="button" id="tag-merge-preview">预览影响</button>
+        </div>
+        <div class="tag-merge-plan" id="tag-merge-plan" hidden></div>
+        <div class="tag-governance-list" id="tag-governance-list"></div>
+      </section>
       <div class="content-audit-list" id="content-audit-list"></div>
     </dialog>
 
@@ -607,6 +684,25 @@
         <button type="button" id="storage-backup">创建本地安全备份</button>
         <span id="storage-backup-result" role="status"></span>
       </div>
+    </dialog>
+
+    <dialog class="trash-dialog asset-library-dialog" id="asset-library-dialog">
+      <div class="trash-dialog-heading">
+        <div>
+          <p class="eyebrow">素材复用</p>
+          <h2>选择已有图片</h2>
+          <p id="asset-library-summary">从图片内容、R2 台账和本地文件读取可复用素材。</p>
+        </div>
+        <button type="button" id="asset-library-close" aria-label="关闭素材库">关闭</button>
+      </div>
+      <div class="asset-library-toolbar">
+        <label>
+          <span class="sr-only">搜索素材</span>
+          <input id="asset-library-query" type="search" placeholder="搜索标题、标签、来源" />
+        </label>
+        <button type="button" id="asset-library-refresh">刷新素材</button>
+      </div>
+      <div class="asset-library-list" id="asset-library-list"></div>
     </dialog>
 
     <script src="/app.js" type="module"></script>

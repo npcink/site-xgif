@@ -299,6 +299,7 @@ body.detail-dialog-open { overflow: hidden; }
 .dialog-article-actions { display: none; }
 .detail-dialog[data-detail-kind="article"] .detail-grid { display: none; }
 .detail-dialog[data-detail-kind="article"] .dialog-article-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 18px; margin-top: 30px; }
+.detail-dialog[data-detail-kind="article"] .article-cover { display: none; }
 .dialog-full-link { color: var(--ink); font-family: var(--font-geist-mono); font-size: 11px; font-weight: 700; text-decoration: underline; text-underline-offset: 4px; }
 .dialog-full-link:hover { color: var(--coral); }
 .detail-dialog[data-detail-kind="image"] {
@@ -409,11 +410,27 @@ body.detail-dialog-open { overflow: hidden; }
   margin: 0 0 28px;
 }
 .detail-summary { max-width: 780px; font-size: clamp(18px, 2vw, 25px); line-height: 1.65; color: #46433e; }
+.article-cover {
+  aspect-ratio: 16 / 8.5;
+  border: 1px solid var(--ink);
+  margin: 0 0 70px;
+  overflow: hidden;
+}
+.article-cover img { display: block; height: 100%; object-fit: cover; width: 100%; }
 .detail-grid { display: grid; grid-template-columns: 280px minmax(0, 720px); gap: 9vw; border-top: 1px solid var(--ink); padding-top: 52px; }
 .detail-grid aside { position: sticky; top: 28px; align-self: start; }
-.detail-grid aside > p { color: var(--muted); line-height: 1.7; margin: 20px 0 30px; }
+.article-source-note > p { color: var(--muted); line-height: 1.7; margin: 20px 0 30px; }
+.article-toc { border-bottom: 1px solid var(--line); margin-bottom: 30px; padding-bottom: 28px; }
+.article-toc ol { display: grid; gap: 10px; list-style: none; margin: 18px 0 0; padding: 0; }
+.article-toc li { font-size: 13px; line-height: 1.45; }
+.article-toc li[data-depth="3"] { color: var(--muted); padding-left: 14px; }
+.article-toc a:hover { color: var(--coral); }
 .prose { font-size: 17px; line-height: 1.9; color: #3f3c37; }
 .prose > :first-child { margin-top: 0; }
+.prose > p { margin: 0; }
+.prose > p + p { margin-top: 1.5em; }
+.prose > ul, .prose > ol { margin: 0 0 1.5em; padding-left: 1.4em; }
+.prose li + li { margin-top: .55em; }
 .prose h2, .prose h3 { color: var(--ink); letter-spacing: -.04em; line-height: 1.2; margin-top: 2.4em; }
 .prose a { color: var(--coral); text-decoration: underline; }
 .prose blockquote { border-left: 4px solid var(--coral); margin: 2em 0; padding: 12px 0 12px 22px; font-size: 20px; color: var(--ink); }
@@ -494,6 +511,8 @@ body.detail-dialog-open { overflow: hidden; }
   .detail-dialog-body .image-detail-grid { grid-template-columns: 1fr; gap: 38px; }
   .detail-dialog-body .image-detail-grid { height: auto; min-height: 0; }
   .detail-dialog-body .detail-grid aside { order: 2; position: static; }
+  .article-detail .detail-grid aside { position: static; }
+  .article-cover { margin-bottom: 46px; }
   .detail-dialog[data-detail-kind="article"] .dialog-article-actions { align-items: flex-start; flex-direction: column; gap: 14px; }
   .detail-dialog-body .image-detail figure img { height: min(58svh, 620px); }
   .detail-dialog-body .image-detail-copy { padding: 0 18px 20px; }

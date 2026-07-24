@@ -9,6 +9,7 @@ import {
   prepareArticlePublication,
   readEditableArticleBody,
 } from "./article-publication.js";
+import { safeParagraphSuggestion } from "./article-paragraph-formatting.js";
 import { auditContentLibrary } from "./content-audit.js";
 import { createContentId, isContentId } from "./content-id.js";
 import {
@@ -25,6 +26,17 @@ import { publisherSourceVersion } from "./runtime-version.js";
 import { calendarDate } from "./calendar-date.js";
 import { saveR2PrivateBackup } from "./r2-private-backup.js";
 import { loadLocalEnv } from "./local-env.js";
+import { listReusableAssets } from "./asset-library.js";
+import {
+  applyTagMerge,
+  inspectTagGovernance,
+  planTagMerge,
+} from "./tag-governance.js";
+import {
+  listSqliteBackups,
+  readRecoveryDrillStatus,
+  runRecoveryDrill,
+} from "./recovery-drill.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..");
@@ -60,6 +72,7 @@ const maxImageBytes = Number(process.env.PUBLISHER_MAX_IMAGE_BYTES || 8 * 1024 *
 const minImageDimension = Number(process.env.PUBLISHER_MIN_IMAGE_DIMENSION || 160);
 const maxImageDimension = Number(process.env.PUBLISHER_MAX_IMAGE_DIMENSION || 6000);
 const aiTimeoutMs = Number(process.env.XGIF_AI_TIMEOUT_MS || 45_000);
+const maxAiArticleCharacters = 12_000;
 const maxImportZipBytes = Number(process.env.PUBLISHER_MAX_IMPORT_ZIP_BYTES || 10 * 1024 * 1024);
 const maxImportUncompressedBytes = Number(process.env.PUBLISHER_MAX_IMPORT_UNCOMPRESSED_BYTES || 50 * 1024 * 1024);
 const localSiteUrl = new URL("http://127.0.0.1:4321");
@@ -70,6 +83,7 @@ const livePublicationCacheTtlMs = 60_000;
 const runtimeStartedAt = new Date().toISOString();
 const runtimeVersion = publisherSourceVersion(__dirname);
 const csrfToken = randomUUID();
+const recoveryDrillStatusPath = path.join(__dirname, ".runtime", "recovery-drill.json");
 
 const mimeTypes = new Map([
   [".html", "text/html; charset=utf-8"],
@@ -590,6 +604,7 @@ async function getContentPublicationStates(items) {
         title: item.title,
         summary: item.summary,
         description: item.summary,
+        contentId: item.contentId,
         draft: false,
         public: true,
       },
@@ -915,6 +930,21 @@ function normalizeImportedArticle(item, override = {}) {
     : /^原创(?:内容)?$/u.test(source)
       ? "original"
       : "unknown";
+  let body = item.body;
+  if (Object.hasOwn(override, "body")) {
+    if (typeof override.body !== "string") {
+      const error = new Error("导入正文格式无效，已拒绝生成草稿。");
+      error.statusCode = 400;
+      throw error;
+    }
+    const paragraphSuggestion = safeParagraphSuggestion(item.body, override.body);
+    if (paragraphSuggestion.paragraphFormatting === "rejected") {
+      const error = new Error("导入正文只能新增 Markdown 段落空行，不能改字、删文或合并原有段落。");
+      error.statusCode = 422;
+      throw error;
+    }
+    body = paragraphSuggestion.body;
+  }
   const payload = {
     title,
     summary,
@@ -926,7 +956,7 @@ function normalizeImportedArticle(item, override = {}) {
     readTime: item.readTime,
     editorNote: clampText(override.editorNote, 240),
     internalNote,
-    body: item.body,
+    body,
     featured: false,
     draft: true,
   };
@@ -1124,10 +1154,13 @@ function parseAiJson(content) {
   }
 }
 
-function sanitizeArticleSuggestion(value, fallbackSource) {
+function sanitizeArticleSuggestion(value, fallbackSource, originalBody) {
   const raw = value && typeof value === "object" ? value : {};
   const tags = normalizeContentTags(raw.tags, { type: "article" });
   const readTime = clampText(raw.readTime, 16);
+  const paragraphSuggestion = safeParagraphSuggestion(originalBody, raw.body, {
+    maxCharacters: maxAiArticleCharacters,
+  });
 
   return {
     title: clampText(raw.title, 120),
@@ -1136,6 +1169,7 @@ function sanitizeArticleSuggestion(value, fallbackSource) {
     readTime: /^\d+\s*分钟$/.test(readTime) ? readTime.replace(/\s+/, " ") : "",
     editorNote: clampText(raw.editorNote || raw.note, 240),
     source: clampText(raw.source, 40) || fallbackSource,
+    ...paragraphSuggestion,
   };
 }
 
@@ -1150,11 +1184,12 @@ async function createArticleSuggestion(payload) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), aiTimeoutMs);
   const fallbackSource = String(payload.source || "").trim() || inferArticleSourceName(payload.sourceUrl);
+  const originalBody = String(payload.body || "").trim();
   const input = {
     existingTitle: clampText(payload.title, 200),
     sourceName: fallbackSource,
     sourceUrl: clampText(payload.sourceUrl, 500),
-    articleText: String(payload.body || "").trim().slice(0, 12_000),
+    articleText: [...originalBody].slice(0, maxAiArticleCharacters).join(""),
   };
 
   try {
@@ -1171,7 +1206,7 @@ async function createArticleSuggestion(payload) {
         messages: [
           {
             role: "system",
-            content: `你是中文内容编辑。只返回 JSON 对象，不要 Markdown。字段必须是 title、summary、tags、readTime、editorNote、source。summary 为 1-2 句且不超过 160 字；tags 只能从以下规范标签中选择 1-3 个：${canonicalTagsPrompt()}；readTime 为类似‘3 分钟’；editorNote 是可以公开展示的阅读价值说明，不超过 80 字。只根据参考资料写作，不要编造未提供的事实；如果信息不足，保守概括。source 可保留已给出的来源名称。`,
+            content: `你是中文内容编辑。只返回 JSON 对象，不要 Markdown。字段必须是 title、summary、tags、readTime、editorNote、source、body。summary 为 1-2 句且不超过 160 字；tags 只能从以下规范标签中选择 1-3 个：${canonicalTagsPrompt()}；readTime 为类似‘3 分钟’；editorNote 是可以公开展示的阅读价值说明，不超过 80 字。body 必须完整保留输入 articleText 的每一个字、标点、空格和已有换行，只能通过插入两个换行符来改善段落，不得润色、纠错、删减、摘要、续写或改变任何非换行字符。段落判断标准：已有段落长度适中、每段表达一个相对完整意思时原样返回；连续叙事的单个段落超过 180 个非空字符时视为不合理，必须按照时间推进、场景变化、观察对象变化、感受或结论转折整理成 2-5 段；原文句号较少时可以在语义完整的逗号、引号或省略号之后插入空行，但不能移动或替换标点。只根据参考资料写作，不要编造未提供的事实；如果信息不足，保守概括。source 可保留已给出的来源名称。`,
           },
           {
             role: "user",
@@ -1190,7 +1225,11 @@ async function createArticleSuggestion(payload) {
       throw error;
     }
 
-    return sanitizeArticleSuggestion(parseAiJson(data?.choices?.[0]?.message?.content), fallbackSource);
+    return sanitizeArticleSuggestion(
+      parseAiJson(data?.choices?.[0]?.message?.content),
+      fallbackSource,
+      originalBody,
+    );
   } catch (error) {
     if (error.name === "AbortError") {
       const timeoutError = new Error("AI 响应超时，请稍后重试。");
@@ -1218,7 +1257,11 @@ function buildArticleMarkdown(payload) {
   const internalNote = String(payload.internalNote || "").trim();
   const editorNoteLine = editorNote ? `editorNote: ${yamlString(editorNote)}\n` : "";
   const internalNoteLine = internalNote ? `internalNote: ${yamlString(internalNote)}\n` : "";
-  return `---\ntitle: ${yamlString(payload.title)}\ncontentId: ${yamlString(payload.contentId)}\nsummary: ${yamlString(payload.summary)}\nsource: ${yamlString(payload.source)}\n${sourceUrlLine}sourceKind: ${yamlString(payload.sourceKind || "original")}\ntags: ${yamlArray(tags)}\npubDate: ${date}\nreadTime: ${yamlString(payload.readTime || "1 分钟")}\n${editorNoteLine}${internalNoteLine}featured: ${Boolean(payload.featured)}\ndraft: ${Boolean(payload.draft)}\n---\n\n${markdownBody(payload.body)}`;
+  const coverImage = String(payload.coverImage || "").trim();
+  const coverAlt = String(payload.coverAlt || "").trim();
+  const coverImageLine = coverImage ? `coverImage: ${yamlString(coverImage)}\n` : "";
+  const coverAltLine = coverImage && coverAlt ? `coverAlt: ${yamlString(coverAlt)}\n` : "";
+  return `---\ntitle: ${yamlString(payload.title)}\ncontentId: ${yamlString(payload.contentId)}\nsummary: ${yamlString(payload.summary)}\nsource: ${yamlString(payload.source)}\n${sourceUrlLine}sourceKind: ${yamlString(payload.sourceKind || "original")}\ntags: ${yamlArray(tags)}\npubDate: ${date}\nreadTime: ${yamlString(payload.readTime || "1 分钟")}\n${editorNoteLine}${internalNoteLine}${coverImageLine}${coverAltLine}featured: ${Boolean(payload.featured)}\ndraft: ${Boolean(payload.draft)}\n---\n\n${markdownBody(payload.body)}`;
 }
 
 function validateArticleAttribution(payload) {
@@ -1258,6 +1301,10 @@ async function checkArticleQuality(payload) {
   if (!String(payload.title || "").trim()) issues.push(qualityIssue("error", "缺少标题。"));
   if (!String(payload.summary || "").trim()) issues.push(qualityIssue("error", "缺少摘要。"));
   if (!String(payload.source || "").trim()) issues.push(qualityIssue("error", "缺少来源名称。"));
+  const coverImage = String(payload.coverImage || "").trim();
+  if (coverImage && !coverImage.startsWith("/") && !/^https?:\/\//iu.test(coverImage)) {
+    issues.push(qualityIssue("error", "文章封面必须使用 public 路径或 HTTP(S) 地址。"));
+  }
   const sourceKind = String(payload.sourceKind || "original");
   if (sourceKind === "unknown") {
     issues.push(qualityIssue("error", "文章来源仍待确认，请补充来源链接或明确标记为原创。"));
@@ -2274,8 +2321,88 @@ async function handleApi(req, res) {
     return;
   }
 
+  if (pathname === "/api/storage/dashboard" && req.method === "GET") {
+    const [contentHistory, backups, recoveryDrill, r2] = await Promise.all([
+      localContentBackupStatus(),
+      listSqliteBackups(localDataStore.backupsDir),
+      readRecoveryDrillStatus(recoveryDrillStatusPath),
+      reconcileR2Assets({ repoRoot }),
+    ]);
+    sendJson(res, 200, {
+      generatedAt: new Date().toISOString(),
+      localData: localDataStatus(),
+      contentHistory,
+      sqliteBackups: {
+        count: backups.length,
+        latest: backups[0] || null,
+      },
+      recoveryDrill,
+      r2: {
+        ok: r2.ok,
+        counts: r2.counts,
+        note: "这里执行本地只读对账；远端对象与私有字节完整核验仍使用 r2:reconcile。",
+      },
+    });
+    return;
+  }
+
+  if (pathname === "/api/storage/recovery-drill" && req.method === "POST") {
+    const result = await runRecoveryDrill({
+      repoRoot,
+      workflowRoot: __dirname,
+      statusPath: recoveryDrillStatusPath,
+    });
+    localDataStore.recordOperation("recovery_drill", {
+      ok: result.ok,
+      content: result.content,
+      trash: result.trash,
+      completedAt: result.completedAt,
+    });
+    sendJson(res, 200, result);
+    return;
+  }
+
   if (pathname === "/api/content/audit" && req.method === "GET") {
     sendJson(res, 200, await auditContentLibrary({ repoRoot }));
+    return;
+  }
+
+  if (pathname === "/api/tags/governance" && req.method === "GET") {
+    const report = await inspectTagGovernance({ repoRoot });
+    sendJson(res, 200, {
+      ...report,
+      documents: undefined,
+    });
+    return;
+  }
+
+  if (pathname === "/api/assets" && req.method === "GET") {
+    sendJson(res, 200, await listReusableAssets({ repoRoot }));
+    return;
+  }
+
+  if (pathname === "/api/tags/merge" && req.method === "POST") {
+    const payload = await readJson(req);
+    if (!payload.apply) {
+      sendJson(res, 200, await planTagMerge({
+        repoRoot,
+        fromTag: payload.fromTag,
+        toTag: payload.toTag,
+      }));
+      return;
+    }
+    const result = await applyTagMerge({
+      repoRoot,
+      fromTag: payload.fromTag,
+      toTag: payload.toTag,
+      confirmation: payload.confirmation,
+    });
+    const indexWarning = await refreshLocalIndexes("merge_tags", {
+      fromTag: result.fromTag,
+      toTag: result.toTag,
+      changed: result.changedFiles.length,
+    });
+    sendJson(res, 200, { ...result, indexWarning });
     return;
   }
 
