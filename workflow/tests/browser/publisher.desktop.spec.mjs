@@ -22,6 +22,24 @@ test("content library is the default and a new article starts clean", async ({ p
   await expect(page.locator("#article-body-stats")).toHaveText("0 字，0 段");
 });
 
+test("articles without a source link use an explicit publishable disclosure", async ({ page }) => {
+  await page.goto("/");
+  await page.locator(".workspace-create-menu > summary").click();
+  await page.locator('[data-tab="article"]').click();
+  await page.locator("#article-details > summary").click();
+
+  const sourceKind = page.locator('#article-form [name="sourceKind"]');
+  const sourceUrl = page.locator('#article-form [name="sourceUrl"]');
+  await expect(sourceKind.locator("option")).toHaveCount(3);
+  await expect(sourceKind.locator("option")).toHaveText(["来源待确认", "原创内容", "外部来源"]);
+  await sourceKind.selectOption("unknown");
+  await expect(sourceUrl).not.toHaveAttribute("required", "");
+  await expect(sourceUrl).toHaveAttribute("placeholder", "没有具体原文可留空并正常发布");
+  await expect(page.locator('#article-form [name="editorNote"]')).toBeHidden();
+  await expect(page.locator(".article-reference")).toContainText("仍可正常发布");
+  await expect(page.locator(".article-reference")).toContainText("不要填写网站首页");
+});
+
 test("imported articles use an explicit publish confirmation that resets after content changes", async ({ page }) => {
   await page.goto("/");
   await page.locator(".workspace-create-menu > summary").click();

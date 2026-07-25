@@ -68,23 +68,64 @@ test("content audit classifies ready, review, and blocked articles", async () =>
         source: "第三方",
         sourceUrl: "",
         sourceKind: "unknown",
-        body: "这篇测试文章缺少可以核验的来源信息，因此即使正文已经整理完整，也必须先退回草稿，等来源确认后才能进入公开同步流程。",
+        body: "这篇测试文章缺少可以核验的来源信息，但正文已经整理完整，因此允许公开发布，并在公开页面如实显示来源仍待确认。读者可以通过版权反馈入口补充来源线索，发布者也不会用网站首页或猜测的地址冒充具体原文链接。",
       }),
       "utf8",
     ),
   ]);
 
   const report = await auditContentLibrary({ repoRoot: dirs.repoRoot });
-  assert.deepEqual(report.counts, { total: 3, ready: 1, review: 1, draft: 1 });
+  assert.deepEqual(report.counts, { total: 3, ready: 2, review: 1, draft: 0 });
   assert.equal(report.items.find((item) => item.title === "可发布文章").status, "ready");
   assert.match(
     report.items.find((item) => item.title === "需要确认来源").warnings.join(" "),
     /网站首页/,
   );
   assert.match(
-    report.items.find((item) => item.title === "来源待确认").blockers.join(" "),
-    /来源待确认/,
+    report.items.find((item) => item.title === "来源待确认").notices.join(" "),
+    /公开页会明确显示/,
   );
+});
+
+test("content audit names real duplicate sources but does not treat a site homepage as a series", async () => {
+  const dirs = await fixture();
+  await Promise.all([
+    writeFile(
+      path.join(dirs.articlesDir, "20260723-0020.md"),
+      article({
+        contentId: "20260723-0020",
+        title: "系列第一篇",
+        sourceUrl: "https://example.com/thread/123",
+      }),
+      "utf8",
+    ),
+    writeFile(
+      path.join(dirs.articlesDir, "20260723-0021.md"),
+      article({
+        contentId: "20260723-0021",
+        title: "系列第二篇",
+        sourceUrl: "https://example.com/thread/123",
+      }),
+      "utf8",
+    ),
+    writeFile(
+      path.join(dirs.articlesDir, "20260723-0022.md"),
+      article({
+        contentId: "20260723-0022",
+        title: "只有网站首页",
+        sourceUrl: "https://example.com/",
+      }),
+      "utf8",
+    ),
+  ]);
+
+  const report = await auditContentLibrary({ repoRoot: dirs.repoRoot });
+  const first = report.items.find((item) => item.title === "系列第一篇");
+  const homepage = report.items.find((item) => item.title === "只有网站首页");
+  assert.match(first.warnings.join(" "), /《系列第二篇》/);
+  assert.match(first.warnings.join(" "), /同一原文拆分内容可以保留/);
+  assert.match(homepage.warnings.join(" "), /网站首页/);
+  assert.doesNotMatch(homepage.warnings.join(" "), /同一原文拆分/);
 });
 
 test("content audit applies the same unresolved internal review gate as publishing", async () => {

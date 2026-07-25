@@ -110,7 +110,10 @@ test("article details publish structured data and honest source labels", async (
   assert.ok(articles.some((article) => /application\/ld\+json/.test(article)));
   assert.ok(articles.some((article) => /访问来源站/.test(article)));
   assert.match(component, /publication:\s*"访问来源站"/);
-  assert.match(component, /editorial:\s*"查看编辑手记"/);
+  assert.match(component, /editorial:\s*"访问来源站"/);
+  assert.match(component, /sourcePending/);
+  assert.match(component, /暂未找到可核验的原始来源/);
+  assert.match(component, /补充来源线索 \/ 版权反馈/);
 });
 
 test("production build excludes local draft preview routes", async () => {

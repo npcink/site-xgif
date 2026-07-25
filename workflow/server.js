@@ -901,13 +901,14 @@ async function verifyLiveContent(type, filePath, parsed) {
 async function scanDuplicateArticle({ title, sourceUrl, excludeFile }) {
   const records = await scanMarkdownFrontmatter(target.articles);
   const normalizedSourceUrl = normalizeUrl(sourceUrl);
+  const compareSourceUrl = normalizedSourceUrl && !isGenericArticleSourceUrl(normalizedSourceUrl);
   const normalizedTitle = normalizeText(title);
   const excludedPath = excludeFile ? path.resolve(repoRoot, excludeFile) : "";
 
   return records
     .filter((record) => record.file !== excludedPath)
     .filter((record) => {
-      const sameUrl = normalizedSourceUrl && normalizeUrl(record.sourceUrl) === normalizedSourceUrl;
+      const sameUrl = compareSourceUrl && normalizeUrl(record.sourceUrl) === normalizedSourceUrl;
       const sameTitle = normalizedTitle && normalizeText(record.title) === normalizedTitle;
       return sameUrl || sameTitle;
     })
@@ -1250,6 +1251,15 @@ function normalizeUrl(value) {
   }
 }
 
+function isGenericArticleSourceUrl(value) {
+  try {
+    const url = new URL(String(value || "").trim());
+    return !url.pathname.replace(/\/+$/u, "");
+  } catch {
+    return false;
+  }
+}
+
 function getAiConfig() {
   const apiKey = String(process.env.XGIF_AI_API_KEY || "").trim();
   const model = String(process.env.XGIF_AI_MODEL || "").trim();
@@ -1323,7 +1333,6 @@ function sanitizeArticleSuggestion(value, fallbackSource, originalBody) {
     summary: clampText(raw.summary, 320),
     tags,
     readTime: /^\d+\s*分钟$/.test(readTime) ? readTime.replace(/\s+/, " ") : "",
-    editorNote: clampText(raw.editorNote || raw.note, 240),
     source: clampText(raw.source, 40) || fallbackSource,
     ...paragraphSuggestion,
   };
@@ -1362,7 +1371,7 @@ async function createArticleSuggestion(payload) {
         messages: [
           {
             role: "system",
-            content: `你是中文内容编辑。只返回 JSON 对象，不要 Markdown。字段必须是 title、summary、tags、readTime、editorNote、source、body。summary 为 1-2 句且不超过 160 字；tags 只能从以下规范标签中选择 1-3 个：${canonicalTagsPrompt()}；readTime 为类似‘3 分钟’；editorNote 是可以公开展示的阅读价值说明，不超过 80 字。body 必须完整保留输入 articleText 的每一个字、标点、空格和已有换行，只能通过插入两个换行符来改善段落，不得润色、纠错、删减、摘要、续写或改变任何非换行字符。段落判断标准：已有段落长度适中、每段表达一个相对完整意思时原样返回；连续叙事的单个段落超过 180 个非空字符时视为不合理，必须按照时间推进、场景变化、观察对象变化、感受或结论转折整理成 2-5 段；原文句号较少时可以在语义完整的逗号、引号或省略号之后插入空行，但不能移动或替换标点。只根据参考资料写作，不要编造未提供的事实；如果信息不足，保守概括。source 可保留已给出的来源名称。`,
+            content: `你是中文内容编辑。只返回 JSON 对象，不要 Markdown。字段必须是 title、summary、tags、readTime、source、body。summary 为 1-2 句且不超过 160 字；tags 只能从以下规范标签中选择 1-3 个：${canonicalTagsPrompt()}；readTime 为类似‘3 分钟’。body 必须完整保留输入 articleText 的每一个字、标点、空格和已有换行，只能通过插入两个换行符来改善段落，不得润色、纠错、删减、摘要、续写或改变任何非换行字符。段落判断标准：已有段落长度适中、每段表达一个相对完整意思时原样返回；连续叙事的单个段落超过 180 个非空字符时视为不合理，必须按照时间推进、场景变化、观察对象变化、感受或结论转折整理成 2-5 段；原文句号较少时可以在语义完整的逗号、引号或省略号之后插入空行，但不能移动或替换标点。只根据参考资料写作，不要编造未提供的事实；如果信息不足，保守概括。source 可保留已给出的来源名称。`,
           },
           {
             role: "user",
@@ -1507,22 +1516,20 @@ function buildArticleMarkdown(payload) {
 }
 
 function validateArticleAttribution(payload) {
-  validateRequired(payload, ["title", "summary", "source"]);
   const sourceKind = String(payload.sourceKind || "original").trim();
   if (!["original", "publication", "editorial", "unknown"].includes(sourceKind)) {
     const error = new Error("文章来源类型无效。");
     error.statusCode = 400;
     throw error;
   }
-  if (sourceKind === "unknown" && !payload.draft) {
-    const error = new Error("文章来源仍待确认，只能保存为草稿。请补充来源链接或明确标记为原创后再发布。");
-    error.statusCode = 422;
-    throw error;
-  }
-  if (["publication", "editorial"].includes(sourceKind)) validateRequired(payload, ["sourceUrl"]);
-  if (String(payload.sourceUrl || "").trim()) {
+  const normalized = sourceKind === "unknown"
+    ? { ...payload, sourceKind, source: String(payload.source || "").trim() || "来源待确认" }
+    : { ...payload, sourceKind };
+  validateRequired(normalized, ["title", "summary", "source"]);
+  if (["publication", "editorial"].includes(sourceKind)) validateRequired(normalized, ["sourceUrl"]);
+  if (String(normalized.sourceUrl || "").trim()) {
     try {
-      const sourceUrl = new URL(payload.sourceUrl);
+      const sourceUrl = new URL(normalized.sourceUrl);
       if (!["http:", "https:"].includes(sourceUrl.protocol)) throw new Error();
     } catch {
       const error = new Error("来源链接必须是有效的 http 或 https 地址。");
@@ -1530,7 +1537,7 @@ function validateArticleAttribution(payload) {
       throw error;
     }
   }
-  return { ...payload, sourceKind };
+  return normalized;
 }
 
 function qualityIssue(level, message) {
@@ -1556,13 +1563,16 @@ async function checkArticleQuality(payload) {
   }
   const sourceKind = String(payload.sourceKind || "original");
   if (sourceKind === "unknown") {
-    issues.push(qualityIssue("error", "文章来源仍待确认，请补充来源链接或明确标记为原创。"));
+    issues.push(qualityIssue("warning", "未填写可核验的来源链接；发布后会明确显示“来源待确认”。"));
   } else if (sourceKind !== "original" && !String(payload.sourceUrl || "").trim()) {
     issues.push(qualityIssue("error", "外部来源文章必须填写来源链接。"));
   } else if (String(payload.sourceUrl || "").trim()) {
     try {
       const sourceUrl = new URL(String(payload.sourceUrl));
       if (!["http:", "https:"].includes(sourceUrl.protocol)) throw new Error();
+      if (isGenericArticleSourceUrl(sourceUrl.href)) {
+        issues.push(qualityIssue("warning", "来源链接只指向网站首页；找不到具体原文时请留空并选择“来源待确认”。"));
+      }
     } catch {
       issues.push(qualityIssue("error", "来源链接不是有效网址。"));
     }
@@ -1583,7 +1593,14 @@ async function checkArticleQuality(payload) {
     issues.push(qualityIssue("error", "内部复核备注尚未确认，请完成复核或清空备注后再发布。"));
   }
   const duplicates = await scanDuplicateArticle(payload);
-  if (duplicates.length) issues.push(qualityIssue("warning", `发现 ${duplicates.length} 条标题或来源链接重复内容。`));
+  if (duplicates.length) {
+    const titles = duplicates.slice(0, 3).map((item) => `《${item.title || "未命名文章"}》`).join("、");
+    const remainder = duplicates.length > 3 ? `等 ${duplicates.length} 篇` : "";
+    issues.push(qualityIssue(
+      "warning",
+      `相同标题或来源链接还用于 ${titles}${remainder}。如果是同一原文拆分内容可以继续；否则请返回修改。`,
+    ));
+  }
   return { ok: !issues.some((item) => item.level === "error"), issues, duplicates };
 }
 

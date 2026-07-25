@@ -155,6 +155,50 @@ try {
   assert.equal(overlongParagraph.status, 200);
   assert.equal(overlongParagraph.json().ok, false);
   assert.match(overlongParagraph.json().issues.map((item) => item.message).join(" "), /超过 180 字的长段落/);
+
+  const missingSource = await call({
+    method: "POST",
+    pathname: "/api/quality/article",
+    headers: {
+      "content-type": "application/json",
+      "x-xgif-csrf": csrf,
+      origin: `http://127.0.0.1:${port}`,
+    },
+    body: JSON.stringify({
+      title: "缺少来源链接也可发布",
+      summary: "用于确认来源待确认的文章不再被质量检查阻止。",
+      source: "来源待确认",
+      sourceKind: "unknown",
+      tags: ["生活"],
+      body: "这是一段已经完成整理的正文。虽然暂时找不到具体来源链接，但公开页面会如实说明来源待确认，并保留版权反馈入口。",
+    }),
+  });
+  assert.equal(missingSource.status, 200);
+  assert.equal(missingSource.json().ok, true);
+  assert.match(missingSource.json().issues.map((item) => item.message).join(" "), /会明确显示“来源待确认”/);
+
+  const genericSource = await call({
+    method: "POST",
+    pathname: "/api/quality/article",
+    headers: {
+      "content-type": "application/json",
+      "x-xgif-csrf": csrf,
+      origin: `http://127.0.0.1:${port}`,
+    },
+    body: JSON.stringify({
+      title: "网站首页不是具体来源",
+      summary: "用于确认网站首页会得到直接处理提示，而不是被误认为系列文章。",
+      source: "知乎",
+      sourceKind: "publication",
+      sourceUrl: "https://www.zhihu.com/",
+      tags: ["生活"],
+      body: "这是一段用于来源质量检查的正文。它会帮助确认网站首页不能冒充具体原文，也不会因为其他文章使用同一个首页而提示为系列内容。",
+    }),
+  });
+  assert.equal(genericSource.status, 200);
+  assert.equal(genericSource.json().ok, true);
+  assert.match(genericSource.json().issues.map((item) => item.message).join(" "), /只指向网站首页/);
+  assert.doesNotMatch(genericSource.json().issues.map((item) => item.message).join(" "), /同一原文拆分/);
   console.log("本地发布器 HTTP 集成检查通过。");
 } finally {
   child.kill("SIGTERM");

@@ -41,9 +41,6 @@ const articles = defineCollection({
     if (["publication", "editorial"].includes(data.sourceKind) && !data.sourceUrl) {
       context.addIssue({ code: "custom", path: ["sourceUrl"], message: "外部来源文章必须保留来源链接" });
     }
-    if (data.sourceKind === "unknown" && !data.draft) {
-      context.addIssue({ code: "custom", path: ["sourceKind"], message: "来源待确认的文章只能保存为草稿" });
-    }
   }),
 });
 
