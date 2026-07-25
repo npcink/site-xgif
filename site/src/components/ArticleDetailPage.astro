@@ -44,6 +44,15 @@ const sourceLabel = {
 }[article.data.sourceKind];
 const editorNote = publicArticleNote(article.data);
 const articleHref = contentHref(article);
+const hasArticleSidebar = tableOfContents.length > 0 || Boolean(editorNote) || Boolean(article.data.sourceUrl);
+const titleLength = [...article.data.title].length;
+const dialogTitleSize = titleLength <= 12
+  ? "short"
+  : titleLength <= 24
+    ? "standard"
+    : titleLength <= 30
+      ? "long"
+      : "longest";
 ---
 
 {preview && (
@@ -61,7 +70,7 @@ const articleHref = contentHref(article);
       <time datetime={article.data.pubDate.toISOString()}>{formatShortDate(article.data.pubDate)}</time>
       <span>{article.data.readTime}</span>
     </div>
-    <h1>{article.data.title}</h1>
+    <h1 class:list={["article-title", `dialog-title--${dialogTitleSize}`]}>{article.data.title}</h1>
     <p class="detail-summary">{article.data.summary}</p>
     <div class="card-tags">
       {article.data.tags.map((tag) => <a href={`/tags/${encodeURIComponent(tag)}`}>#{tag}</a>)}
@@ -100,8 +109,8 @@ const articleHref = contentHref(article);
     </figure>
   )}
 
-  <div class="detail-grid">
-    <aside>
+  <div class:list={["detail-grid", { "detail-grid--single": !hasArticleSidebar }]}>
+    {hasArticleSidebar && <aside>
       {tableOfContents.length > 0 && (
         <nav class="article-toc" aria-label="文章目录">
           <span class="section-kicker">CONTENTS / 目录</span>
@@ -123,7 +132,7 @@ const articleHref = contentHref(article);
           </a>
         )}
       </div>
-    </aside>
+    </aside>}
     <div class="prose"><Content /></div>
   </div>
 

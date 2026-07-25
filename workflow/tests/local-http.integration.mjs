@@ -134,6 +134,27 @@ try {
   });
   assert.equal(emptyTitleSuggestions.status, 400);
   assert.match(emptyTitleSuggestions.json().error, /正文、摘要或来源链接/);
+
+  const overlongParagraph = await call({
+    method: "POST",
+    pathname: "/api/quality/article",
+    headers: {
+      "content-type": "application/json",
+      "x-xgif-csrf": csrf,
+      origin: `http://127.0.0.1:${port}`,
+    },
+    body: JSON.stringify({
+      title: "长段落测试",
+      summary: "用于确认发布质量门槛会拦截未分段的长正文。",
+      source: "原创内容",
+      sourceKind: "original",
+      tags: ["生活"],
+      body: "需要分段的正文。".repeat(30),
+    }),
+  });
+  assert.equal(overlongParagraph.status, 200);
+  assert.equal(overlongParagraph.json().ok, false);
+  assert.match(overlongParagraph.json().issues.map((item) => item.message).join(" "), /超过 180 字的长段落/);
   console.log("本地发布器 HTTP 集成检查通过。");
 } finally {
   child.kill("SIGTERM");

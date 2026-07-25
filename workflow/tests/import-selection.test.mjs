@@ -27,9 +27,10 @@ test("all selected ignores disabled exact duplicates", () => {
   assert.equal(summary.allSelected, true);
 });
 
-test("unselected filter keeps unchecked and disabled items visible", () => {
-  assert.equal(importItemMatchesFilter({ checked: false, disabled: false }, "unselected"), true);
-  assert.equal(importItemMatchesFilter({ checked: false, disabled: true }, "unselected"), true);
-  assert.equal(importItemMatchesFilter({ checked: true, disabled: false }, "unselected"), false);
-  assert.equal(importItemMatchesFilter({ checked: true, disabled: false }, "all"), true);
+test("needs-review filter shows review and similar items regardless of selection", () => {
+  assert.equal(importItemMatchesFilter({ status: "review", checked: false }, "needs-review"), true);
+  assert.equal(importItemMatchesFilter({ status: "similar", checked: true }, "needs-review"), true);
+  assert.equal(importItemMatchesFilter({ status: "ready", checked: false }, "needs-review"), false);
+  assert.equal(importItemMatchesFilter({ status: "exact", checked: false }, "needs-review"), false);
+  assert.equal(importItemMatchesFilter({ status: "ready", checked: true }, "all"), true);
 });

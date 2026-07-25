@@ -1,5 +1,4 @@
 import { importItemMatchesFilter, summarizeImportSelection } from "./import-selection.js";
-import { renderMarkdownPreview } from "./markdown-preview.js";
 import {
   clearLibrarySelectionState,
   createLibrarySelection,
@@ -36,14 +35,14 @@ const articleResult = $("#article-result");
 const imageResult = $("#image-result");
 const articleDetails = $("#article-details");
 const imageDetails = $("#image-details");
-const articlePagePreview = $("#article-page-preview");
 const articleBody = $("#article-body");
 const articleTitleAi = $("#article-title-ai");
 const articleTitleSuggestions = $("#article-title-suggestions");
 const articleTitleCandidateList = $("#article-title-candidate-list");
 const articleTitleAiStatus = $("#article-title-ai-status");
-const workspaceSidebar = $("#workspace-sidebar");
-const workspaceNavToggle = $("#workspace-nav-toggle");
+const articleAuditGuidance = $("#article-audit-guidance");
+const articleAuditIssues = $("#article-audit-issues");
+const articleAuditNextStep = $("#article-audit-next-step");
 const workspacePageTitle = $("#workspace-page-title");
 const contentList = $("#content-list");
 const libraryDetail = $("#library-detail");
@@ -51,7 +50,6 @@ const libraryResult = $("#library-result");
 const libraryFeedback = $("#library-feedback");
 const libraryEdit = $("#library-edit");
 const libraryDuplicate = $("#library-duplicate");
-const libraryTransition = $("#library-transition");
 const libraryReturnDraft = $("#library-return-draft");
 const librarySyncCurrent = $("#library-sync-current");
 const libraryPreview = $("#library-preview");
@@ -82,7 +80,7 @@ const flomoResult = $("#flomo-result");
 const flomoSelectionSummary = $("#flomo-selection-summary");
 const flomoOnlyUnselected = $("#flomo-only-unselected");
 const flomoCompleteActions = $("#flomo-complete-actions");
-const flomoAiSelected = $("#flomo-ai-selected");
+const flomoPublishSelected = $("#flomo-publish-selected");
 const flomoImportSelected = $("#flomo-import-selected");
 let selectedImage = null;
 let activeContent = null;
@@ -90,10 +88,7 @@ let flomoFileData = "";
 let flomoInspection = null;
 const flomoAiBodies = new Map();
 let flomoImportFilter = "all";
-let flomoAiBusy = false;
 let flomoImportBusy = false;
-let articlePreviewMode = "card";
-let imagePreviewMode = "card";
 let sitePreviewAvailable = false;
 let sitePreviewUrl = "http://127.0.0.1:4321/";
 let aiAvailable = null;
@@ -112,17 +107,21 @@ let libraryCounts = {
   unknown: 0,
   online: 0,
   unverified: 0,
+  cloud: 0,
+  attention: 0,
 };
 let libraryBatchMode = false;
 let librarySearchTimer = null;
 let libraryRequestController = null;
 let libraryRequestSequence = 0;
+let contentAuditItemsByFile = new Map();
 let recycleBinItems = [];
 let trashReturnFocus = null;
 const recycleSelectedIds = new Set();
 const librarySelection = createLibrarySelection();
 const librarySelectedItems = new Map();
 let lastTrashedItems = [];
+let libraryUndoAvailableForFeedback = false;
 let tagMergePlan = null;
 let assetLibraryItems = [];
 let assetPickerMode = "insert";
@@ -191,6 +190,8 @@ function formData(form) {
 function articlePayload() {
   syncPublishMode(articleForm);
   const data = formData(articleForm);
+  data.commit = false;
+  data.push = false;
   if (articleForm.dataset.editFile) data.excludeFile = articleForm.dataset.editFile;
   return data;
 }
@@ -229,15 +230,6 @@ function updateArticlePreview() {
     <p class="summary">${escapeHtml(data.summary || "文章摘要会显示在这里。")}</p>
     ${data.editorNote ? `<blockquote class="note">${escapeHtml(data.editorNote)}</blockquote>` : ""}
     <div class="tags">${renderTags(data.tags)}</div>`;
-  articlePagePreview.innerHTML = `
-    <header>
-      <div class="meta"><span>${escapeHtml(data.source || "来源")}</span><span>${escapeHtml(data.pubDate || today)}</span><span>${escapeHtml(data.readTime || "1 分钟")}</span></div>
-      <h1>${escapeHtml(data.title || "文章标题")}</h1>
-      <p class="summary">${escapeHtml(data.summary || "文章摘要会显示在这里。")}</p>
-      <div class="tags">${renderTags(data.tags)}</div>
-    </header>
-    ${data.coverImage ? `<img class="article-page-preview-cover" src="${escapeHtml(data.coverImage)}" alt="${escapeHtml(data.coverAlt || data.title || "文章封面")}" />` : ""}
-    <div class="article-prose">${renderMarkdownPreview(data.body)}</div>`;
   updateArticleReview(data);
   updateArticleBodyTools();
 }
@@ -347,22 +339,11 @@ async function uploadArticleImage(file) {
 function updateImagePreview() {
   const data = formData(imageForm);
   const image = selectedImage?.dataUrl || "";
-  const source = data.sourceKind === "user_provided"
-    ? "图片来源：用户提供 · 已确认可公开发布"
-    : data.sourceKind === "unknown"
-      ? "图片来源：群聊转存 · 原作者与授权信息待核实"
-      : `图片来源备注：${data.source || "外部来源待填写"}`;
   $("#image-preview").innerHTML = `
     ${image ? `<img src="${image}" alt="${escapeHtml(data.title || "图片预览")}" />` : ""}
     <div class="copy"><div class="meta"><span>${escapeHtml(data.category || "表情包")}</span><span>${escapeHtml(data.pubDate || today)}</span></div>
     <h2>${escapeHtml(data.title || "图片标题")}</h2><p class="summary">${escapeHtml(data.description || "图片说明会显示在这里。")}</p>
     <div class="tags">${renderTags(data.tags)}</div></div>`;
-  $("#image-detail-preview").innerHTML = `
-    <figure>${image ? `<img src="${image}" alt="${escapeHtml(data.title || "图片预览")}" />` : ""}</figure>
-    <div class="copy"><p class="eyebrow">REACTION / 图片详情</p><h2>${escapeHtml(data.title || "图片标题")}</h2>
-    <p class="summary">${escapeHtml(data.description || "图片说明会显示在这里。")}</p>
-    <dl><div><dt>分类</dt><dd>${escapeHtml(data.category || "表情包")}</dd></div><div><dt>情绪</dt><dd>${escapeHtml(data.mood || "未分类")}</dd></div><div><dt>场景</dt><dd>${escapeHtml(data.scenes || "通用")}</dd></div></dl>
-    <div class="tags">${renderTags(data.tags)}</div><p class="image-source">${escapeHtml(source)}</p></div>`;
   updateImageReview(data);
 }
 
@@ -396,7 +377,7 @@ function renderArticleTitleSuggestions(titles) {
     articleTitleCandidateList.append(button);
   }
   articleTitleSuggestions.hidden = false;
-  articleTitleAi.textContent = "AI 再换一组";
+  articleTitleAi.textContent = "再生成一组";
   articleTitleAiStatus.dataset.state = "ready";
   articleTitleAiStatus.textContent = "已生成 3 个候选标题，请选择一个。";
 }
@@ -424,7 +405,7 @@ function applyArticleTitleSuggestion(title) {
 function resetArticleTitleSuggestions() {
   articleTitleCandidateList.replaceChildren();
   articleTitleSuggestions.hidden = true;
-  articleTitleAi.textContent = "AI 换标题";
+  articleTitleAi.textContent = "只生成标题";
   articleTitleAiStatus.dataset.state = "";
   articleTitleAiStatus.textContent = "";
 }
@@ -433,7 +414,7 @@ function invalidateArticleTitleSuggestions() {
   if (articleTitleSuggestions.hidden) return;
   articleTitleCandidateList.replaceChildren();
   articleTitleSuggestions.hidden = true;
-  articleTitleAi.textContent = "AI 换标题";
+  articleTitleAi.textContent = "只生成标题";
   articleTitleAiStatus.dataset.state = "stale";
   articleTitleAiStatus.textContent = "文章资料已修改，请重新生成候选标题。";
 }
@@ -518,36 +499,58 @@ function syncInternalReviewState() {
   const note = $('[name="internalNote"]', articleForm);
   const status = $('[name="internalReviewStatus"]', articleForm);
   const resolvedAt = $('[name="internalReviewResolvedAt"]', articleForm);
+  const confirmation = $('[name="internalReviewConfirmed"]', articleForm);
+  const confirmationPanel = $("#article-review-confirmation");
+  confirmationPanel.hidden = !note.value.trim();
   if (!note.value.trim()) {
     status.value = "unresolved";
     resolvedAt.value = "";
-    status.disabled = true;
+    confirmation.checked = false;
+    confirmation.disabled = true;
     return;
   }
-  status.disabled = false;
+  confirmation.disabled = false;
+  if (status.value === "resolved") confirmation.checked = true;
+  status.value = confirmation.checked ? "resolved" : "unresolved";
   if (status.value === "resolved" && !resolvedAt.value) resolvedAt.value = new Date().toISOString();
   if (status.value !== "resolved") resolvedAt.value = "";
 }
 
-function showResult(node, data) {
+function updateLibraryUndoVisibility() {
+  $("#library-undo-trash").hidden = !(libraryUndoAvailableForFeedback && lastTrashedItems.length);
+}
+
+function showResult(node, data, { undoTrash = false } = {}) {
   node.classList.remove("error");
   node.hidden = false;
   node.textContent = typeof data === "string" ? data : JSON.stringify(data, null, 2);
-  if (node === libraryResult) libraryFeedback.hidden = false;
+  if (node === libraryResult) {
+    libraryUndoAvailableForFeedback = undoTrash;
+    libraryFeedback.hidden = false;
+    updateLibraryUndoVisibility();
+  }
 }
 
 function showError(node, error) {
   node.classList.add("error");
   node.hidden = false;
   node.textContent = error.message;
-  if (node === libraryResult) libraryFeedback.hidden = false;
+  if (node === libraryResult) {
+    libraryUndoAvailableForFeedback = false;
+    libraryFeedback.hidden = false;
+    updateLibraryUndoVisibility();
+  }
 }
 
 function clearResult(node) {
   node.hidden = true;
   node.classList.remove("error");
   node.textContent = "";
-  if (node === libraryResult) libraryFeedback.hidden = true;
+  if (node === libraryResult) {
+    libraryUndoAvailableForFeedback = false;
+    libraryFeedback.hidden = true;
+    updateLibraryUndoVisibility();
+  }
 }
 
 function draftScope(form) {
@@ -830,12 +833,6 @@ function syncArticleActionState() {
   $("#article-next-step-title").textContent = nextTitle;
   $("#article-next-step-description").textContent = nextDescription;
 
-  const stageIndex = { save: 0, preview: 1, publish: 2, sync: 3 }[nextAction] ?? 0;
-  for (const [index, step] of $$("[data-journey-stage]", $("#article-publish-journey")).entries()) {
-    step.classList.toggle("done", index < stageIndex);
-    step.classList.toggle("current", index === stageIndex);
-  }
-
   articlePublishOptions.hidden = !isPublishingDraft;
   $("#article-original-date").textContent = `沿用 ${$('[name="pubDate"]', articleForm).value || "草稿中的收藏日期"}`;
   $("#article-today-date").textContent = `使用 ${today}，按正式发布当天排序`;
@@ -853,17 +850,17 @@ function syncImageActionState() {
   const draft = $('[name="draft"]', imageForm).checked;
   if (editing && draft) submit.textContent = "保存草稿修改";
   else if (editing) submit.textContent = "检查并保存修改";
-  else submit.textContent = draft ? "保存图片草稿" : "检查并发布图片";
+  else submit.textContent = draft ? "保存草稿" : "发布到本地";
 }
 
 function switchTab(name, { skipRoute = false, systemView = "status" } = {}) {
   const titles = {
-    article: "新建文章",
-    image: "新建图片",
+    article: articleForm.dataset.editFile ? "编辑文章" : "新建文章",
+    image: imageForm.dataset.editFile ? "编辑图片" : "新建图片",
     import: "导入内容",
     library: "内容库",
-    audit: "内容体检与标签",
-    system: "系统状态与恢复",
+    audit: "待处理内容",
+    system: "系统",
   };
   $$(".tab").forEach((item) => {
     const active = item.dataset.tab === name;
@@ -874,9 +871,10 @@ function switchTab(name, { skipRoute = false, systemView = "status" } = {}) {
   $$(".workspace-nav-section").forEach((section) => {
     section.classList.toggle("is-current", Boolean($(".tab.active", section)));
   });
+  const createMenu = $(".workspace-create-menu");
+  if (createMenu) createMenu.open = name === "article" || name === "image";
   $$(".panel").forEach((item) => item.classList.toggle("active", item.id === `${name}-panel`));
   workspacePageTitle.textContent = titles[name] || "本地发布助手";
-  setWorkspaceNavigationOpen(false);
   window.scrollTo({ top: 0, behavior: "auto" });
   if (!skipRoute) updateWorkspaceRoute(name, { systemView });
   if (name === "library") loadLibrary();
@@ -896,7 +894,7 @@ function updateWorkspaceRoute(name, { replace = false, systemView = "status" } =
 }
 
 function setSystemView(view, { updateRoute = true } = {}) {
-  const next = ["status", "sync", "recovery"].includes(view) ? view : "status";
+  const next = ["status", "sync", "recovery", "tags"].includes(view) ? view : "status";
   for (const button of $$("[data-system-view]")) {
     const active = button.dataset.systemView === next;
     button.classList.toggle("active", active);
@@ -912,13 +910,14 @@ function setSystemView(view, { updateRoute = true } = {}) {
   if (next === "status") loadStatus();
   if (next === "sync") loadSyncHistory();
   if (next === "recovery") loadRecoveryDashboard();
+  if (next === "tags") loadTagGovernance();
 }
 
 function restoreWorkspaceRoute({ replace = false } = {}) {
   const [name, detail] = window.location.hash.slice(1).split("/");
   const workspace = ["article", "image", "import", "library", "audit", "system"].includes(name)
     ? name
-    : "article";
+    : "library";
   switchTab(workspace, { skipRoute: true, systemView: detail || "status" });
   if (replace || !window.location.hash) {
     window.history.replaceState(
@@ -927,27 +926,6 @@ function restoreWorkspaceRoute({ replace = false } = {}) {
       workspaceRoute(workspace, detail || "status"),
     );
   }
-}
-
-function setWorkspaceNavigationOpen(open) {
-  const expanded = Boolean(open);
-  const wasOpen = document.body.classList.contains("workspace-nav-open");
-  const mobile = window.matchMedia("(max-width: 900px)").matches;
-  document.body.classList.toggle("workspace-nav-open", expanded);
-  workspaceNavToggle.setAttribute("aria-expanded", String(expanded));
-  if (mobile && !expanded) workspaceSidebar.setAttribute("aria-hidden", "true");
-  else workspaceSidebar.removeAttribute("aria-hidden");
-  if (expanded) $("#workspace-nav-close").focus();
-  else if (mobile && wasOpen && workspaceSidebar.contains(document.activeElement)) workspaceNavToggle.focus();
-}
-
-function runWorkspaceNavigationAction(action) {
-  setWorkspaceNavigationOpen(false);
-  if (action === "trash") {
-    openRecycleBin();
-    return;
-  }
-  if (action === "site-preview") $("#open-site-preview").click();
 }
 
 function applyArticleSuggestion(suggestion, expectedBody) {
@@ -1008,25 +986,27 @@ function suggestRatio(width, height) {
 function imagePayload() {
   syncPublishMode(imageForm);
   const data = formData(imageForm);
+  data.commit = false;
+  data.push = false;
   if (selectedImage?.dataUrl?.startsWith("data:")) data.fileData = selectedImage.dataUrl;
   if (imageForm.dataset.editFile) data.excludeFile = imageForm.dataset.editFile;
   return data;
 }
 
 const importStatusLabels = {
-  ready: "可直接导入",
-  review: "需要整理",
+  ready: "可直接发布",
+  review: "需处理",
   similar: "疑似重复",
-  exact: "精确重复",
+  exact: "已存在",
 };
 
 function renderFlomoStats(stats) {
   const entries = [
     ["总计", stats.total],
-    ["可直接导入", stats.ready],
-    ["需要整理", stats.review],
+    ["可直接发布", stats.ready],
+    ["需处理", stats.review],
     ["疑似重复", stats.similar],
-    ["精确重复", stats.exact],
+    ["已存在", stats.exact],
   ];
   flomoStats.innerHTML = entries.filter(([label, value]) => label === "总计" || value > 0).map(([label, value]) => `
     <div class="import-stat"><strong>${value}</strong><span>${label}</span></div>`).join("");
@@ -1040,8 +1020,11 @@ function renderFlomoInspection(inspection) {
     const duplicate = item.duplicate
       ? `<p class="import-duplicate">${escapeHtml(item.duplicate.reason)}${item.duplicate.title ? `：${escapeHtml(item.duplicate.title)}` : ""}${item.duplicate.similarity < 1 ? `（相似度 ${Math.round(item.duplicate.similarity * 100)}%）` : ""}</p>`
       : "";
-    const sourceWarning = item.sourceReviewReason
-      ? `<p class="import-source-warning">${escapeHtml(item.sourceReviewReason)}</p>`
+    const reviewReason = item.sourceReviewReason
+      || (item.needsTitle ? "候选标题需要确认" : "")
+      || (item.status === "review" && item.charCount < 120 ? "正文较短，请确认内容完整" : "");
+    const sourceWarning = reviewReason
+      ? `<p class="import-source-warning">${escapeHtml(reviewReason)}</p>`
       : "";
     const importGroups = item.importTags?.length
       ? `<p class="import-item-meta">内部导入分组：${escapeHtml(item.importTags.join("、"))}（不公开展示）</p>`
@@ -1051,10 +1034,10 @@ function renderFlomoInspection(inspection) {
       ? `来源：${escapeHtml(item.source || "外部来源")} · ${escapeHtml(item.sourceUrl)}`
       : `来源：${escapeHtml(item.source || "来源待确认")}`;
     return `
-      <article class="import-item" data-import-hash="${item.contentHash}" data-status="${item.status}" data-selected="${item.selectedByDefault && item.status !== "exact"}">
+      <article class="import-item" data-import-hash="${item.contentHash}" data-status="${item.status}" data-selected="${item.status === "ready"}">
         <div class="import-item-heading">
           <label class="import-item-select">
-            <input type="checkbox" data-import-select ${item.selectedByDefault ? "checked" : ""} ${item.status === "exact" ? "disabled" : ""} />
+            <input type="checkbox" data-import-select ${item.status === "ready" ? "checked" : ""} ${item.status === "exact" ? "disabled" : ""} />
             <span data-import-title>${escapeHtml(item.title)}</span>
           </label>
           <span class="import-status">${importStatusLabels[item.status]}</span>
@@ -1101,10 +1084,6 @@ function renderFlomoInspection(inspection) {
   updateFlomoSelectionToggle();
 }
 
-function selectableImportCheckboxes() {
-  return $$("[data-import-select]:not(:disabled)", flomoList);
-}
-
 function importSelectionStates() {
   return $$("[data-import-hash]", flomoList).map((card) => {
     const checkbox = $("[data-import-select]", card);
@@ -1112,6 +1091,7 @@ function importSelectionStates() {
       card,
       checked: checkbox.checked,
       disabled: checkbox.disabled,
+      status: card.dataset.status,
     };
   });
 }
@@ -1123,21 +1103,18 @@ function applyFlomoImportFilter(states) {
 }
 
 function updateFlomoSelectionToggle() {
-  const button = $("#flomo-toggle-selection");
   const states = importSelectionStates();
   const summary = summarizeImportSelection(states);
 
   for (const state of states) state.card.dataset.selected = String(state.checked && !state.disabled);
   applyFlomoImportFilter(states);
   const exactDuplicates = $("#flomo-exact-duplicates");
-  if (exactDuplicates && flomoImportFilter === "unselected") exactDuplicates.open = true;
+  if (exactDuplicates) exactDuplicates.open = false;
 
   flomoSelectionSummary.textContent = `已选 ${summary.selected} / 可选 ${summary.selectable} / 总计 ${summary.total}`;
-  button.textContent = summary.allSelected ? "取消全选" : "全选";
-  button.disabled = summary.selectable === 0;
-  flomoAiSelected.textContent = flomoAiBusy ? `AI 整理中（${summary.selected}）` : `AI 整理已选（${summary.selected}）`;
-  flomoImportSelected.textContent = flomoImportBusy ? `正在生成（${summary.selected}）` : `生成草稿（${summary.selected}）`;
-  flomoAiSelected.disabled = flomoAiBusy || summary.selected === 0;
+  flomoPublishSelected.textContent = flomoImportBusy ? `正在检查并发布（${summary.selected}）` : `检查并发布 ${summary.selected} 条`;
+  flomoImportSelected.textContent = flomoImportBusy ? `正在保存（${summary.selected}）` : "保存所选为草稿";
+  flomoPublishSelected.disabled = flomoImportBusy || summary.selected === 0;
   flomoImportSelected.disabled = flomoImportBusy || summary.selected === 0;
 }
 
@@ -1145,6 +1122,26 @@ function selectedImportItems() {
   if (!flomoInspection) return [];
   const selected = new Set($$("[data-import-select]:checked", flomoList).map((input) => input.closest("[data-import-hash]").dataset.importHash));
   return flomoInspection.items.filter((item) => selected.has(item.contentHash));
+}
+
+function hasOverlongMarkdownParagraph(body, maxCharacters = 180) {
+  return String(body || "")
+    .split(/\n[ \t]*\n/gu)
+    .some((paragraph) => [...paragraph.replace(/\s/gu, "")].length > maxCharacters);
+}
+
+async function ensureImportParagraphsBeforePublish(items) {
+  const candidates = items.filter((item) => hasOverlongMarkdownParagraph(flomoAiBodies.get(item.contentHash) || item.body));
+  if (!candidates.length) return;
+
+  const overrides = collectImportOverrides();
+  for (const [index, item] of candidates.entries()) {
+    showResult(flomoResult, `正在安全分段 ${index + 1} / ${candidates.length}…`);
+    const succeeded = await organizeImportItem(item, overrides);
+    if (!succeeded || hasOverlongMarkdownParagraph(flomoAiBodies.get(item.contentHash) || item.body)) {
+      throw new Error(`“${item.title || "未命名内容"}”仍有超过 180 字的长段落，已停止发布。请在卡片中重试 AI 整理或保存为草稿后手动编辑。`);
+    }
+  }
 }
 
 function collectImportOverrides() {
@@ -1218,40 +1215,27 @@ async function organizeImportItem(item, overrides = collectImportOverrides()) {
   }
 }
 
-async function aiOrganizeSelectedImports() {
-  const items = selectedImportItems();
-  if (!items.length) throw new Error("请先选择需要 AI 整理的内容。");
-  if (!window.confirm(`将把选中的 ${items.length} 条正文发送给当前配置的 AI 服务，用于生成标题、摘要和标签，并在必要时仅通过新增空行整理长段落。是否继续？`)) return;
-  const overrides = collectImportOverrides();
-  let completed = 0;
-  let failed = 0;
-  items.forEach((item) => setFlomoAiStatus(item, "waiting", "等待 AI 整理…"));
-  for (const [index, item] of items.entries()) {
-    showResult(flomoResult, `AI 正在整理 ${index + 1} / ${items.length}…`);
-    const succeeded = await organizeImportItem(item, overrides);
-    if (succeeded) completed += 1;
-    else failed += 1;
-  }
-  if (failed) {
-    showError(flomoResult, new Error(`AI 已整理 ${completed} 条，${failed} 条失败。可在对应内容卡片中单独重试。`));
-  } else {
-    showResult(flomoResult, `AI 已整理 ${completed} 条内容。请复核后再生成草稿。`);
-  }
-}
-
-async function applyFlomoImport() {
+async function applyFlomoImport(mode = "draft") {
   const items = selectedImportItems();
   if (!items.length) throw new Error("请至少选择一条内容。");
-  if (!window.confirm(`将生成 ${items.length} 篇本地 Markdown 草稿，不会提交或推送。是否继续？`)) return;
+  const publishing = mode === "publish";
+  const action = publishing ? "先由 AI 安全分段后发布到本地" : "保存为本地 Markdown 草稿";
+  if (!window.confirm(`将${action} ${items.length} 条选中内容，不会提交或推送。是否继续？`)) return;
+  if (publishing) await ensureImportParagraphsBeforePublish(items);
   const result = await api("/api/import/flomo/apply", {
     fileData: flomoFileData,
     selectedHashes: items.map((item) => item.contentHash),
     overrides: collectImportOverrides(),
+    mode,
   });
-  showResult(flomoResult, `已生成 ${result.imported} 篇草稿。${result.skipped.length ? `另有 ${result.skipped.length} 条因重复跳过。` : ""}\n${result.files.map((item) => item.file).join("\n")}`);
+  const completedLabel = publishing ? "已发布到本地" : "已保存为草稿";
+  const blocked = result.blocked?.length
+    ? `\n${result.blocked.length} 条需要补充：\n${result.blocked.map((item) => `- ${item.title}：${item.reason}`).join("\n")}`
+    : "";
+  showResult(flomoResult, `${completedLabel} ${result.imported} 条。${result.skipped.length ? `另有 ${result.skipped.length} 条因重复跳过。` : ""}${blocked}\n${result.files.map((item) => item.file).join("\n")}`);
   await loadLibrary();
   renderFlomoInspection(await api("/api/import/flomo/inspect", { fileData: flomoFileData }));
-  flomoCompleteActions.hidden = false;
+  flomoCompleteActions.hidden = !result.drafted;
   $("#flomo-review-drafts").textContent = `前往内容库查看 ${result.imported} 篇草稿`;
 }
 
@@ -1292,29 +1276,25 @@ function renderLibraryCounts(counts = {}) {
     unknown: Number(counts.unverified || counts.unknown || 0),
     online: Number(counts.online || 0),
     unverified: Number(counts.unverified || 0),
+    cloud: Number(counts.cloud || 0),
+    attention: Number(counts.attention || 0),
   };
   const countTargets = {
     all: "#library-count-all",
     draft: "#library-count-draft",
     local: "#library-count-local",
-    pending: "#library-count-pending",
-    online: "#library-count-online",
+    cloud: "#library-count-cloud",
   };
   for (const [status, selector] of Object.entries(countTargets)) {
     $(selector).textContent = Number(counts[status] || 0);
   }
-  $("#library-count-unknown").textContent = String(libraryCounts.unknown);
   const task = libraryTaskPresentation(libraryCounts);
   $("#library-task-summary").textContent =
-    `${libraryCounts.all} 项内容 · ${libraryCounts.draft} 项草稿 · ${libraryCounts.local} 项待同步 · ${libraryCounts.pending} 项待上线 · ${libraryCounts.unknown} 项待验证`;
+    `${libraryCounts.all} 项内容 · ${libraryCounts.draft} 项草稿 · ${libraryCounts.local} 项本地发布 · ${libraryCounts.cloud} 项云端流程`;
   $("#library-task-banner").dataset.state = task.state;
   $("#library-task-kicker").textContent = task.kicker;
   $("#library-task-title").textContent = task.title;
   $("#library-task-description").textContent = task.description;
-  const action = $("#library-task-action");
-  action.hidden = task.action === "none";
-  action.textContent = task.actionLabel;
-  action.dataset.libraryTaskAction = task.action;
 }
 
 function renderLibraryView() {
@@ -1346,7 +1326,7 @@ function updateLibrarySelection() {
   $("#library-bulk-edit").disabled = selectedCount === 0;
   $("#library-bulk-sync").disabled = selectedCount === 0;
   $("#library-bulk-trash").disabled = selectedCount === 0;
-  $("#library-undo-trash").hidden = lastTrashedItems.length === 0;
+  updateLibraryUndoVisibility();
   $("#library-clear-selection").disabled = selectedCount === 0;
   const pageFiles = libraryPageItems.map((item) => item.file);
   const selectedOnPage = pageFiles.filter((file) => isLibraryFileSelected(librarySelection, file)).length;
@@ -1530,22 +1510,48 @@ async function loadLibrary() {
   }
 }
 
-function auditItemDetails(item) {
-  return [...item.blockers, ...item.warnings, ...item.notices].join("；") || "检查通过";
+function auditIssues(item) {
+  if (!item) return [];
+  return [
+    ...(item.blockers || []),
+    ...(item.warnings || []),
+    ...(item.notices || []),
+  ].filter(Boolean);
+}
+
+function renderArticleAuditGuidance(item) {
+  const issues = auditIssues(item);
+  articleAuditGuidance.hidden = !issues.length;
+  articleAuditIssues.innerHTML = issues.map((issue) => `<li>${escapeHtml(issue)}</li>`).join("");
+  if (!issues.length) {
+    articleAuditNextStep.textContent = "";
+    return;
+  }
+  const needsParagraphs = issues.some((issue) => /长段落/u.test(issue));
+  const needsSource = issues.some((issue) => /来源链接/u.test(issue));
+  articleAuditNextStep.textContent = needsParagraphs
+    ? `先使用“AI 辅助 → 整理文章资料”安全分段${needsSource ? "，再补充具体原文链接" : ""}；保存或发布时会自动复核。`
+    : "按上述事项修改后保存或发布，系统会自动复核。";
 }
 
 function renderContentAuditGroup(report, status, label) {
   const items = report.items.filter((item) => item.status === status);
   return `
-    <details class="content-audit-group" ${status === "ready" ? "" : "open"}>
+    <details class="content-audit-group" ${status === "ready" || !items.length ? "" : "open"}>
       <summary>${label} <span>${items.length}</span></summary>
       <div>
-        ${items.length ? items.map((item) => `
-          <article data-status="${status}">
-            <div><strong>${escapeHtml(item.title)}</strong><span>${item.type === "article" ? "文章" : "图片"} · ${escapeHtml(item.source || "未标注")}</span></div>
-            <p>${escapeHtml(auditItemDetails(item))}</p>
-            <code>${escapeHtml(item.file)}</code>
-          </article>`).join("") : '<p class="library-empty">无。</p>'}
+        ${items.length ? items.map((item) => {
+          const issues = auditIssues(item);
+          const body = `
+            <div class="content-audit-item-heading">
+              <div><strong>${escapeHtml(item.title)}</strong><span>${item.type === "article" ? "文章" : "图片"} · ${escapeHtml(item.source || "未标注")}</span></div>
+            </div>
+            ${issues.length ? `<ul>${issues.map((issue) => `<li>${escapeHtml(issue)}</li>`).join("")}</ul>` : "<p>检查通过</p>"}
+            <code>${escapeHtml(item.file)}</code>`;
+          return item.type === "article" && status !== "ready"
+            ? `<button class="content-audit-item-action" type="button" data-status="${status}" data-audit-open-article="${escapeHtml(item.file)}" aria-label="继续处理：${escapeHtml(item.title)}">${body}</button>`
+            : `<article data-status="${status}">${body}</article>`;
+        }).join("") : '<p class="library-empty">无。</p>'}
       </div>
     </details>`;
 }
@@ -1554,10 +1560,8 @@ async function loadContentAudit() {
   $("#content-audit-summary").textContent = "正在检查全部内容…";
   $("#content-audit-list").innerHTML = '<p class="library-empty">正在读取体检结果…</p>';
   try {
-    const [report] = await Promise.all([
-      api("/api/content/audit"),
-      loadTagGovernance(),
-    ]);
+    const report = await api("/api/content/audit");
+    contentAuditItemsByFile = new Map(report.items.map((item) => [item.file, item]));
     $("#content-audit-summary").textContent =
       `可直接上线 ${report.counts.ready} 条 · 需要确认 ${report.counts.review} 条 · 建议退回草稿 ${report.counts.draft} 条`;
     $("#content-audit-list").innerHTML = [
@@ -1569,6 +1573,12 @@ async function loadContentAudit() {
     $("#content-audit-summary").textContent = `体检失败：${error.message}`;
     $("#content-audit-list").innerHTML = "";
   }
+}
+
+async function openAuditedArticle(file) {
+  const item = await api(`/api/content/read?${new URLSearchParams({ type: "article", file })}`);
+  activeContent = { ...item, audit: contentAuditItemsByFile.get(file) || null };
+  openActiveContent();
 }
 
 function renderTagGovernance(report) {
@@ -1858,9 +1868,6 @@ function selectReusableAsset(item) {
 function updateTrashCount(count) {
   const value = String(Number(count) || 0);
   $("#library-trash-count").textContent = value;
-  const sidebarCount = $("#sidebar-trash-count");
-  sidebarCount.textContent = value;
-  sidebarCount.setAttribute("aria-label", `${value} 条内容`);
 }
 
 function renderRecycleBin(items) {
@@ -2010,21 +2017,19 @@ function updateLibraryActions(item) {
   for (const button of $$("button", libraryActions)) button.classList.remove("primary");
   libraryEdit.hidden = false;
   libraryDuplicate.hidden = false;
-  libraryEdit.textContent = item.data.draft ? "打开复核" : "打开编辑";
-  libraryTransition.hidden = item.type !== "article" || !item.data.draft;
-  libraryTransition.textContent = "复核并发布";
+  libraryEdit.textContent = item.data.draft ? "继续处理" : "编辑内容";
   libraryReturnDraft.hidden = item.type !== "article" || item.data.draft;
   librarySyncCurrent.hidden = presentation.action !== "sync";
   libraryPreview.hidden = item.type !== "article" || !item.data.draft || !item.previewUrl || !sitePreviewAvailable;
   const isPublic = !item.data.draft && (item.type === "article" || item.data.public !== false);
   libraryOpen.hidden = !isPublic || !sitePreviewAvailable;
   libraryOpen.textContent = item.publication?.state === "online"
-    ? "打开线上内容"
-    : item.type === "article" ? "打开本地文章" : "打开本地图片";
+    ? "查看线上内容 ↗"
+    : "在站点预览中查看 ↗";
   $("#retry-push").hidden = presentation.action !== "retry";
   if (!$("#retry-push").hidden) $("#retry-push").classList.add("primary");
   else if (!librarySyncCurrent.hidden) librarySyncCurrent.classList.add("primary");
-  else if (item.type === "article" && item.data.draft) libraryTransition.classList.add("primary");
+  else if (item.data.draft) libraryEdit.classList.add("primary");
   else if (presentation.action === "open" && !libraryOpen.hidden) libraryOpen.classList.add("primary");
   else libraryEdit.classList.add("primary");
 }
@@ -2045,11 +2050,11 @@ async function selectContent(type, file) {
     const internalReviewStatus = item.data.internalReviewStatus === "resolved" ? "resolved" : "unresolved";
     const internalNote = item.type === "article" && item.data.internalNote
       ? `<div class="internal-review-note" data-state="${internalReviewStatus}">
-          <strong>${internalReviewStatus === "resolved" ? "复核已完成" : "内部复核待处理"}</strong>
+          <strong>${internalReviewStatus === "resolved" ? "导入内容已确认" : "导入内容待确认"}</strong>
           <p>${escapeHtml(item.data.internalNote)}</p>
           ${internalReviewStatus === "resolved"
             ? `<small>完成时间：${escapeHtml(formatDateTime(item.data.internalReviewResolvedAt))}</small>`
-            : "<small>完成复核或清空备注后才能发布。</small>"}
+            : "<small>核对来源链接与正文后，在编辑页勾选“我已确认”。</small>"}
         </div>`
       : "";
     const media = item.type === "image" && item.data.image
@@ -2112,6 +2117,7 @@ function openActiveContent(nextDraft = null) {
   if (!activeContent) return;
   const { type, file, data, body, previewUrl } = activeContent;
   if (type === "article") {
+    renderArticleAuditGuidance(activeContent.audit);
     setFormValues(articleForm, { ...data, tags: list(data.tags).join(", "), body });
     setPublishMode(articleForm, typeof nextDraft === "boolean" ? (nextDraft ? "draft" : "publish") : (data.draft ? "draft" : "publish"));
     syncArticleAttribution();
@@ -2159,20 +2165,6 @@ function openActiveContent(nextDraft = null) {
 }
 
 for (const tab of $$(".tab")) tab.addEventListener("click", () => switchTab(tab.dataset.tab));
-workspaceNavToggle.addEventListener("click", () => setWorkspaceNavigationOpen(true));
-$("#workspace-nav-close").addEventListener("click", () => setWorkspaceNavigationOpen(false));
-$("#workspace-nav-scrim").addEventListener("click", () => setWorkspaceNavigationOpen(false));
-for (const button of $$("[data-nav-action]")) {
-  button.addEventListener("click", () => runWorkspaceNavigationAction(button.dataset.navAction));
-}
-document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape" && document.body.classList.contains("workspace-nav-open")) {
-    setWorkspaceNavigationOpen(false);
-  }
-});
-window.matchMedia("(max-width: 900px)").addEventListener("change", () => {
-  setWorkspaceNavigationOpen(false);
-});
 
 for (const button of $$("[data-markdown-action]")) {
   button.addEventListener("click", () => applyMarkdownAction(button.dataset.markdownAction));
@@ -2211,9 +2203,12 @@ articleBody.addEventListener("drop", (event) => {
 for (const input of $$("input, textarea, select", articleForm)) {
   if (input.closest(".markdown-find")) continue;
   input.addEventListener("input", () => {
-    if (input.name === "internalNote") {
+    if (["title", "body", "source", "sourceUrl", "sourceKind", "internalNote"].includes(input.name)) {
       $('[name="internalReviewStatus"]', articleForm).value = "unresolved";
       $('[name="internalReviewResolvedAt"]', articleForm).value = "";
+      $('[name="internalReviewConfirmed"]', articleForm).checked = false;
+    } else if (input.name === "internalReviewConfirmed") {
+      $('[name="internalReviewStatus"]', articleForm).value = input.checked ? "resolved" : "unresolved";
     }
     markFormDirty(articleForm);
     syncPublishMode(articleForm);
@@ -2227,9 +2222,12 @@ for (const input of $$("input, textarea, select", articleForm)) {
     saveLocalDraft(articleForm);
   });
   input.addEventListener("change", () => {
-    if (input.name === "internalNote") {
+    if (["title", "body", "source", "sourceUrl", "sourceKind", "internalNote"].includes(input.name)) {
       $('[name="internalReviewStatus"]', articleForm).value = "unresolved";
       $('[name="internalReviewResolvedAt"]', articleForm).value = "";
+      $('[name="internalReviewConfirmed"]', articleForm).checked = false;
+    } else if (input.name === "internalReviewConfirmed") {
+      $('[name="internalReviewStatus"]', articleForm).value = input.checked ? "resolved" : "unresolved";
     }
     markFormDirty(articleForm);
     syncPublishMode(articleForm);
@@ -2271,24 +2269,6 @@ for (const button of $$("[data-open-details]")) {
   });
 }
 
-for (const tab of $$('[data-preview]')) {
-  tab.addEventListener("click", () => {
-    articlePreviewMode = tab.dataset.preview;
-    $$(".preview-tab").forEach((item) => item.classList.toggle("active", item === tab));
-    $("#article-preview").classList.toggle("hidden", articlePreviewMode !== "card");
-    articlePagePreview.classList.toggle("active", articlePreviewMode === "page");
-  });
-}
-
-for (const tab of $$('[data-image-preview]')) {
-  tab.addEventListener("click", () => {
-    imagePreviewMode = tab.dataset.imagePreview;
-    $$('[data-image-preview]').forEach((item) => item.classList.toggle("active", item === tab));
-    $("#image-preview").hidden = imagePreviewMode !== "card";
-    $("#image-detail-preview").hidden = imagePreviewMode !== "detail";
-  });
-}
-
 $('input[name="file"]', imageForm).addEventListener("change", async (event) => {
   const file = event.target.files[0];
   if (!file) return;
@@ -2308,16 +2288,6 @@ $('input[name="file"]', imageForm).addEventListener("change", async (event) => {
     selectedImage = null;
     showError(imageResult, error);
   }
-});
-
-$('[data-quality="article"]').addEventListener("click", async () => {
-  try { showResult(articleResult, formatQuality(await api("/api/quality/article", articlePayload()))); }
-  catch (error) { showError(articleResult, error); }
-});
-
-$('[data-quality="image"]').addEventListener("click", async () => {
-  try { showResult(imageResult, formatQuality(await api("/api/quality/image", imagePayload()))); }
-  catch (error) { showError(imageResult, error); }
 });
 
 $('[data-ai-fill="article"]').addEventListener("click", async (event) => {
@@ -2340,7 +2310,7 @@ $('[data-ai-fill="article"]').addEventListener("click", async (event) => {
     showResult(articleResult, `AI 已填写建议内容。${paragraphMessage}请检查后再发布。`);
   }
   catch (error) { showError(articleResult, error); }
-  finally { button.disabled = false; button.textContent = "AI 整理文章资料"; syncAiAvailability(); }
+  finally { button.disabled = false; button.textContent = "整理文章资料"; syncAiAvailability(); }
 });
 
 articleTitleAi.addEventListener("click", async () => {
@@ -2721,6 +2691,7 @@ async function trashSelectedContent() {
         result.succeeded.length ? "可点击“撤销删除”恢复到原位置。" : "",
         result.requiresSync ? "其中包含已发布内容；请完成 Git 与 Cloudflare 同步以更新线上站点。" : "",
       ].filter(Boolean).join("\n"),
+      { undoTrash: result.succeeded.length > 0 },
     );
   } catch (error) {
     showError(libraryResult, error);
@@ -2751,6 +2722,7 @@ async function restoreLastTrashedDrafts() {
         `已恢复 ${result.succeeded.length} 条草稿。`,
         result.failed.length ? `${result.failed.length} 条恢复失败：\n${batchFailureSummary(result.failed)}` : "",
       ].filter(Boolean).join("\n"),
+      { undoTrash: lastTrashedItems.length > 0 },
     );
   } catch (error) {
     showError(libraryResult, error);
@@ -2813,13 +2785,6 @@ for (const button of $$("[data-library-view]")) {
 
 $("#library-refresh").addEventListener("click", loadLibrary);
 $("#library-batch-toggle").addEventListener("click", () => setLibraryBatchMode(!libraryBatchMode));
-$("#library-task-action").addEventListener("click", (event) => {
-  const action = event.currentTarget.dataset.libraryTaskAction;
-  if (!["pending", "unknown", "draft"].includes(action)) return;
-  resetLibraryNavigation();
-  setLibraryStatus(action === "draft" ? "draft" : action === "unknown" ? "unknown" : "local");
-  loadLibrary();
-});
 $("#library-audit").addEventListener("click", () => switchTab("audit"));
 $("#article-open-assets").addEventListener("click", () => openAssetLibrary("insert"));
 $("#article-cover-assets").addEventListener("click", () => openAssetLibrary("cover"));
@@ -2838,6 +2803,14 @@ assetLibraryDialog.addEventListener("click", (event) => {
 $("#tag-governance-refresh").addEventListener("click", loadTagGovernance);
 $("#tag-merge-preview").addEventListener("click", previewTagMerge);
 $("#content-audit-refresh").addEventListener("click", loadContentAudit);
+$("#content-audit-list").addEventListener("click", async (event) => {
+  const button = event.target.closest("[data-audit-open-article]");
+  if (!button) return;
+  button.disabled = true;
+  try { await openAuditedArticle(button.dataset.auditOpenArticle); }
+  catch (error) { $("#content-audit-summary").textContent = `无法打开文章：${error.message}`; }
+  finally { button.disabled = false; }
+});
 $("#library-open-trash").addEventListener("click", openRecycleBin);
 $("#sync-history-refresh").addEventListener("click", loadSyncHistory);
 $("#article-version-history").addEventListener("click", () => openVersionHistory(articleForm));
@@ -3020,10 +2993,6 @@ libraryDuplicate.addEventListener("click", async () => {
   }
 });
 librarySyncCurrent.addEventListener("click", syncCurrentContent);
-libraryTransition.addEventListener("click", () => {
-  if (!activeContent || activeContent.type !== "article") return;
-  openActiveContent(false);
-});
 libraryReturnDraft.addEventListener("click", () => {
   if (!activeContent || activeContent.type !== "article" || activeContent.data.draft) return;
   openActiveContent(true);
@@ -3100,19 +3069,12 @@ $("#flomo-inspect").addEventListener("click", async (event) => {
   finally { button.disabled = false; button.textContent = "解析并检查重复"; }
 });
 
-$("#flomo-toggle-selection").addEventListener("click", () => {
-  const checkboxes = selectableImportCheckboxes();
-  const shouldSelect = !checkboxes.every((checkbox) => checkbox.checked);
-  for (const checkbox of checkboxes) checkbox.checked = shouldSelect;
-  updateFlomoSelectionToggle();
-});
-
 flomoList.addEventListener("change", (event) => {
   if (event.target.matches("[data-import-select]")) updateFlomoSelectionToggle();
 });
 
 flomoOnlyUnselected.addEventListener("change", () => {
-  flomoImportFilter = flomoOnlyUnselected.checked ? "unselected" : "all";
+  flomoImportFilter = flomoOnlyUnselected.checked ? "needs-review" : "all";
   updateFlomoSelectionToggle();
 });
 
@@ -3129,24 +3091,21 @@ flomoList.addEventListener("click", async (event) => {
   retry.disabled = false;
 });
 
-flomoAiSelected.addEventListener("click", async (event) => {
-  const button = event.currentTarget;
-  flomoAiBusy = true;
+flomoImportSelected.addEventListener("click", async (event) => {
+  flomoImportBusy = true;
   updateFlomoSelectionToggle();
-  button.setAttribute("aria-busy", "true");
-  try { await aiOrganizeSelectedImports(); }
+  try { await applyFlomoImport("draft"); }
   catch (error) { showError(flomoResult, error); }
   finally {
-    flomoAiBusy = false;
-    button.removeAttribute("aria-busy");
+    flomoImportBusy = false;
     updateFlomoSelectionToggle();
   }
 });
 
-flomoImportSelected.addEventListener("click", async (event) => {
+flomoPublishSelected.addEventListener("click", async () => {
   flomoImportBusy = true;
   updateFlomoSelectionToggle();
-  try { await applyFlomoImport(); }
+  try { await applyFlomoImport("publish"); }
   catch (error) { showError(flomoResult, error); }
   finally {
     flomoImportBusy = false;
@@ -3296,38 +3255,21 @@ async function loadStatus() {
     preview.dataset.state = sitePreviewAvailable ? "ready" : "offline";
     preview.textContent = sitePreviewAvailable ? "站点预览运行中" : "站点预览未运行";
     $("#open-site-preview").disabled = !sitePreviewAvailable;
-    $("#workspace-open-site-preview").disabled = !sitePreviewAvailable;
     const localPending = Number(status.publicationCounts?.local || 0);
     const deploymentPending = Number(status.publicationCounts?.pending || 0);
     const verificationPending = Number(status.publicationCounts?.unverified || 0);
-    const publicPending = localPending + deploymentPending;
+    const attentionPending = Number(status.publicationCounts?.attention || 0);
     const syncSummary = $("#content-sync-summary");
-    syncSummary.dataset.state = publicPending || verificationPending ? "attention" : "ready";
-    syncSummary.textContent = localPending
-      ? `${localPending} 条内容待同步`
-      : deploymentPending
-        ? `${deploymentPending} 条内容待上线`
-        : verificationPending
-          ? `${verificationPending} 条内容待验证`
-          : "公开内容已核对";
-    $("#open-pending-content").textContent = localPending
-      ? `查看待同步（${localPending}）`
-      : deploymentPending
-        ? `查看待上线（${deploymentPending}）`
-        : verificationPending
-          ? `查看待验证（${verificationPending}）`
-          : "查看发布状态";
-    $("#open-pending-content").dataset.targetStatus = localPending
-      ? "local"
-      : deploymentPending
-        ? "pending"
-        : verificationPending
-          ? "unknown"
-          : "all";
+    syncSummary.dataset.state = attentionPending ? "attention" : "ready";
+    syncSummary.textContent = attentionPending ? `${attentionPending} 条内容待处理` : "公开内容已核对";
+    $("#open-pending-content").textContent = attentionPending
+      ? `查看待处理（${attentionPending}）`
+      : "查看发布状态";
+    $("#open-pending-content").dataset.targetStatus = attentionPending ? "attention" : "all";
     const health = $("#publisher-health");
     const healthLabel = $("#publisher-health-label");
     const healthDetail = $("#publisher-health-detail");
-    health.dataset.state = !sitePreviewAvailable || publicPending || verificationPending ? "attention" : "ready";
+    health.dataset.state = !sitePreviewAvailable || attentionPending ? "attention" : "ready";
     if (!sitePreviewAvailable) {
       healthLabel.textContent = "发布台可用，站点预览未运行";
       healthDetail.textContent = "打开系统详情检查预览服务后再进行真实预览";
@@ -3344,24 +3286,8 @@ async function loadStatus() {
       healthLabel.textContent = "本地发布环境已就绪";
       healthDetail.textContent = "发布台、站点预览与公开内容状态正常";
     }
-    for (const gitControl of $$('input[name="commit"], input[name="push"]')) {
-      const description = $(".check-copy small", gitControl.closest("label"));
-      description.dataset.defaultText ||= description.textContent;
-      if (status.branch === "main") gitControl.checked = false;
-      gitControl.disabled = status.branch === "main";
-      description.textContent = status.branch === "main"
-        ? `${description.dataset.defaultText}（main 分支已停用）`
-        : description.dataset.defaultText;
-      gitControl.closest("label").title = status.branch === "main"
-        ? "main 分支受保护，请先切换到内容分支。"
-        : "";
-    }
-    $("#article-advanced-summary").textContent = status.branch === "main"
-      ? "精选 · main 分支不执行 Git 操作"
-      : "精选与版本控制";
-    $("#image-advanced-summary").textContent = status.branch === "main"
-      ? "日期、比例、正文 · main 分支不执行 Git 操作"
-      : "日期、比例、正文与版本控制";
+    $("#article-advanced-summary").textContent = "精选";
+    $("#image-advanced-summary").textContent = "日期、比例与正文";
     updateLibraryActions(activeContent);
     syncArticleActionState();
   } catch {
@@ -3392,7 +3318,6 @@ setLibraryStatus(libraryStatus);
 renderLibraryView();
 updateArticlePreview();
 updateImagePreview();
-setWorkspaceNavigationOpen(false);
 loadStatus();
 restoreWorkspaceRoute({ replace: true });
 window.addEventListener("popstate", () => restoreWorkspaceRoute());

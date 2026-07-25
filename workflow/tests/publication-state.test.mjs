@@ -3,7 +3,28 @@ import test from "node:test";
 import {
   contentPublicationCounts,
   publicationFromDeployment,
+  publicationFromWorkflow,
 } from "../publication-state.js";
+
+test("content lists derive publication progress without waiting for live verification", () => {
+  assert.deepEqual(publicationFromWorkflow({ state: "draft" }), {
+    state: "draft",
+    label: "草稿",
+    description: "只保存在本地内容库。",
+    verification: "not_applicable",
+    checkedAt: "",
+    lastVerifiedAt: "",
+  });
+  assert.equal(publicationFromWorkflow({ state: "pending_commit" }).state, "local");
+  assert.deepEqual(publicationFromWorkflow({ state: "pending_deploy" }), {
+    state: "pending",
+    label: "云端待核对",
+    description: "远程已包含当前内容；打开详情后再核对线上页面。",
+    verification: "not_checked",
+    checkedAt: "",
+    lastVerifiedAt: "",
+  });
+});
 
 test("deployment verification maps live and pending states without ambiguity", () => {
   const checkedAt = "2026-07-24T10:00:00.000Z";
@@ -64,5 +85,7 @@ test("publication counts separate workflow progress from verification confidence
     unknown: 1,
     online: 1,
     unverified: 2,
+    cloud: 3,
+    attention: 4,
   });
 });

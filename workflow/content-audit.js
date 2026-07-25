@@ -125,6 +125,11 @@ function auditArticle(item) {
   if (sourceKind === "unknown" && !item.draft) {
     item.blockers.push("来源待确认的文章不能公开发布。");
   }
+  const internalNote = String(data.internalNote || "").trim();
+  const internalReviewStatus = String(data.internalReviewStatus || "unresolved").trim();
+  if (internalNote && internalReviewStatus !== "resolved") {
+    item.blockers.push("内部复核备注尚未确认，不能进入发布流程。");
+  }
   if (sourceUrl && isGenericSourceUrl(sourceUrl)) {
     item.warnings.push("来源链接只指向网站首页，需要确认具体原文地址。");
   }

@@ -129,7 +129,9 @@ test("article and tag routes retain their direct-reading and discovery hierarchy
 
   assert.match(article, /ArticleDetailPage/);
   assert.match(articleDetail, /class="detail-page article-detail"/);
-  assert.match(articleDetail, /class="detail-grid"/);
+  assert.match(articleDetail, /class:list=\{\["detail-grid"/);
+  assert.match(articleDetail, /hasArticleSidebar/);
+  assert.match(articleDetail, /detail-grid--single/);
   assert.match(articleDetail, /class="related-section"/);
   assert.match(tagIndex, /class="archive-hero tags-archive-hero"/);
   assert.match(tagIndex, /class="tag-index"/);
@@ -148,6 +150,8 @@ test("article dialogs support complete reading while direct pages retain source-
 
   assert.match(articlePage, /class="dialog-article-actions"/);
   assert.match(articlePage, /class="dialog-full-link"/);
+  assert.match(articlePage, /const dialogTitleSize = titleLength <= 12/);
+  assert.match(articlePage, /`dialog-title--\$\{dialogTitleSize\}`/);
   assert.match(previewPage, /import\.meta\.env\.DEV/);
   assert.match(previewPage, /noindex/);
   assert.match(previewPage, /ArticleDetailPage \{article\} preview/);
@@ -155,7 +159,17 @@ test("article dialogs support complete reading while direct pages retain source-
   assert.match(styles, /\[data-detail-kind="article"\] \.detail-grid \{[\s\S]*display: block;/);
   assert.match(styles, /\[data-detail-kind="article"\] \.detail-grid aside \{ display: none; \}/);
   assert.match(styles, /\[data-detail-kind="article"\] \.detail-header \{[\s\S]*display: grid;/);
-  assert.match(styles, /\[data-detail-kind="article"\] \.detail-summary \{ display: none; \}/);
+  assert.match(styles, /\[data-detail-kind="article"\] \.detail-summary \{[\s\S]*display: block;[\s\S]*grid-column: 1 \/ -1;[\s\S]*-webkit-line-clamp: 2;/);
+  assert.match(styles, /\[data-detail-kind="article"\] \.detail-header h1 \{[\s\S]*grid-column: 1 \/ -1;[\s\S]*max-width: 900px;/);
+  assert.match(styles, /\.dialog-title--short \{[\s\S]*font-size: clamp\(48px, 6\.4vw, 68px\);/);
+  assert.match(styles, /\.dialog-title--longest \{[\s\S]*font-size: clamp\(38px, 4\.2vw, 44px\);/);
+  assert.match(styles, /\.article-detail \.detail-header h1\.dialog-title--longest,[\s\S]*\.detail-dialog\[data-detail-kind="article"\] \.detail-header h1\.dialog-title--longest/);
   assert.match(styles, /\[data-detail-kind="article"\] \.card-tags \{[\s\S]*grid-column: 1;/);
   assert.match(styles, /\[data-detail-kind="article"\] \.dialog-article-actions \{[\s\S]*display: flex;/);
+  assert.match(styles, /\.article-detail \.detail-header h1 \{[^}]*font-size: clamp\(44px, 4\.4vw, 68px\);[^}]*text-wrap: balance;/);
+  assert.match(styles, /\.article-detail \.detail-header \{ max-width: 980px; margin-inline: auto;/);
+  assert.match(styles, /\.article-detail \.detail-summary \{[^}]*border-left: 3px solid var\(--coral\);[^}]*max-width: 900px;[^}]*-webkit-line-clamp: 2;/);
+  assert.match(styles, /\.detail-grid--single \{ grid-template-columns: minmax\(0, 720px\); gap: 0; \}/);
+  assert.match(styles, /\.article-recommendations \{[^}]*max-width: 1200px;[^}]*margin: 72px auto 0;/);
+  assert.match(styles, /\.article-recommendation h3 \{[^}]*max-width: 820px;/);
 });

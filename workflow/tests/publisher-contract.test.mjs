@@ -17,6 +17,8 @@ test("publisher exposes local public URLs and keeps empty result panels hidden",
 
   assert.match(server, /function publicContentUrl/);
   assert.match(server, /function previewContentUrl/);
+  assert.match(server, /if \(preview\) return `\/preview\/articles\/\$\{contentId\}`/);
+  assert.match(server, /return `\/\$\{contentId\}`/);
   assert.match(server, /function createArticleTitleSuggestions/);
   assert.match(server, /\/api\/ai\/article-title-suggestions/);
   assert.match(server, /\/api\/recommendations/);
@@ -49,31 +51,35 @@ test("publisher exposes local public URLs and keeps empty result panels hidden",
   assert.match(html, /id="app-frame"/);
   assert.match(html, /id="workspace-sidebar"/);
   assert.match(html, /class="workspace-navigation"/);
-  assert.match(html, /id="workspace-nav-toggle"/);
-  assert.match(html, /id="workspace-nav-scrim"/);
+  assert.doesNotMatch(html, /id="workspace-nav-toggle"/);
+  assert.doesNotMatch(html, /id="workspace-nav-close"/);
+  assert.doesNotMatch(html, /id="workspace-nav-scrim"/);
   assert.match(html, /id="workspace-page-title"/);
-  assert.match(html, /data-tab="audit"/);
-  assert.match(html, /data-nav-action="trash"/);
-  assert.match(html, /id="sidebar-trash-count"/);
+  assert.doesNotMatch(html, /data-tab="audit"/);
+  assert.doesNotMatch(html, /data-nav-action="trash"/);
+  assert.doesNotMatch(html, /id="sidebar-trash-count"/);
   assert.match(html, /data-tab="system"/);
-  assert.match(html, /data-nav-action="site-preview"/);
-  assert.equal((html.match(/class="tab(?: active)?"/g) || []).length, 6);
+  assert.doesNotMatch(html, /data-nav-action="site-preview"/);
+  assert.equal((html.match(/class="tab(?: active)?"/g) || []).length, 5);
+  assert.match(html, /class="workspace-create-menu"/);
+  assert.match(html, /class="tab active" data-tab="library"/);
   assert.doesNotMatch(html, /class="tabs"/);
   assert.match(html, /id="library-open"/);
   assert.match(html, /id="library-preview"/);
   assert.match(html, /id="library-result" hidden/);
   assert.match(html, /class="library-status-tabs"/);
   assert.match(html, /id="library-task-banner"/);
-  assert.match(html, /id="library-task-action"/);
+  assert.doesNotMatch(html, /id="library-task-action"/);
   assert.match(html, /id="library-batch-toggle"/);
   assert.match(html, /id="library-feedback" hidden role="status" aria-live="polite"/);
-  assert.match(html, /styles\.css\?v=20260724-console/);
-  assert.match(html, /app\.js\?v=20260724-console/);
+  assert.match(html, /styles\.css\?v=20260725-desktop-local-5/);
+  assert.match(html, /app\.js\?v=20260725-desktop-local-5/);
   assert.match(html, /data-library-status="draft"/);
   assert.match(html, /data-library-status="local"/);
-  assert.match(html, /data-library-status="pending"/);
-  assert.match(html, /data-library-status="unknown"/);
-  assert.match(html, /data-library-status="online"/);
+  assert.match(html, /data-library-status="cloud"/);
+  assert.doesNotMatch(html, /data-library-status="pending"/);
+  assert.doesNotMatch(html, /data-library-status="unknown"/);
+  assert.doesNotMatch(html, /data-library-status="online"/);
   assert.doesNotMatch(html, /data-library-status="pending_commit"/);
   assert.match(html, /data-library-view="compact"/);
   assert.match(html, /id="library-pagination"/);
@@ -94,6 +100,7 @@ test("publisher exposes local public URLs and keeps empty result panels hidden",
   assert.match(html, /id="library-close-detail"/);
   assert.match(html, /id="library-duplicate"/);
   assert.match(html, /id="library-return-draft"/);
+  assert.match(html, /在站点预览中查看 ↗/);
   assert.match(html, /class="library-detail-more"/);
   assert.match(html, /class="library-more-actions"/);
   assert.match(html, /id="trash-dialog"/);
@@ -123,12 +130,17 @@ test("publisher exposes local public URLs and keeps empty result panels hidden",
   assert.match(html, /data-open-details="article"/);
   assert.match(html, /data-open-details="image"/);
   assert.match(html, /class="editor-actions"/);
-  assert.match(html, /id="article-publish-journey"/);
+  assert.doesNotMatch(html, /id="article-publish-journey"/);
+  assert.doesNotMatch(html, /id="article-page-preview"/);
+  assert.match(html, /class="ai-action-control ai-action-menu"/);
   assert.match(html, /id="article-title-ai"/);
   assert.match(html, /id="article-title-suggestions"[^>]*hidden/);
   assert.match(html, /id="article-title-candidate-list"/);
   assert.match(html, /id="article-title-ai-status" role="status" aria-live="polite"/);
   assert.match(html, /id="article-result" hidden/);
+  assert.match(html, /id="article-audit-guidance" hidden aria-live="polite"/);
+  assert.match(html, /id="article-audit-issues"/);
+  assert.match(html, /id="article-audit-next-step"/);
   assert.match(html, /class="markdown-toolbar"/);
   assert.match(html, /id="article-body-stats"/);
   assert.match(html, /id="article-outline"/);
@@ -149,11 +161,21 @@ test("publisher exposes local public URLs and keeps empty result panels hidden",
   assert.match(html, /class="library-tools-more"/);
   assert.match(html, /class="advanced-settings"/);
   assert.match(html, /发布时会自动执行重复检查与质量检查/);
+  assert.doesNotMatch(html, /data-quality=/);
+  assert.doesNotMatch(html, /name="commit"/);
+  assert.doesNotMatch(html, /name="push"/);
+  assert.match(html, /id="article-review-confirmation"/);
+  assert.match(html, /已核对来源链接与正文，可公开发布/);
+  assert.match(html, /name="internalReviewConfirmed" type="checkbox"/);
+  assert.doesNotMatch(html, /<option value="unresolved">尚未完成<\/option>/);
   assert.doesNotMatch(html, /data-check="article"/);
   assert.doesNotMatch(html, /data-check="image"/);
   assert.match(app, /window\.open\(activeContent\.publicUrl/);
   assert.match(app, /window\.open\(activeContent\.previewUrl/);
   assert.match(app, /function syncPublishMode/);
+  assert.match(app, /function syncInternalReviewState/);
+  assert.match(app, /confirmationPanel\.hidden = !note\.value\.trim\(\)/);
+  assert.match(app, /input\.name === "internalReviewConfirmed"/);
   assert.match(app, /function syncImageActionState/);
   assert.match(app, /function renderArticleTitleSuggestions/);
   assert.match(app, /function applyArticleTitleSuggestion/);
@@ -163,15 +185,15 @@ test("publisher exposes local public URLs and keeps empty result panels hidden",
   assert.match(app, /\/api\/recommendations/);
   assert.match(app, /OpenAI 兼容接口/);
   assert.match(app, /syncAiAvailability\(\);\n    articleDetails\.open = true/);
-  assert.match(app, /function setWorkspaceNavigationOpen/);
-  assert.match(app, /function runWorkspaceNavigationAction/);
+  assert.doesNotMatch(app, /function setWorkspaceNavigationOpen/);
+  assert.doesNotMatch(app, /function runWorkspaceNavigationAction/);
   assert.match(app, /function restoreWorkspaceRoute/);
   assert.match(app, /window\.addEventListener\("popstate"/);
   assert.match(app, /function setSystemView/);
   assert.match(app, /function updateTrashCount/);
-  assert.match(app, /workspaceNavToggle\.addEventListener/);
+  assert.doesNotMatch(app, /workspaceNavToggle/);
   assert.match(app, /setAttribute\("aria-current", "page"\)/);
-  assert.match(app, /workspace-open-site-preview/);
+  assert.doesNotMatch(app, /workspace-open-site-preview/);
   assert.match(app, /function markFormDirty/);
   assert.match(app, /function markFormClean/);
   assert.match(app, /new AbortController\(\)/);
@@ -192,6 +214,10 @@ test("publisher exposes local public URLs and keeps empty result panels hidden",
   assert.match(app, /createLibrarySelection/);
   assert.match(app, /const librarySelectedItems = new Map/);
   assert.match(app, /function transitionSelectedContent/);
+  assert.match(app, /let libraryUndoAvailableForFeedback = false/);
+  assert.match(app, /function updateLibraryUndoVisibility/);
+  assert.match(app, /libraryUndoAvailableForFeedback && lastTrashedItems\.length/);
+  assert.match(app, /\{ undoTrash: result\.succeeded\.length > 0 \}/);
   assert.match(app, /function syncSelectedContent/);
   assert.match(app, /function applyBatchMetadata/);
   assert.match(app, /function trashSelectedContent/);
@@ -217,15 +243,18 @@ test("publisher exposes local public URLs and keeps empty result panels hidden",
   assert.match(css, /\.app-frame/);
   assert.match(css, /\.workspace-sidebar/);
   assert.match(css, /\.workspace-navigation/);
-  assert.match(css, /body\.workspace-nav-open/);
-  assert.match(css, /@media \(max-width: 900px\)/);
-  assert.match(css, /prefers-reduced-motion: reduce/);
+  assert.match(css, /min-width: 1180px/);
+  assert.doesNotMatch(css, /workspace-nav-open/);
+  assert.doesNotMatch(css, /@media \(max-width: 900px\)/);
+  assert.doesNotMatch(css, /@media \(max-width: 560px\)/);
   assert.match(css, /\.ai-review-card/);
+  assert.match(css, /\.article-audit-guidance/);
   assert.match(css, /\.title-suggestion-panel/);
   assert.match(css, /\.title-candidate-list/);
   assert.match(css, /\.publish-mode-grid/);
   assert.match(css, /\.editor-actions/);
-  assert.match(css, /\.publish-journey/);
+  assert.doesNotMatch(css, /\.publish-journey/);
+  assert.match(css, /\.ai-action-menu/);
   assert.match(css, /\.publisher-health/);
   assert.match(css, /\.next-step-copy/);
   assert.match(css, /\.library-tools-more/);
@@ -252,6 +281,8 @@ test("publisher exposes local public URLs and keeps empty result panels hidden",
   assert.match(css, /\.content-state-grid/);
   assert.match(css, /\.markdown-toolbar/);
   assert.match(css, /\.library-detail-more/);
+  assert.match(app, /item\.data\.draft \? "继续处理" : "编辑内容"/);
+  assert.match(app, /在站点预览中查看 ↗/);
 });
 
 test("draft publishing uses explicit states, protected-branch guards, and mandatory quality checks", async () => {
@@ -263,7 +294,7 @@ test("draft publishing uses explicit states, protected-branch guards, and mandat
     read("README.md"),
   ]);
 
-  assert.match(html, /id="library-transition"/);
+  assert.doesNotMatch(html, /id="library-transition"/);
   assert.match(html, /id="article-publish-options"/);
   assert.match(html, /name="publishDateMode"/);
   assert.match(app, /function syncArticleActionState/);
@@ -279,6 +310,8 @@ test("draft publishing uses explicit states, protected-branch guards, and mandat
   assert.match(server, /发布前质量检查未通过/);
   assert.match(server, /main 分支受保护/);
   assert.match(server, /function getContentWorkflowStates/);
+  assert.match(server, /function getContentLocalPublicationStates/);
+  assert.match(server, /const searchableItems = await getContentLocalPublicationStates\(indexedItems\)/);
   assert.match(server, /function getContentPublicationStates/);
   assert.match(server, /publicationFromDeployment/);
   assert.match(server, /contentPublicationCounts/);
@@ -290,6 +323,8 @@ test("draft publishing uses explicit states, protected-branch guards, and mandat
   assert.match(server, /async function syncBatchContent/);
   assert.match(server, /auditContentLibrary/);
   assert.match(server, /未通过上线体检，已停止同步/);
+  assert.match(server, /function overlongMarkdownParagraphs/);
+  assert.match(server, /请先使用“AI 整理文章资料”完成安全分段后再发布/);
   assert.match(server, /recordOperation\("sync_content"/);
   assert.match(server, /\/api\/content\/audit/);
   assert.match(server, /\/api\/history/);
@@ -317,7 +352,7 @@ test("draft publishing uses explicit states, protected-branch guards, and mandat
   assert.match(server, /pageSize/);
   assert.match(server, /pagination:/);
   assert.match(css, /\.workflow-state/);
-  assert.match(readme, /草稿、待同步、待上线、待验证、已上线/);
+  assert.match(readme, /全部、草稿、本地发布、云端流程/);
   assert.match(readme, /“发布到本地”/);
   assert.match(readme, /“同步所选”/);
   assert.match(readme, /移至回收站/);
@@ -341,14 +376,15 @@ test("publisher writes the metadata required by Astro collections", async () => 
   assert.match(server, /PUBLISHER_MAX_IMAGE_BYTES/);
   assert.match(server, /图片文件重复/);
   assert.match(server, /409/);
-  assert.match(html, /data-image-preview="detail"/);
+  assert.doesNotMatch(html, /data-image-preview="detail"/);
+  assert.doesNotMatch(html, /id="image-detail-preview"/);
   assert.match(app, /function imagePayload/);
   assert.match(app, /window\.confirm/);
   assert.match(server, /function recordUserProvidedAsset/);
   assert.match(server, /user-provided-assets\.jsonl/);
 });
 
-test("publisher imports flomo exports locally as deduplicated drafts", async () => {
+test("publisher imports flomo exports through a direct publish path with a draft fallback", async () => {
   const [server, importer, html, app, css, readme] = await Promise.all([
     read("server.js"),
     read("flomo-import.js"),
@@ -360,28 +396,45 @@ test("publisher imports flomo exports locally as deduplicated drafts", async () 
 
   assert.match(html, /data-tab="import"/);
   assert.match(html, /id="flomo-file"/);
-  assert.match(html, /id="flomo-toggle-selection"/);
+  assert.doesNotMatch(html, /id="flomo-toggle-selection"/);
   assert.match(html, /id="flomo-selection-summary"/);
   assert.match(html, /id="flomo-only-unselected"/);
   assert.match(html, /id="flomo-review-drafts"/);
+  assert.match(html, /id="flomo-publish-selected"/);
+  assert.match(html, /检查并发布所选/);
+  assert.match(html, /只看需处理/);
+  assert.doesNotMatch(html, /id="flomo-ai-selected"/);
   assert.doesNotMatch(html, /flomo-select-ready|flomo-clear-selection/);
   assert.match(server, /\/api\/import\/flomo\/inspect/);
   assert.match(server, /\/api\/import\/flomo\/apply/);
+  assert.match(server, /payload\.mode === "publish" \? "publish" : "draft"/);
+  assert.match(server, /mode === "publish" && item\.status !== "ready"/);
+  assert.match(server, /draft: mode !== "publish"/);
   assert.match(server, /flomo-imports\.jsonl/);
-  assert.match(server, /draft: true/);
+  assert.match(server, /function normalizeImportedArticle\(item, override = \{\}, \{ draft = true \} = \{\}\)/);
   assert.match(importer, /normalizeImportText/);
   assert.match(importer, /inflateRawSync/);
-  assert.match(html, /AI 整理选中项/);
-  assert.match(app, /aiOrganizeSelectedImports/);
+  assert.doesNotMatch(app, /aiOrganizeSelectedImports/);
+  assert.match(app, /async function applyFlomoImport\(mode = "draft"\)/);
+  assert.match(app, /async function ensureImportParagraphsBeforePublish/);
+  assert.match(app, /function hasOverlongMarkdownParagraph/);
+  assert.match(app, /applyFlomoImport\("publish"\)/);
   assert.match(app, /data-import-field="sourceUrl"/);
   assert.match(app, /data-import-field="source"/);
   assert.match(app, /updateFlomoSelectionToggle/);
   assert.match(app, /summarizeImportSelection/);
   assert.match(app, /organizeImportItem/);
+  assert.doesNotMatch(html, /id="content-audit-format-paragraphs"/);
+  assert.match(app, /async function openAuditedArticle/);
+  assert.match(app, /data-audit-open-article/);
+  assert.doesNotMatch(app, /打开处理 →/);
+  assert.match(app, /function renderArticleAuditGuidance/);
+  assert.match(html, /从内容体检带来的待处理事项/);
+  assert.match(app, /contentAuditItemsByFile/);
   assert.match(app, /flomoImportFilter/);
   assert.match(app, /id="flomo-exact-duplicates"/);
   assert.match(app, /没有需要导入的内容/);
-  assert.match(server, /selectedByDefault: status !== "exact"/);
+  assert.match(server, /selectedByDefault: status === "ready"/);
   assert.match(server, /sourceKind,/);
   assert.match(server, /文章来源仍待确认/);
   assert.match(html, /value="unknown">来源待确认/);

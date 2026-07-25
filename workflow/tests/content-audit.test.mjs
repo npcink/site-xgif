@@ -24,6 +24,8 @@ function article({
   sourceUrl = "https://jandan.net/t/1234567",
   sourceKind = "publication",
   draft = false,
+  internalNote = "",
+  internalReviewStatus = "",
   body,
 } = {}) {
   const resolvedBody = body
@@ -38,7 +40,7 @@ sourceKind: ${JSON.stringify(sourceKind)}
 tags: ["生活"]
 pubDate: "2026-07-23"
 readTime: "2 分钟"
-draft: ${draft}
+${internalNote ? `internalNote: ${JSON.stringify(internalNote)}\n` : ""}${internalReviewStatus ? `internalReviewStatus: ${JSON.stringify(internalReviewStatus)}\n` : ""}draft: ${draft}
 ---
 
 ${resolvedBody}
@@ -83,6 +85,39 @@ test("content audit classifies ready, review, and blocked articles", async () =>
     report.items.find((item) => item.title === "来源待确认").blockers.join(" "),
     /来源待确认/,
   );
+});
+
+test("content audit applies the same unresolved internal review gate as publishing", async () => {
+  const dirs = await fixture();
+  await Promise.all([
+    writeFile(
+      path.join(dirs.articlesDir, "20260723-0010.md"),
+      article({
+        contentId: "20260723-0010",
+        title: "待内部复核",
+        internalNote: "从 flomo 私人收藏导入，请在公开前复核来源和内容。",
+      }),
+      "utf8",
+    ),
+    writeFile(
+      path.join(dirs.articlesDir, "20260723-0011.md"),
+      article({
+        contentId: "20260723-0011",
+        title: "已完成内部复核",
+        sourceUrl: "https://jandan.net/t/7654321",
+        internalNote: "从 flomo 私人收藏导入，请在公开前复核来源和内容。",
+        internalReviewStatus: "resolved",
+      }),
+      "utf8",
+    ),
+  ]);
+
+  const report = await auditContentLibrary({ repoRoot: dirs.repoRoot });
+  const unresolved = report.items.find((item) => item.title === "待内部复核");
+  const resolved = report.items.find((item) => item.title === "已完成内部复核");
+  assert.equal(unresolved.status, "draft");
+  assert.match(unresolved.blockers.join(" "), /内部复核备注尚未确认/);
+  assert.equal(resolved.status, "ready");
 });
 
 test("content audit blocks invalid source links and missing local image files", async () => {

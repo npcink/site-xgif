@@ -13,6 +13,6 @@ export function summarizeImportSelection(states = []) {
 }
 
 export function importItemMatchesFilter(state, filter = "all") {
-  if (filter === "unselected") return !state.checked;
+  if (filter === "needs-review") return state.status === "review" || state.status === "similar";
   return true;
 }
