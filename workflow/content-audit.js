@@ -122,8 +122,8 @@ function auditArticle(item) {
   if (sourceUrl && !isValidHttpUrl(sourceUrl)) {
     item.blockers.push("来源链接不是有效的 HTTP(S) 地址。");
   }
-  if (sourceKind === "unknown" && !item.draft) {
-    item.blockers.push("来源待确认的文章不能公开发布。");
+  if (sourceKind === "unknown") {
+    item.notices.push("来源链接缺失；公开页会明确显示“来源待确认”。");
   }
   const internalNote = String(data.internalNote || "").trim();
   const internalReviewStatus = String(data.internalReviewStatus || "unresolved").trim();
@@ -190,7 +190,7 @@ function finalize(items) {
   const sourceGroups = new Map();
   const contentGroups = new Map();
   for (const item of items.filter((entry) => entry.type === "article")) {
-    if (item.sourceUrl) {
+    if (item.sourceUrl && !isGenericSourceUrl(item.sourceUrl)) {
       const group = sourceGroups.get(item.sourceUrl) || [];
       group.push(item);
       sourceGroups.set(item.sourceUrl, group);
@@ -220,7 +220,12 @@ function finalize(items) {
   for (const group of sourceGroups.values()) {
     if (group.length <= 1) continue;
     for (const item of group) {
-      item.warnings.push(`来源链接与另外 ${group.length - 1} 篇文章相同，需要确认是否为系列内容。`);
+      const relatedTitles = group
+        .filter((entry) => entry !== item)
+        .slice(0, 3)
+        .map((entry) => `《${entry.title}》`)
+        .join("、");
+      item.warnings.push(`相同来源链接还用于 ${relatedTitles}。如果是同一原文拆分内容可以保留；否则请修改链接。`);
     }
   }
   for (const group of contentGroups.values()) {

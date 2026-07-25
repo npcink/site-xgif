@@ -487,7 +487,7 @@ function syncArticleAttribution() {
   const sourceUrl = $('[name="sourceUrl"]', articleForm);
   sourceUrl.required = ["publication", "editorial"].includes(sourceKind);
   sourceUrl.placeholder = sourceKind === "unknown"
-    ? "未识别到来源，可先保存草稿"
+    ? "没有具体原文可留空并正常发布"
     : sourceKind === "original"
       ? "原创内容可留空"
       : "https://example.com/article";
@@ -627,7 +627,10 @@ function markFormClean(form, message = "") {
 }
 
 function setFormValues(form, data) {
-  for (const [key, value] of Object.entries(data || {})) {
+  const normalizedData = form === articleForm && data?.sourceKind === "editorial"
+    ? { ...data, sourceKind: "publication" }
+    : data;
+  for (const [key, value] of Object.entries(normalizedData || {})) {
     const field = form.elements.namedItem(key);
     if (!field) continue;
     if (field instanceof HTMLInputElement && field.type === "checkbox") field.checked = Boolean(value);
@@ -929,7 +932,7 @@ function restoreWorkspaceRoute({ replace = false } = {}) {
 }
 
 function applyArticleSuggestion(suggestion, expectedBody) {
-  for (const field of ["title", "summary", "tags", "readTime", "editorNote", "source"]) {
+  for (const field of ["title", "summary", "tags", "readTime", "source"]) {
     const input = $(`[name="${field}"]`, articleForm);
     const value = Array.isArray(suggestion[field]) ? suggestion[field].join(", ") : suggestion[field];
     if (input && value) input.value = value;

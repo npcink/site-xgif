@@ -39,12 +39,13 @@ const relatedImages = selectContentRecommendations(article, allImages, {
 const sourceLabel = {
   original: "原创内容",
   publication: "访问来源站",
-  editorial: "查看编辑手记",
+  editorial: "访问来源站",
   unknown: "来源待确认",
 }[article.data.sourceKind];
 const editorNote = publicArticleNote(article.data);
 const articleHref = contentHref(article);
-const hasArticleSidebar = tableOfContents.length > 0 || Boolean(editorNote) || Boolean(article.data.sourceUrl);
+const sourcePending = article.data.sourceKind === "unknown";
+const hasArticleSidebar = tableOfContents.length > 0 || Boolean(editorNote) || Boolean(article.data.sourceUrl) || sourcePending;
 const titleLength = [...article.data.title].length;
 const dialogTitleSize = titleLength <= 12
   ? "short"
@@ -125,11 +126,16 @@ const dialogTitleSize = titleLength <= 12
       )}
       <div class="article-source-note">
         <span class="section-kicker">{editorNote ? "EDITOR'S NOTE" : "SOURCE / 来源"}</span>
-        <p>{editorNote || "保留来源名称与原文链接，方便继续核对。"}</p>
+        <p>{editorNote || (sourcePending
+          ? "暂未找到可核验的原始来源；如有来源线索或版权问题，请联系我们补充或下架。"
+          : "保留来源名称与原文链接，方便继续核对。")}</p>
         {article.data.sourceUrl && (
           <a class="primary-button" href={article.data.sourceUrl} target="_blank" rel="noreferrer">
             {sourceLabel} <span>↗</span>
           </a>
+        )}
+        {sourcePending && !article.data.sourceUrl && (
+          <a class="dialog-full-link" href="/rights">补充来源线索 / 版权反馈 →</a>
         )}
       </div>
     </aside>}

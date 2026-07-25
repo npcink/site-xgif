@@ -110,7 +110,8 @@
               </label>
               <label>
                 来源链接
-                <input name="sourceUrl" type="url" placeholder="原创内容可留空" />
+                <input name="sourceUrl" type="url" placeholder="没有具体原文可留空" />
+                <small>找不到具体原文时请留空，并在详细资料中选择“来源待确认”；仍可正常发布。不要填写网站首页。</small>
               </label>
             </div>
             <div class="form-grid article-body-grid">
@@ -191,23 +192,19 @@
                 <input name="readTime" placeholder="3 分钟" />
               </label>
               <label>
-                链接类型
+                来源情况
                 <select name="sourceKind">
-                  <option value="unknown">来源待确认（仅草稿）</option>
+                  <option value="unknown">来源待确认</option>
                   <option value="original">原创内容</option>
-                  <option value="publication">来源站</option>
-                  <option value="editorial">编辑手记</option>
+                  <option value="publication">外部来源</option>
                 </select>
               </label>
-              <label class="span-2">
-                公开编辑手记
-                <input name="editorNote" placeholder="可选：为什么值得看，会展示在公开页面" />
-              </label>
+              <input name="editorNote" type="hidden" />
               <div class="form-field span-2 internal-review-fields">
                 <section class="internal-review-confirmation" id="article-review-confirmation" hidden aria-live="polite">
                   <div>
                     <p>导入内容确认</p>
-                    <strong>已核对来源链接与正文，可公开发布</strong>
+                    <strong>已核对来源情况与正文，可公开发布</strong>
                     <small>确认会记录时间；修改标题、来源、链接或正文后，需要再次确认。</small>
                   </div>
                   <label class="review-confirmation-control">

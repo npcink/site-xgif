@@ -121,6 +121,17 @@ test("publisher exposes local public URLs and keeps empty result panels hidden",
   assert.match(html, /id="connection-private-git"/);
   assert.match(html, /id="private-content-sync"/);
   assert.match(html, /id="article-cover-assets"/);
+  assert.match(html, /<option value="unknown">来源待确认<\/option>/);
+  assert.match(html, /<option value="publication">外部来源<\/option>/);
+  assert.doesNotMatch(html, /<option value="editorial">/);
+  assert.match(html, /<input name="editorNote" type="hidden" \/>/);
+  assert.doesNotMatch(html, />\s*公开编辑手记\s*</);
+  assert.match(html, /没有具体原文可留空/);
+  assert.match(html, /仍可正常发布/);
+  assert.doesNotMatch(app, /\["title", "summary", "tags", "readTime", "editorNote", "source"\]/);
+  assert.match(app, /data\?\.sourceKind === "editorial"/);
+  assert.match(server, /发布后会明确显示“来源待确认”/);
+  assert.doesNotMatch(server, /文章来源仍待确认，只能保存为草稿/);
   assert.match(html, /data-system-view="sync"/);
   assert.match(html, /id="sync-history-list"/);
   assert.doesNotMatch(html, /id="sync-history-dialog"/);
@@ -165,7 +176,7 @@ test("publisher exposes local public URLs and keeps empty result panels hidden",
   assert.doesNotMatch(html, /name="commit"/);
   assert.doesNotMatch(html, /name="push"/);
   assert.match(html, /id="article-review-confirmation"/);
-  assert.match(html, /已核对来源链接与正文，可公开发布/);
+  assert.match(html, /已核对来源情况与正文，可公开发布/);
   assert.match(html, /name="internalReviewConfirmed" type="checkbox"/);
   assert.doesNotMatch(html, /<option value="unresolved">尚未完成<\/option>/);
   assert.doesNotMatch(html, /data-check="article"/);
@@ -436,7 +447,7 @@ test("publisher imports flomo exports through a direct publish path with a draft
   assert.match(app, /没有需要导入的内容/);
   assert.match(server, /selectedByDefault: status === "ready"/);
   assert.match(server, /sourceKind,/);
-  assert.match(server, /文章来源仍待确认/);
+  assert.match(server, /发布后会明确显示“来源待确认”/);
   assert.match(html, /value="unknown">来源待确认/);
   assert.match(server, /importTags/);
   assert.match(app, /内部导入分组/);

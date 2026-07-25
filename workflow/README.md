@@ -170,7 +170,7 @@ npm run data:rebuild --prefix workflow
 
 “检查并发布”只会处理来源、重复与质量检查均可直接发布的条目；不满足条件的条目会在状态旁列出原因，用户可补充后重试或选择“保存所选为草稿”。两种路径都不会自动提交或推送。长段落需要整理时，当前勾选的正文和来源元数据才会发送给 `.env` 中配置的 AI 服务；安全通过的分段结果会在服务端再次逐字校验，正文仍只能新增 Markdown 空行，不能改字或删文。外部来源草稿发布时，完整正文会写入公开 Markdown，并在本机 `private-sources/articles/` 保留备份；再次退回草稿时，管理端仍可从私有副本恢复正文供编辑。每次成功导入会在 `records/flomo-imports.jsonl` 追加正文哈希、时间和目标文件；台账不保存正文。完整取舍见 [`ADR-014`](../site/docs/decisions/ADR-014-flomo-import-quality-gate.md)。
 
-文章备注分成两个字段：`editorNote` 是可以显示给读者的“公开编辑手记”，`internalNote` 是只在本地内容库中显示的复核提醒。AI 只会建议公开编辑手记；flomo 导入批次、来源待核验等内部信息必须写入 `internalNote`，不能进入公开页面。
+历史文章仍兼容 `editorNote` 并继续在公开页显示，但日常编辑表单不再提供“公开编辑手记”，AI 也不会生成它。`internalNote` 只在本地内容库中显示；flomo 导入批次、来源待核验等内部信息必须写入 `internalNote`，不能进入公开页面。外部内容找不到具体原文时，使用 `sourceKind: "unknown"`、省略 `sourceUrl` 并如实保留“来源待确认”，仍可公开发布；公开页会显示来源披露和版权反馈入口。
 
 默认 ZIP 上限为 10 MB、解压后上限为 50 MB，可按需在 `.env` 中调整：
 
