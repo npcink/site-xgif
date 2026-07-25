@@ -42,6 +42,7 @@ import { sanitizeArticleTitleSuggestions } from "./article-title-suggestions.js"
 import {
   contentPublicationCounts,
   publicationFromDeployment,
+  publicationFromWorkflow,
 } from "./publication-state.js";
 import {
   getRecommendationStatus,
@@ -612,28 +613,9 @@ async function computeContentPublicationStates(items) {
   const workflowItems = await getContentWorkflowStates(items);
 
   return Promise.all(workflowItems.map(async (item) => {
-    if (item.workflow?.state === "draft") {
-      return {
-        ...item,
-        publication: {
-          ...workflowState("draft", "草稿", "只保存在本地内容库。"),
-          verification: "not_applicable",
-          checkedAt: "",
-          lastVerifiedAt: "",
-        },
-      };
-    }
-
+    const localPublication = publicationFromWorkflow(item.workflow);
     if (item.workflow?.state !== "pending_deploy") {
-      return {
-        ...item,
-        publication: {
-          ...workflowState("local", "待同步", "本地站点已经发布，当前版本尚未完整进入远程发布流程。"),
-          verification: "not_applicable",
-          checkedAt: "",
-          lastVerifiedAt: "",
-        },
-      };
+      return { ...item, publication: localPublication };
     }
 
     const cacheKey = [
@@ -673,6 +655,13 @@ async function computeContentPublicationStates(items) {
     });
     livePublicationCache.set(cacheKey, { checkedAt: Date.now(), publication });
     return { ...item, publication };
+  }));
+}
+
+async function getContentLocalPublicationStates(items) {
+  return (await getContentWorkflowStates(items)).map((item) => ({
+    ...item,
+    publication: publicationFromWorkflow(item.workflow),
   }));
 }
 
@@ -2880,7 +2869,7 @@ async function handleApi(req, res) {
       publicUrl: publicContentUrl(item.type, item.contentId),
       previewUrl: previewContentUrl(item.type, item.contentId),
     }));
-    const searchableItems = await getContentPublicationStates(indexedItems);
+    const searchableItems = await getContentLocalPublicationStates(indexedItems);
     const counts = contentStatusCounts(searchableItems);
     const filteredItems = searchableItems.filter((item) => matchesContentStatus(item, status));
     const sortedItems = filteredItems;

@@ -43,8 +43,6 @@ const articleTitleAiStatus = $("#article-title-ai-status");
 const articleAuditGuidance = $("#article-audit-guidance");
 const articleAuditIssues = $("#article-audit-issues");
 const articleAuditNextStep = $("#article-audit-next-step");
-const workspaceSidebar = $("#workspace-sidebar");
-const workspaceNavToggle = $("#workspace-nav-toggle");
 const workspacePageTitle = $("#workspace-page-title");
 const contentList = $("#content-list");
 const libraryDetail = $("#library-detail");
@@ -877,7 +875,6 @@ function switchTab(name, { skipRoute = false, systemView = "status" } = {}) {
   if (createMenu) createMenu.open = name === "article" || name === "image";
   $$(".panel").forEach((item) => item.classList.toggle("active", item.id === `${name}-panel`));
   workspacePageTitle.textContent = titles[name] || "本地发布助手";
-  setWorkspaceNavigationOpen(false);
   window.scrollTo({ top: 0, behavior: "auto" });
   if (!skipRoute) updateWorkspaceRoute(name, { systemView });
   if (name === "library") loadLibrary();
@@ -929,18 +926,6 @@ function restoreWorkspaceRoute({ replace = false } = {}) {
       workspaceRoute(workspace, detail || "status"),
     );
   }
-}
-
-function setWorkspaceNavigationOpen(open) {
-  const expanded = Boolean(open);
-  const wasOpen = document.body.classList.contains("workspace-nav-open");
-  const mobile = window.matchMedia("(max-width: 900px)").matches;
-  document.body.classList.toggle("workspace-nav-open", expanded);
-  workspaceNavToggle.setAttribute("aria-expanded", String(expanded));
-  if (mobile && !expanded) workspaceSidebar.setAttribute("aria-hidden", "true");
-  else workspaceSidebar.removeAttribute("aria-hidden");
-  if (expanded) $("#workspace-nav-close").focus();
-  else if (mobile && wasOpen && workspaceSidebar.contains(document.activeElement)) workspaceNavToggle.focus();
 }
 
 function applyArticleSuggestion(suggestion, expectedBody) {
@@ -2180,17 +2165,6 @@ function openActiveContent(nextDraft = null) {
 }
 
 for (const tab of $$(".tab")) tab.addEventListener("click", () => switchTab(tab.dataset.tab));
-workspaceNavToggle.addEventListener("click", () => setWorkspaceNavigationOpen(true));
-$("#workspace-nav-close").addEventListener("click", () => setWorkspaceNavigationOpen(false));
-$("#workspace-nav-scrim").addEventListener("click", () => setWorkspaceNavigationOpen(false));
-document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape" && document.body.classList.contains("workspace-nav-open")) {
-    setWorkspaceNavigationOpen(false);
-  }
-});
-window.matchMedia("(max-width: 900px)").addEventListener("change", () => {
-  setWorkspaceNavigationOpen(false);
-});
 
 for (const button of $$("[data-markdown-action]")) {
   button.addEventListener("click", () => applyMarkdownAction(button.dataset.markdownAction));
@@ -3344,7 +3318,6 @@ setLibraryStatus(libraryStatus);
 renderLibraryView();
 updateArticlePreview();
 updateImagePreview();
-setWorkspaceNavigationOpen(false);
 loadStatus();
 restoreWorkspaceRoute({ replace: true });
 window.addEventListener("popstate", () => restoreWorkspaceRoute());

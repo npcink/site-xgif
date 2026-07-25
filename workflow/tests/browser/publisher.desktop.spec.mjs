@@ -1,5 +1,15 @@
 import { expect, test } from "@playwright/test";
 
+test("1280 by 800 is the minimum desktop baseline without mobile navigation", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/");
+  await expect(page.locator("#workspace-sidebar")).toBeVisible();
+  await expect(page.locator("#workspace-nav-toggle, #workspace-nav-close, #workspace-nav-scrim")).toHaveCount(0);
+  await expect
+    .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))
+    .toBe(true);
+});
+
 test("content library is the default and a new article starts clean", async ({ page }) => {
   await page.goto("/");
   await expect(page.locator("#library-panel")).toHaveClass(/active/);

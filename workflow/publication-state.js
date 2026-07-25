@@ -3,6 +3,39 @@ function normalizeTimestamp(value) {
   return Number.isNaN(Date.parse(timestamp)) ? "" : timestamp;
 }
 
+export function publicationFromWorkflow(workflow = {}) {
+  if (workflow.state === "draft") {
+    return {
+      state: "draft",
+      label: "草稿",
+      description: "只保存在本地内容库。",
+      verification: "not_applicable",
+      checkedAt: "",
+      lastVerifiedAt: "",
+    };
+  }
+
+  if (workflow.state !== "pending_deploy") {
+    return {
+      state: "local",
+      label: "待同步",
+      description: "本地站点已经发布，当前版本尚未完整进入远程发布流程。",
+      verification: "not_applicable",
+      checkedAt: "",
+      lastVerifiedAt: "",
+    };
+  }
+
+  return {
+    state: "pending",
+    label: "云端待核对",
+    description: "远程已包含当前内容；打开详情后再核对线上页面。",
+    verification: "not_checked",
+    checkedAt: "",
+    lastVerifiedAt: "",
+  };
+}
+
 export function publicationFromDeployment(
   deployment = {},
   {
