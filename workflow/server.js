@@ -494,8 +494,8 @@ function contentRoute(type, contentId, { preview = false } = {}) {
     error.statusCode = 422;
     throw error;
   }
-  const routeType = type === "article" ? "articles" : "images";
-  return `/${preview ? "preview/" : ""}${routeType}/${contentId}/`;
+  if (preview) return `/preview/articles/${contentId}`;
+  return `/${contentId}`;
 }
 
 function publicContentUrl(type, contentId) {
@@ -710,6 +710,17 @@ async function getContentPublicationStates(items) {
     publicationStateSnapshotCache.delete(key);
     throw error;
   }
+}
+
+function matchesContentStatus(item, status) {
+  if (status === "all") return true;
+  if (status === "unknown") return item.publication?.verification === "unknown";
+  if (status === "cloud") return ["pending", "unknown", "online"].includes(item.publication?.state);
+  if (status === "attention") {
+    return ["local", "pending"].includes(item.publication?.state)
+      || item.publication?.verification === "unknown";
+  }
+  return item.publication?.state === status;
 }
 
 function clearPublicationStateCaches() {
@@ -1007,14 +1018,16 @@ async function inspectFlomoImport(fileData) {
   };
 }
 
-function normalizeImportedArticle(item, override = {}) {
+function normalizeImportedArticle(item, override = {}, { draft = true } = {}) {
   const title = clampText(override.title || item.title, 120);
   const summary = clampText(override.summary || item.summary, 320);
   const tags = normalizeContentTags(
     override.tags?.length ? override.tags : item.tags,
     { type: "article" },
   );
-  const internalNote = clampText(override.internalNote || item.internalNote || item.note, 240);
+  const internalNote = item.needsReview
+    ? clampText(override.internalNote || item.internalNote || item.note, 240)
+    : "";
   const sourceUrlValue = Object.hasOwn(override, "sourceUrl") ? override.sourceUrl : item.sourceUrl;
   const sourceUrl = clampText(sourceUrlValue, 500);
   const sourceValue = Object.hasOwn(override, "source") ? override.source : item.source;
@@ -1053,7 +1066,7 @@ function normalizeImportedArticle(item, override = {}) {
     internalReviewStatus: internalNote ? "unresolved" : "none",
     body,
     featured: false,
-    draft: true,
+    draft,
   };
   validateArticleAttribution(payload);
   if (!payload.tags.length) {
@@ -1074,8 +1087,10 @@ async function importFlomoDrafts(payload) {
   }
   const selected = new Set(selectedHashes);
   const overrides = payload.overrides && typeof payload.overrides === "object" ? payload.overrides : {};
+  const mode = payload.mode === "publish" ? "publish" : "draft";
   const files = [];
   const skipped = [];
+  const blocked = [];
 
   await mkdir(target.articles, { recursive: true });
   await mkdir(path.dirname(target.flomoImportLedger), { recursive: true });
@@ -1085,7 +1100,27 @@ async function importFlomoDrafts(payload) {
       skipped.push({ contentHash: item.contentHash, reason: item.duplicate?.reason || "精确重复" });
       continue;
     }
-    const article = normalizeImportedArticle(item, overrides[item.contentHash]);
+    if (mode === "publish" && item.status !== "ready") {
+      blocked.push({
+        contentHash: item.contentHash,
+        title: item.title || "未命名内容",
+        reason: item.duplicate?.reason || item.sourceReviewReason || "请补充标题、来源或正文后再发布",
+      });
+      continue;
+    }
+    const article = normalizeImportedArticle(item, overrides[item.contentHash], { draft: mode !== "publish" });
+    if (mode === "publish") {
+      const quality = await checkArticleQuality(article);
+      const errors = quality.issues.filter((entry) => entry.level === "error");
+      if (errors.length) {
+        blocked.push({
+          contentHash: item.contentHash,
+          title: article.title || "未命名内容",
+          reason: errors.map((entry) => entry.message).join("；"),
+        });
+        continue;
+      }
+    }
     article.contentId = await allocateContentId(article.pubDate);
     const filePath = path.join(target.articles, `${article.contentId}.md`);
     const prepared = await prepareArticlePublication(article, { workflowRoot: __dirname });
@@ -1101,7 +1136,7 @@ async function importFlomoDrafts(payload) {
       recordedAt: item.recordedAt,
       importedAt,
       contentFile: relativeFile,
-      status: "draft",
+      status: mode,
       ...(item.importTags?.length ? { importTags: item.importTags } : {}),
     };
     await appendFile(target.flomoImportLedger, `${JSON.stringify(ledgerRecord)}\n`, "utf8");
@@ -1111,11 +1146,16 @@ async function importFlomoDrafts(payload) {
   const indexWarning = await refreshLocalIndexes("import_flomo", {
     imported: files.length,
     skipped: skipped.length,
+    blocked: blocked.length,
+    mode,
   });
   return {
     ok: true,
     imported: files.length,
     skipped,
+    blocked,
+    drafted: mode === "draft" ? files.length : 0,
+    published: mode === "publish" ? files.length : 0,
     files,
     ledger: path.relative(repoRoot, target.flomoImportLedger),
     indexWarning,
@@ -1508,6 +1548,13 @@ function qualityIssue(level, message) {
   return { level, message };
 }
 
+function overlongMarkdownParagraphs(body, maxCharacters = 180) {
+  return String(body || "")
+    .split(/\n[ \t]*\n/gu)
+    .map((paragraph) => [...paragraph.replace(/\s/gu, "")].length)
+    .filter((length) => length > maxCharacters);
+}
+
 async function checkArticleQuality(payload) {
   const issues = [];
   const tags = normalizeList(payload.tags);
@@ -1535,6 +1582,13 @@ async function checkArticleQuality(payload) {
   if (tags.length > 6) issues.push(qualityIssue("warning", "标签较多，建议控制在 2 到 6 个。"));
   if (String(payload.summary || "").trim().length > 320) issues.push(qualityIssue("warning", "摘要较长，列表页阅读体验可能变差。"));
   if (!String(payload.body || "").trim()) issues.push(qualityIssue("warning", "正文为空，详情页只会显示摘要信息。"));
+  const longParagraphs = overlongMarkdownParagraphs(payload.body);
+  if (longParagraphs.length) {
+    issues.push(qualityIssue(
+      "error",
+      `正文含 ${longParagraphs.length} 个超过 180 字的长段落（最长 ${Math.max(...longParagraphs)} 字）。请先使用“AI 整理文章资料”完成安全分段后再发布。`,
+    ));
+  }
   const internalReview = normalizeInternalReview(payload);
   if (internalReview.note && internalReview.status !== "resolved") {
     issues.push(qualityIssue("error", "内部复核备注尚未确认，请完成复核或清空备注后再发布。"));
@@ -1879,7 +1933,7 @@ async function resolveBatchItems(input) {
   }
 
   const type = ["all", "article", "image"].includes(selection.type) ? selection.type : "all";
-  const status = ["all", "draft", "local", "pending", "unknown", "online"].includes(selection.status)
+  const status = ["all", "draft", "local", "pending", "unknown", "online", "cloud", "attention"].includes(selection.status)
     ? selection.status
     : "all";
   const query = normalizeText(selection.query);
@@ -1888,12 +1942,7 @@ async function resolveBatchItems(input) {
   );
   const selectedItems = (await getContentPublicationStates(await listContent(type))).filter((item) => {
     if (excludedFiles.has(item.file)) return false;
-    if (
-      status !== "all"
-      && (status === "unknown"
-        ? item.publication?.verification !== "unknown"
-        : item.publication?.state !== status)
-    ) return false;
+    if (!matchesContentStatus(item, status)) return false;
     const text = normalizeText([item.title, item.summary, item.source, item.tags.join(" ")].join(" "));
     return !query || text.includes(query);
   });
@@ -2833,11 +2882,7 @@ async function handleApi(req, res) {
     }));
     const searchableItems = await getContentPublicationStates(indexedItems);
     const counts = contentStatusCounts(searchableItems);
-    const filteredItems = searchableItems.filter((item) => {
-      if (status === "all") return true;
-      if (status === "unknown") return item.publication?.verification === "unknown";
-      return item.publication?.state === status;
-    });
+    const filteredItems = searchableItems.filter((item) => matchesContentStatus(item, status));
     const sortedItems = filteredItems;
     const total = sortedItems.length;
     const pages = Math.max(1, Math.ceil(total / pageSize));

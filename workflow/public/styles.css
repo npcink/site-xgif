@@ -1156,6 +1156,53 @@ button:disabled {
   margin-bottom: 14px;
 }
 
+.article-audit-guidance {
+  background: #fff7dc;
+  border: 1px solid #dfc778;
+  border-left: 4px solid #b47434;
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+  margin: 16px 0 0;
+  padding: 14px 16px;
+}
+
+.article-audit-guidance > div {
+  display: grid;
+  gap: 2px;
+}
+
+.article-audit-guidance p {
+  color: #8a5724;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .04em;
+  margin: 0;
+}
+
+.article-audit-guidance strong {
+  color: var(--ink);
+  font-size: 15px;
+}
+
+.article-audit-guidance ul {
+  color: #5b5143;
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 18px;
+}
+
+.article-audit-guidance li,
+.article-audit-guidance small {
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.article-audit-guidance small {
+  color: #6f5535;
+}
+
 .ai-review-card {
   align-items: center;
   background: #f4efe5;
@@ -2259,6 +2306,19 @@ summary:focus-visible {
   gap: 4px;
 }
 
+.content-audit-group .content-audit-item-heading {
+  align-items: start;
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+}
+
+.content-audit-item-heading > button {
+  flex: 0 0 auto;
+  font-size: 12px;
+  padding: 7px 10px;
+}
+
 .content-audit-group article span,
 .content-audit-group article p,
 .content-audit-group article code {
@@ -2843,14 +2903,73 @@ summary:focus-visible {
   background: #f4efe5;
   display: grid;
   gap: 10px;
-  grid-template-columns: minmax(0, 1fr) 180px;
+  grid-template-columns: minmax(0, 1fr);
   padding: 12px;
 }
 
-.internal-review-fields > small {
+.internal-review-confirmation {
+  align-items: center;
+  background: #fff8df;
+  border-left: 3px solid #b8952e;
+  display: flex;
+  gap: 18px;
+  justify-content: space-between;
+  padding: 11px 12px;
+}
+
+.internal-review-confirmation > div {
+  display: grid;
+  gap: 3px;
+}
+
+.internal-review-confirmation p {
+  color: #75601b;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .04em;
+  margin: 0;
+}
+
+.internal-review-confirmation strong {
+  font-size: 14px;
+}
+
+.internal-review-confirmation small,
+.internal-review-details {
   color: var(--muted);
   font-size: 11px;
-  grid-column: 1 / -1;
+}
+
+.review-confirmation-control {
+  align-items: center;
+  color: var(--ink);
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 13px;
+  font-weight: 800;
+  gap: 7px;
+  white-space: nowrap;
+}
+
+.review-confirmation-control input {
+  accent-color: var(--accent);
+  height: 18px;
+  margin: 0;
+  width: 18px;
+}
+
+.internal-review-details {
+  padding: 0 2px;
+}
+
+.internal-review-details summary {
+  cursor: pointer;
+  width: fit-content;
+}
+
+.internal-review-details label {
+  display: block;
+  margin-top: 8px;
 }
 
 .content-state-grid {
@@ -2929,42 +3048,6 @@ summary:focus-visible {
 
 .library-actions button {
   min-height: 42px;
-}
-
-.library-detail-more {
-  position: relative;
-}
-
-.library-detail-more > summary {
-  align-items: center;
-  background: var(--button);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  cursor: pointer;
-  display: flex;
-  font-weight: 700;
-  min-height: 42px;
-  padding: 0 14px;
-}
-
-.library-detail-more > div {
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  box-shadow: 0 12px 30px rgb(44 40 34 / 14%);
-  display: grid;
-  gap: 8px;
-  min-width: 180px;
-  padding: 8px;
-  position: absolute;
-  right: 0;
-  top: calc(100% + 6px);
-  z-index: 5;
-}
-
-.library-detail-more > div button {
-  justify-content: flex-start;
-  width: 100%;
 }
 
 .import-panel {

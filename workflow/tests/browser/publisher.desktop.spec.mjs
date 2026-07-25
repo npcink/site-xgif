@@ -9,6 +9,24 @@ test("new article starts clean and explains disabled AI actions", async ({ page 
   await expect(page.locator("#article-body-stats")).toHaveText("0 字，0 段");
 });
 
+test("imported articles use an explicit publish confirmation that resets after content changes", async ({ page }) => {
+  await page.goto("/");
+  const confirmation = page.locator("#article-review-confirmation");
+  const confirmed = page.locator('[name="internalReviewConfirmed"]');
+  const status = page.locator('[name="internalReviewStatus"]');
+
+  await expect(confirmation).toBeHidden();
+  await page.locator("#article-details > summary").click();
+  await page.locator(".internal-review-details summary").click();
+  await page.locator('[name="internalNote"]').fill("从 flomo 私人收藏导入，请在公开前复核来源和内容。");
+  await expect(confirmation).toBeVisible();
+  await confirmed.check();
+  await expect(status).toHaveValue("resolved");
+  await page.locator("#article-body").fill("复核后补充了一句正文。");
+  await expect(confirmed).not.toBeChecked();
+  await expect(status).toHaveValue("unresolved");
+});
+
 test("system status is a dedicated workspace instead of a floating popover", async ({ page }) => {
   await page.goto("/");
   await page.locator('[data-tab="system"]').click();
@@ -55,6 +73,61 @@ test("content audit is a restorable workspace and not a dialog", async ({ page }
   await expect(page.locator('[data-tab="audit"]')).toHaveAttribute("aria-current", "page");
 });
 
+test("opening an audited article carries its repair guidance into the editor", async ({ page }) => {
+  await page.route("**/api/content/audit", (route) => route.fulfill({
+    contentType: "application/json",
+    body: JSON.stringify({
+      counts: { ready: 0, review: 1, draft: 0 },
+      items: [{
+        file: "site/src/content/articles/20260101-test.md",
+        type: "article",
+        title: "待处理文章",
+        source: "知乎",
+        status: "review",
+        blockers: [],
+        warnings: [
+          "正文含 1 个超过 180 字的长段落（最长 220 字），建议分段后再发布。",
+          "来源链接只指向网站首页，需要确认具体原文地址。",
+        ],
+        notices: [],
+      }],
+    }),
+  }));
+  await page.route("**/api/content/read?*", (route) => route.fulfill({
+    contentType: "application/json",
+    body: JSON.stringify({
+      type: "article",
+      file: "site/src/content/articles/20260101-test.md",
+      data: {
+        title: "待处理文章",
+        summary: "用于验证体检直达编辑器。",
+        source: "知乎",
+        sourceUrl: "https://www.zhihu.com/",
+        sourceKind: "publication",
+        tags: ["生活"],
+        pubDate: "2026-01-01",
+        readTime: "1 分钟",
+        draft: true,
+      },
+      body: "需要安全分段的正文。",
+      previewUrl: "http://127.0.0.1:4321/preview/articles/20260101-test",
+      workflow: { state: "draft", label: "草稿", description: "只保存在本地内容库。" },
+    }),
+  }));
+
+  await page.goto("/");
+  await page.locator('[data-tab="audit"]').click();
+  await page.locator('[data-audit-open-article]').click();
+
+  const guidance = page.locator("#article-audit-guidance");
+  await expect(page.locator("#article-panel")).toHaveClass(/active/);
+  await expect(guidance).toBeVisible();
+  await expect(guidance).toContainText("超过 180 字的长段落");
+  await expect(guidance).toContainText("来源链接只指向网站首页");
+  await expect(guidance).toContainText("AI 整理文章资料");
+  await expect(guidance).toContainText("仅检查");
+});
+
 test("sync history belongs to the system workspace and browser back restores the previous page", async ({ page }) => {
   await page.goto("/#library");
   await page.locator('[data-tab="system"]').click();
@@ -82,12 +155,15 @@ test("recycle bin remains a focused dialog and returns focus to its sidebar entr
   await expect(page).toHaveURL(/#library$/);
 });
 
-test("content library exposes separate Git and deployment states", async ({ page }) => {
+test("content library groups content locations and keeps process details", async ({ page }) => {
   await page.goto("/");
   await page.locator('[data-tab="library"]').click();
-  await expect(page.locator('[data-library-status="local"]')).toContainText("待同步");
-  await expect(page.locator('[data-library-status="pending"]')).toContainText("待上线");
-  await expect(page.locator('[data-library-status="unknown"]')).toContainText("待验证");
+  await expect(page.locator('[data-library-status="local"]')).toContainText("本地发布");
+  await expect(page.locator('[data-library-status="cloud"]')).toContainText("云端流程");
+  await expect(page.locator('[data-library-status="pending"]')).toHaveCount(0);
+  await page.locator('[data-library-status="cloud"]').click();
+  await expect(page.locator('[data-library-status="cloud"]')).toHaveAttribute("aria-pressed", "true");
+  await page.locator('[data-library-status="all"]').click();
   await expect(page.locator(".content-table")).toBeVisible();
   await page.locator("[data-content-open]").first().click();
   await expect(page.locator(".content-state-grid")).toBeVisible();

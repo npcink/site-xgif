@@ -52,26 +52,16 @@ export function libraryTaskPresentation(counts = {}) {
   const pending = Number(counts.pending || 0);
   const unknown = Number(counts.unverified || counts.unknown || 0);
   const online = Number(counts.online || 0);
-  const unfinished = local + pending;
+  const attention = Number(counts.attention || local + pending + unknown);
 
-  if (unfinished > 0) {
+  if (attention > 0) {
     return {
       state: "attention",
       kicker: "下一步",
-      title: `${unfinished} 项发布流程待完成`,
-      description: `${local} 项待同步，${pending} 项等待合并或部署。详情会分别显示 Git 与线上状态。`,
-      actionLabel: "查看待完成内容",
-      action: "pending",
-    };
-  }
-  if (unknown > 0) {
-    return {
-      state: "checking",
-      kicker: "待核对",
-      title: `${unknown} 项线上状态待验证`,
-      description: "网络核对失败不会把已上线内容降级。稍后刷新系统状态即可重试。",
-      actionLabel: "查看待验证内容",
-      action: "unknown",
+      title: `${attention} 项内容待处理`,
+      description: `本地待同步 ${local} 项 · 远程待合并或部署 ${pending} 项 · 线上待核验 ${unknown} 项。详情会分别显示 Git 与线上状态。`,
+      actionLabel: "查看待处理内容",
+      action: "attention",
     };
   }
   if (drafts > 0) {

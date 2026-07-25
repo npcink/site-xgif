@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>XGIF 本地发布助手</title>
-    <link rel="stylesheet" href="/styles.css?v=20260724-console" />
+    <link rel="stylesheet" href="/styles.css?v=20260725-audit-guidance" />
   </head>
   <body>
     <div class="app-frame" id="app-frame">
@@ -102,6 +102,14 @@
             <p class="editor-state" id="article-editor-state"></p>
             <button type="button" id="article-version-history">版本记录</button>
           </div>
+          <section class="article-audit-guidance" id="article-audit-guidance" hidden aria-live="polite">
+            <div>
+              <p>从内容体检带来的待处理事项</p>
+              <strong>请先处理以下问题，再进行发布检查</strong>
+            </div>
+            <ul id="article-audit-issues"></ul>
+            <small id="article-audit-next-step"></small>
+          </section>
           <section class="workflow-step">
             <div class="step-heading">
               <span>1</span>
@@ -216,19 +224,26 @@
                 <input name="editorNote" placeholder="可选：为什么值得看，会展示在公开页面" />
               </label>
               <div class="form-field span-2 internal-review-fields">
-                <label>
-                  内部复核备注
-                  <input name="internalNote" placeholder="仅本地后台可见，不会进入公开页面" />
-                </label>
-                <label>
-                  复核状态
-                  <select name="internalReviewStatus">
-                    <option value="unresolved">尚未完成</option>
-                    <option value="resolved">已经确认</option>
-                  </select>
-                </label>
+                <section class="internal-review-confirmation" id="article-review-confirmation" hidden aria-live="polite">
+                  <div>
+                    <p>导入内容确认</p>
+                    <strong>已核对来源链接与正文，可公开发布</strong>
+                    <small>确认会记录时间；修改标题、来源、链接或正文后，需要再次确认。</small>
+                  </div>
+                  <label class="review-confirmation-control">
+                    <input name="internalReviewConfirmed" type="checkbox" />
+                    我已确认
+                  </label>
+                </section>
+                <details class="internal-review-details">
+                  <summary>内部说明（仅本地）</summary>
+                  <label>
+                    <span class="visually-hidden">内部说明</span>
+                    <input name="internalNote" placeholder="导入内容会自动保留说明；不会进入公开页面" />
+                  </label>
+                </details>
+                <input name="internalReviewStatus" type="hidden" value="unresolved" />
                 <input name="internalReviewResolvedAt" type="hidden" />
-                <small>存在未完成的复核备注时只能保存草稿。确认后会记录完成时间。</small>
               </div>
               <div class="form-field span-2">
                 <span class="field-label-row">
@@ -520,11 +535,11 @@
           <div class="editor-heading">
             <div>
               <p class="eyebrow">FLOMO HTML EXPORT</p>
-              <h2>批量导入文章草稿</h2>
+              <h2>导入并发布文章</h2>
             </div>
             <span class="privacy-badge">仅在本机处理</span>
           </div>
-          <p class="form-note">上传 flomo 官方导出的 ZIP。原始文件不会写入仓库或上传 Cloudflare；只有你确认的内容会生成 Markdown 草稿。</p>
+          <p class="form-note">上传 flomo 官方导出的 ZIP，在本机用 AI 整理后直接发布。只有来源不明、内容过短或疑似重复的条目需要补充；原始 ZIP 不会写入仓库或上传 Cloudflare。</p>
 
           <div class="import-upload">
             <label class="span-2">
@@ -546,8 +561,8 @@
                 </label>
               </div>
               <div class="import-toolbar-actions">
-                <button class="ai-action" id="flomo-ai-selected" type="button">AI 整理选中项</button>
-                <button class="primary" id="flomo-import-selected" type="button">生成选中草稿</button>
+                <button class="primary" id="flomo-publish-selected" type="button">整理并发布所选</button>
+                <button id="flomo-import-selected" type="button">保存为草稿</button>
               </div>
             </div>
             <div class="import-list" id="flomo-list"></div>
@@ -575,13 +590,11 @@
             </div>
             <button class="primary" type="button" id="library-task-action" hidden></button>
           </section>
-          <div class="library-status-tabs" aria-label="按发布状态筛选">
+          <div class="library-status-tabs" aria-label="按内容位置筛选">
             <button class="active" type="button" data-library-status="all" aria-pressed="true">全部 <span id="library-count-all">0</span></button>
             <button type="button" data-library-status="draft" aria-pressed="false">草稿 <span id="library-count-draft">0</span></button>
-            <button type="button" data-library-status="local" aria-pressed="false">待同步 <span id="library-count-local">0</span></button>
-            <button type="button" data-library-status="pending" aria-pressed="false">待上线 <span id="library-count-pending">0</span></button>
-            <button type="button" data-library-status="unknown" aria-pressed="false">待验证 <span id="library-count-unknown">0</span></button>
-            <button type="button" data-library-status="online" aria-pressed="false">已上线 <span id="library-count-online">0</span></button>
+            <button type="button" data-library-status="local" aria-pressed="false">本地发布 <span id="library-count-local">0</span></button>
+            <button type="button" data-library-status="cloud" aria-pressed="false">云端流程 <span id="library-count-cloud">0</span></button>
           </div>
           <div class="library-toolbar">
             <label class="library-search">
@@ -666,19 +679,14 @@
           </div>
           <div id="library-detail" class="library-empty">从左侧选择一条内容。</div>
           <div class="library-actions" id="library-actions" hidden>
-            <button type="button" id="library-edit">打开编辑</button>
+            <button type="button" id="library-edit">编辑内容</button>
             <button type="button" id="library-transition" hidden>复核并发布</button>
             <button type="button" id="library-sync-current" hidden>同步当前内容</button>
             <button type="button" id="library-preview" hidden>真实预览</button>
-            <button type="button" id="library-open" hidden>在网站打开</button>
+            <button type="button" id="library-open" hidden>在站点预览中查看 ↗</button>
             <button type="button" id="retry-push" hidden>重新同步</button>
-            <details class="library-detail-more" id="library-detail-more">
-              <summary>更多操作</summary>
-              <div>
-                <button type="button" id="library-duplicate">复制为草稿</button>
-                <button class="danger" type="button" id="library-return-draft">退回草稿</button>
-              </div>
-            </details>
+            <button type="button" id="library-duplicate">复制为草稿</button>
+            <button class="danger" type="button" id="library-return-draft">退回草稿</button>
           </div>
         </aside>
       </section>
@@ -965,6 +973,6 @@
       <div class="asset-library-list" id="asset-library-list"></div>
     </dialog>
 
-    <script src="/app.js?v=20260724-console" type="module"></script>
+    <script src="/app.js?v=20260725-audit-guidance" type="module"></script>
   </body>
 </html>

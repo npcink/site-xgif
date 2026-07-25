@@ -64,5 +64,7 @@ test("publication counts separate workflow progress from verification confidence
     unknown: 1,
     online: 1,
     unverified: 2,
+    cloud: 3,
+    attention: 4,
   });
 });

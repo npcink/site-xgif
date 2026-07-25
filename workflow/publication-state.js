@@ -74,12 +74,18 @@ export function contentPublicationCounts(items = []) {
     unknown: 0,
     online: 0,
     unverified: 0,
+    cloud: 0,
+    attention: 0,
   };
 
   for (const item of items) {
     const state = item.publication?.state || "unknown";
     if (Object.hasOwn(counts, state)) counts[state] += 1;
     if (item.publication?.verification === "unknown") counts.unverified += 1;
+    if (["pending", "unknown", "online"].includes(state)) counts.cloud += 1;
+    if (["local", "pending"].includes(state) || item.publication?.verification === "unknown") {
+      counts.attention += 1;
+    }
   }
   return counts;
 }
