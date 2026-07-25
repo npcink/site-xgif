@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>XGIF 本地发布助手</title>
-    <link rel="stylesheet" href="/styles.css?v=20260725-audit-guidance" />
+    <link rel="stylesheet" href="/styles.css?v=20260725-desktop-simplify-4" />
   </head>
   <body>
     <div class="app-frame" id="app-frame">
@@ -20,31 +20,18 @@
 
         <nav class="workspace-navigation" aria-label="工作台功能">
           <section class="workspace-nav-section is-current" data-nav-section="content">
-            <p>内容</p>
+            <p>工作台</p>
             <div>
-              <button class="tab" data-tab="library" type="button">内容库</button>
-              <button class="tab active" data-tab="article" type="button" aria-current="page">新建文章</button>
-              <button class="tab" data-tab="image" type="button">新建图片</button>
+              <button class="tab active" data-tab="library" type="button" aria-current="page">内容库</button>
+              <details class="workspace-create-menu">
+                <summary>新建</summary>
+                <div>
+                  <button class="tab" data-tab="article" type="button">文章</button>
+                  <button class="tab" data-tab="image" type="button">图片</button>
+                </div>
+              </details>
               <button class="tab" data-tab="import" type="button">导入内容</button>
-            </div>
-          </section>
-
-          <section class="workspace-nav-section">
-            <p>管理</p>
-            <div>
-              <button class="tab" type="button" data-tab="audit">内容体检与标签</button>
-              <button type="button" data-nav-action="trash">
-                <span>回收站</span>
-                <span class="nav-count" id="sidebar-trash-count" aria-label="0 条内容">0</span>
-              </button>
-            </div>
-          </section>
-
-          <section class="workspace-nav-section">
-            <p>系统</p>
-            <div>
-              <button class="tab" type="button" data-tab="system">系统状态与恢复</button>
-              <button type="button" data-nav-action="site-preview" id="workspace-open-site-preview" disabled>打开站点预览</button>
+              <button class="tab" type="button" data-tab="system">系统</button>
             </div>
           </section>
         </nav>
@@ -63,7 +50,7 @@
             <button class="workspace-nav-toggle" id="workspace-nav-toggle" type="button" aria-controls="workspace-sidebar" aria-expanded="false">菜单</button>
             <div>
               <p class="eyebrow">WORKSPACE</p>
-              <h1 id="workspace-page-title">新建文章</h1>
+              <h1 id="workspace-page-title">内容库</h1>
             </div>
           </div>
           <div class="topbar-tools">
@@ -80,23 +67,28 @@
 
         <main class="shell">
 
-      <section class="panel active" id="article-panel">
+      <section class="panel" id="article-panel">
         <form id="article-form" class="editor">
-          <ol class="publish-journey" id="article-publish-journey" aria-label="文章发布流程">
-            <li data-journey-stage="draft"><span>1</span><strong>保存草稿</strong></li>
-            <li data-journey-stage="preview"><span>2</span><strong>真实预览</strong></li>
-            <li data-journey-stage="local"><span>3</span><strong>发布到本地</strong></li>
-            <li data-journey-stage="cloud"><span>4</span><strong>同步到云端</strong></li>
-          </ol>
           <div class="editor-heading">
             <div>
               <p class="eyebrow">文章信息</p>
               <h2>整理并发布</h2>
             </div>
-            <div class="ai-action-control">
-              <button class="ai-action" type="button" data-ai-fill="article" aria-describedby="article-ai-availability">AI 整理文章资料</button>
+            <details class="ai-action-control ai-action-menu">
+              <summary>AI 辅助</summary>
+              <div>
+                <button class="ai-action" type="button" data-ai-fill="article" aria-describedby="article-ai-availability">整理文章资料</button>
+                <button
+                  class="ai-action"
+                  id="article-title-ai"
+                  type="button"
+                  aria-controls="article-title-suggestions"
+                  aria-describedby="article-title-ai-status"
+                  disabled
+                >只生成标题</button>
+              </div>
               <small id="article-ai-availability">正在检查 AI 配置</small>
-            </div>
+            </details>
           </div>
           <div class="editor-state-row">
             <p class="editor-state" id="article-editor-state"></p>
@@ -175,14 +167,6 @@
               <div class="form-field title-suggestion-field">
                 <span class="field-label-row">
                   <label for="article-title">标题</label>
-                  <button
-                    class="title-ai-action"
-                    id="article-title-ai"
-                    type="button"
-                    aria-controls="article-title-suggestions"
-                    aria-describedby="article-title-ai-status"
-                    disabled
-                  >AI 换标题</button>
                 </span>
                 <input id="article-title" name="title" required placeholder="文章标题" />
                 <p class="title-ai-status" id="article-title-ai-status" role="status" aria-live="polite"></p>
@@ -301,22 +285,12 @@
           </fieldset>
 
           <details class="advanced-settings" id="article-advanced-settings">
-            <summary><span>高级设置</span><small id="article-advanced-summary">精选与版本控制</small></summary>
+            <summary><span>高级设置</span><small id="article-advanced-summary">精选</small></summary>
             <div class="advanced-settings-content">
               <label class="setting-toggle">
                 <input name="featured" type="checkbox" />
                 <span class="check-copy"><strong>设为精选</strong><small>在网站首页或精选列表中优先展示</small></span>
               </label>
-              <div class="git-settings">
-                <label>
-                  <input name="commit" type="checkbox" checked />
-                  <span class="check-copy"><strong>保存到本地 Git</strong><small>记录生成文件，方便回退和管理版本</small></span>
-                </label>
-                <label>
-                  <input name="push" type="checkbox" checked />
-                  <span class="check-copy"><strong>推送到远程仓库</strong><small>将本地提交上传到 GitHub 仓库</small></span>
-                </label>
-              </div>
             </div>
           </details>
 
@@ -327,7 +301,6 @@
               <small id="article-next-step-description">保存到 Markdown 后即可使用真实站点模板预览。</small>
             </div>
             <div class="actions">
-              <button type="button" data-quality="article">仅检查</button>
               <button class="primary" type="button" id="article-next-action" data-action="save">保存草稿</button>
               <button type="submit" id="article-form-submit" hidden>提交文章</button>
             </div>
@@ -338,16 +311,11 @@
           <div class="preview-heading">
             <p class="eyebrow">预览</p>
             <div class="preview-controls">
-              <div class="preview-tabs" aria-label="文章预览类型">
-                <button class="preview-tab active" data-preview="card" type="button">列表卡片</button>
-                <button class="preview-tab" data-preview="page" type="button">文章页</button>
-              </div>
-              <button type="button" id="article-real-preview" disabled>真实预览</button>
+              <button type="button" id="article-real-preview" disabled>打开真实预览</button>
             </div>
           </div>
           <p class="preview-note" id="article-preview-note">保存草稿后，可用真实站点模板在新页面预览。</p>
           <article class="article-card" id="article-preview"></article>
-          <article class="article-page-preview" id="article-page-preview"></article>
           <pre class="result" id="article-result" hidden></pre>
         </aside>
       </section>
@@ -359,7 +327,7 @@
               <p class="eyebrow">图片信息</p>
               <h2>整理并发布</h2>
             </div>
-            <button class="ai-action" type="button" data-ai-fill="image" disabled>AI 整理图片资料</button>
+            <button class="ai-action" type="button" data-ai-fill="image" disabled>AI 辅助</button>
           </div>
           <div class="editor-state-row">
             <p class="editor-state" id="image-editor-state"></p>
@@ -461,12 +429,12 @@
             <legend>发布方式</legend>
             <div class="publish-mode-grid">
               <label>
-                <input type="radio" name="publishMode" value="publish" checked />
-                <span class="check-copy"><strong>立即发布</strong><small>检查通过后进入网站公开图片库</small></span>
+                <input type="radio" name="publishMode" value="publish" />
+                <span class="check-copy"><strong>发布到本地</strong><small>检查通过后进入网站公开图片库</small></span>
               </label>
               <label>
-                <input type="radio" name="publishMode" value="draft" />
-                <span class="check-copy"><strong>保存为草稿</strong><small>保留图片和资料，暂不公开展示</small></span>
+                <input type="radio" name="publishMode" value="draft" checked />
+                <span class="check-copy"><strong>保存草稿</strong><small>保留图片和资料，暂不公开展示</small></span>
               </label>
             </div>
             <input name="public" type="checkbox" checked hidden />
@@ -474,7 +442,7 @@
           </fieldset>
 
           <details class="advanced-settings" id="image-advanced-settings">
-            <summary><span>高级设置</span><small id="image-advanced-summary">日期、比例、正文与版本控制</small></summary>
+            <summary><span>高级设置</span><small id="image-advanced-summary">日期、比例与正文</small></summary>
             <div class="advanced-settings-content">
               <div class="form-grid">
                 <label>
@@ -494,24 +462,13 @@
                   <textarea name="body" rows="4" placeholder="可选：补充使用说明"></textarea>
                 </label>
               </div>
-              <div class="git-settings">
-                <label>
-                  <input name="commit" type="checkbox" checked />
-                  <span class="check-copy"><strong>保存到本地 Git</strong><small>记录生成文件，方便回退和管理版本</small></span>
-                </label>
-                <label>
-                  <input name="push" type="checkbox" checked />
-                  <span class="check-copy"><strong>推送到远程仓库</strong><small>将本地提交上传到 GitHub 仓库</small></span>
-                </label>
-              </div>
             </div>
           </details>
 
           <div class="editor-actions">
             <p>发布时会自动执行重复检查与质量检查</p>
             <div class="actions">
-              <button type="button" data-quality="image">仅检查</button>
-              <button class="primary" type="submit">检查并发布图片</button>
+              <button class="primary" type="submit">保存草稿</button>
             </div>
           </div>
         </form>
@@ -519,13 +476,8 @@
         <aside class="preview">
           <div class="preview-heading">
             <p class="eyebrow">发布前预览</p>
-            <div class="preview-tabs" aria-label="图片预览类型">
-              <button class="preview-tab active" data-image-preview="card" type="button">列表卡片</button>
-              <button class="preview-tab" data-image-preview="detail" type="button">图片详情</button>
-            </div>
           </div>
           <article class="image-card" id="image-preview"></article>
-          <article class="image-detail-preview" id="image-detail-preview" hidden></article>
           <pre class="result" id="image-result"></pre>
         </aside>
       </section>
@@ -554,15 +506,14 @@
             <div class="import-toolbar">
               <div class="import-selection-controls">
                 <p class="import-selection-summary" id="flomo-selection-summary" aria-live="polite"></p>
-                <button id="flomo-toggle-selection" type="button">取消全选</button>
                 <label class="import-filter-toggle">
                   <input id="flomo-only-unselected" type="checkbox" />
-                  <span>仅看未选</span>
+                  <span>只看需处理</span>
                 </label>
               </div>
               <div class="import-toolbar-actions">
-                <button class="primary" id="flomo-publish-selected" type="button">整理并发布所选</button>
-                <button id="flomo-import-selected" type="button">保存为草稿</button>
+                <button class="primary" id="flomo-publish-selected" type="button">检查并发布所选</button>
+                <button id="flomo-import-selected" type="button">保存所选为草稿</button>
               </div>
             </div>
             <div class="import-list" id="flomo-list"></div>
@@ -574,7 +525,7 @@
         </div>
       </section>
 
-      <section class="panel library-panel" id="library-panel">
+      <section class="panel library-panel active" id="library-panel">
         <div class="library-main">
           <header class="library-heading">
             <div>
@@ -588,13 +539,13 @@
               <strong id="library-task-title">读取发布任务…</strong>
               <p id="library-task-description">正在核对草稿、本地内容与线上版本。</p>
             </div>
-            <button class="primary" type="button" id="library-task-action" hidden></button>
           </section>
           <div class="library-status-tabs" aria-label="按内容位置筛选">
             <button class="active" type="button" data-library-status="all" aria-pressed="true">全部 <span id="library-count-all">0</span></button>
             <button type="button" data-library-status="draft" aria-pressed="false">草稿 <span id="library-count-draft">0</span></button>
             <button type="button" data-library-status="local" aria-pressed="false">本地发布 <span id="library-count-local">0</span></button>
             <button type="button" data-library-status="cloud" aria-pressed="false">云端流程 <span id="library-count-cloud">0</span></button>
+            <button type="button" id="library-audit">需处理</button>
           </div>
           <div class="library-toolbar">
             <label class="library-search">
@@ -628,7 +579,6 @@
                     <option value="50">每页 50 条</option>
                   </select>
                 </label>
-                <button type="button" id="library-audit">内容体检</button>
                 <button type="button" id="library-refresh">刷新列表</button>
                 <button type="button" id="library-open-trash">回收站 <span id="library-trash-count">0</span></button>
                 <div class="library-view-toggle" aria-label="列表显示方式">
@@ -679,14 +629,18 @@
           </div>
           <div id="library-detail" class="library-empty">从左侧选择一条内容。</div>
           <div class="library-actions" id="library-actions" hidden>
-            <button type="button" id="library-edit">编辑内容</button>
-            <button type="button" id="library-transition" hidden>复核并发布</button>
-            <button type="button" id="library-sync-current" hidden>同步当前内容</button>
+            <button type="button" id="library-edit">继续处理</button>
+            <button type="button" id="library-sync-current" hidden>同步</button>
             <button type="button" id="library-preview" hidden>真实预览</button>
             <button type="button" id="library-open" hidden>在站点预览中查看 ↗</button>
-            <button type="button" id="retry-push" hidden>重新同步</button>
-            <button type="button" id="library-duplicate">复制为草稿</button>
-            <button class="danger" type="button" id="library-return-draft">退回草稿</button>
+            <button type="button" id="retry-push" hidden>同步</button>
+            <details class="library-detail-more">
+              <summary>更多</summary>
+              <div>
+                <button type="button" id="library-duplicate">复制为草稿</button>
+                <button class="danger" type="button" id="library-return-draft">退回草稿</button>
+              </div>
+            </details>
           </div>
         </aside>
       </section>
@@ -696,33 +650,9 @@
           <div>
             <p id="content-audit-summary" aria-live="polite">正在检查内容…</p>
           </div>
-          <button type="button" id="content-audit-refresh">重新体检</button>
+          <button type="button" id="content-audit-refresh">重新检查</button>
         </header>
         <div class="audit-workspace">
-          <section class="tag-governance" aria-labelledby="tag-governance-title">
-            <div class="tag-governance-heading">
-              <div>
-                <p class="eyebrow">标签治理</p>
-                <h2 id="tag-governance-title">使用情况与安全合并</h2>
-                <p id="tag-governance-summary">正在读取标签使用情况…</p>
-              </div>
-              <button type="button" id="tag-governance-refresh">刷新标签</button>
-            </div>
-            <div class="tag-governance-controls">
-              <label>
-                来源标签
-                <select id="tag-merge-source" aria-label="需要合并的来源标签"></select>
-              </label>
-              <span aria-hidden="true">→</span>
-              <label>
-                规范标签
-                <select id="tag-merge-target" aria-label="合并后的规范标签"></select>
-              </label>
-              <button type="button" id="tag-merge-preview">预览影响</button>
-            </div>
-            <div class="tag-merge-plan" id="tag-merge-plan" hidden></div>
-            <div class="tag-governance-list" id="tag-governance-list"></div>
-          </section>
           <section class="audit-results" aria-labelledby="audit-results-title">
             <div class="audit-results-heading">
               <div>
@@ -746,6 +676,7 @@
           <button class="active" type="button" data-system-view="status" aria-current="page">运行状态</button>
           <button type="button" data-system-view="sync">同步记录</button>
           <button type="button" data-system-view="recovery">恢复与备份</button>
+          <button type="button" data-system-view="tags">标签管理</button>
         </nav>
         <section class="system-status-panel system-section active" data-system-section="status">
           <div class="system-section-heading">
@@ -866,7 +797,33 @@
           <details class="system-technical-details">
             <summary>技术信息</summary>
               <div class="status" id="status">读取状态中...</div>
-            </details>
+          </details>
+        </section>
+        <section class="system-status-panel system-section" data-system-section="tags" hidden>
+          <section class="tag-governance" aria-labelledby="tag-governance-title">
+            <div class="tag-governance-heading">
+              <div>
+                <p class="eyebrow">标签管理</p>
+                <h2 id="tag-governance-title">使用情况与安全合并</h2>
+                <p id="tag-governance-summary">正在读取标签使用情况…</p>
+              </div>
+              <button type="button" id="tag-governance-refresh">刷新标签</button>
+            </div>
+            <div class="tag-governance-controls">
+              <label>
+                来源标签
+                <select id="tag-merge-source" aria-label="需要合并的来源标签"></select>
+              </label>
+              <span aria-hidden="true">→</span>
+              <label>
+                规范标签
+                <select id="tag-merge-target" aria-label="合并后的规范标签"></select>
+              </label>
+              <button type="button" id="tag-merge-preview">预览影响</button>
+            </div>
+            <div class="tag-merge-plan" id="tag-merge-plan" hidden></div>
+            <div class="tag-governance-list" id="tag-governance-list"></div>
+          </section>
         </section>
       </section>
         </main>
@@ -973,6 +930,6 @@
       <div class="asset-library-list" id="asset-library-list"></div>
     </dialog>
 
-    <script src="/app.js?v=20260725-audit-guidance" type="module"></script>
+    <script src="/app.js?v=20260725-desktop-simplify-4" type="module"></script>
   </body>
 </html>

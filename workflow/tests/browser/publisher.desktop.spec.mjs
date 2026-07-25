@@ -1,7 +1,10 @@
 import { expect, test } from "@playwright/test";
 
-test("new article starts clean and explains disabled AI actions", async ({ page }) => {
+test("content library is the default and a new article starts clean", async ({ page }) => {
   await page.goto("/");
+  await expect(page.locator("#library-panel")).toHaveClass(/active/);
+  await page.locator(".workspace-create-menu > summary").click();
+  await page.locator('[data-tab="article"]').click();
   await expect(page.locator("#article-panel")).toHaveClass(/active/);
   await expect(page.locator("#article-result")).toBeHidden();
   await expect(page.locator('[data-ai-fill="article"]')).toBeDisabled();
@@ -11,6 +14,8 @@ test("new article starts clean and explains disabled AI actions", async ({ page 
 
 test("imported articles use an explicit publish confirmation that resets after content changes", async ({ page }) => {
   await page.goto("/");
+  await page.locator(".workspace-create-menu > summary").click();
+  await page.locator('[data-tab="article"]').click();
   const confirmation = page.locator("#article-review-confirmation");
   const confirmed = page.locator('[name="internalReviewConfirmed"]');
   const status = page.locator('[name="internalReviewStatus"]');
@@ -31,7 +36,7 @@ test("system status is a dedicated workspace instead of a floating popover", asy
   await page.goto("/");
   await page.locator('[data-tab="system"]').click();
   await expect(page.locator("#system-panel")).toHaveClass(/active/);
-  await expect(page.locator("#workspace-page-title")).toHaveText("系统状态与恢复");
+  await expect(page.locator("#workspace-page-title")).toHaveText("系统");
   await expect(page.locator(".status-details")).toHaveCount(0);
   await expect(page.locator(".network-disclosure")).toBeVisible();
   await expect(page.locator(".network-disclosure")).toContainText("M4 Ollama");
@@ -50,27 +55,48 @@ test("system status is a dedicated workspace instead of a floating popover", asy
     .toBe(true);
 });
 
+test("image editor defaults to draft and exposes one publish action", async ({ page }) => {
+  await page.goto("/");
+  await page.locator(".workspace-create-menu > summary").click();
+  await page.locator('[data-tab="image"]').click();
+  await expect(page.locator('#image-form [name="publishMode"][value="draft"]')).toBeChecked();
+  await expect(page.locator('#image-form button[type="submit"]')).toHaveText("保存草稿");
+  await expect(page.locator("#image-form [data-quality]")).toHaveCount(0);
+  await expect(page.locator("#image-form [name=commit], #image-form [name=push]")).toHaveCount(0);
+  await expect(page.locator("#image-panel [data-image-preview]")).toHaveCount(0);
+});
+
+test("tag governance is a low-frequency system section", async ({ page }) => {
+  await page.goto("/");
+  await page.locator('[data-tab="system"]').click();
+  await page.locator('[data-system-view="tags"]').click();
+  await expect(page).toHaveURL(/#system\/tags$/);
+  await expect(page.locator('[data-system-section="tags"]')).toBeVisible();
+  await expect(page.locator("#tag-governance-list")).toBeVisible();
+  await expect(page.locator("#audit-panel .tag-governance")).toHaveCount(0);
+});
+
 test("workspace page titles are not repeated inside their content", async ({ page }) => {
   await page.goto("/#library");
   await expect(page.getByRole("heading", { name: "内容库", exact: true })).toHaveCount(1);
 
-  await page.locator('[data-tab="audit"]').click();
-  await expect(page.getByRole("heading", { name: "内容体检与标签", exact: true })).toHaveCount(1);
+  await page.locator("#library-audit").click();
+  await expect(page.getByRole("heading", { name: "待处理内容", exact: true })).toHaveCount(1);
 
   await page.locator('[data-tab="system"]').click();
-  await expect(page.getByRole("heading", { name: "系统状态与恢复", exact: true })).toHaveCount(1);
+  await expect(page.getByRole("heading", { name: "系统", exact: true })).toHaveCount(1);
 });
 
 test("content audit is a restorable workspace and not a dialog", async ({ page }) => {
   await page.goto("/");
-  await page.locator('[data-tab="audit"]').click();
+  await page.locator("#library-audit").click();
   await expect(page).toHaveURL(/#audit$/);
   await expect(page.locator("#audit-panel")).toHaveClass(/active/);
   await expect(page.locator("#content-audit-summary")).not.toHaveText("正在检查内容…");
   await expect(page.locator("#content-audit-dialog")).toHaveCount(0);
   await page.reload();
   await expect(page.locator("#audit-panel")).toHaveClass(/active/);
-  await expect(page.locator('[data-tab="audit"]')).toHaveAttribute("aria-current", "page");
+  await expect(page.locator("#workspace-page-title")).toHaveText("待处理内容");
 });
 
 test("opening an audited article carries its repair guidance into the editor", async ({ page }) => {
@@ -116,16 +142,17 @@ test("opening an audited article carries its repair guidance into the editor", a
   }));
 
   await page.goto("/");
-  await page.locator('[data-tab="audit"]').click();
+  await page.locator("#library-audit").click();
   await page.locator('[data-audit-open-article]').click();
 
   const guidance = page.locator("#article-audit-guidance");
   await expect(page.locator("#article-panel")).toHaveClass(/active/);
+  await expect(page.locator("#workspace-page-title")).toHaveText("编辑文章");
   await expect(guidance).toBeVisible();
   await expect(guidance).toContainText("超过 180 字的长段落");
   await expect(guidance).toContainText("来源链接只指向网站首页");
-  await expect(guidance).toContainText("AI 整理文章资料");
-  await expect(guidance).toContainText("仅检查");
+  await expect(guidance).toContainText("AI 辅助");
+  await expect(guidance).toContainText("自动复核");
 });
 
 test("sync history belongs to the system workspace and browser back restores the previous page", async ({ page }) => {
@@ -143,12 +170,13 @@ test("sync history belongs to the system workspace and browser back restores the
   await expect(page.locator("#library-panel")).toHaveClass(/active/);
 });
 
-test("recycle bin remains a focused dialog and returns focus to its sidebar entry", async ({ page }) => {
+test("recycle bin remains a focused dialog and returns focus to its library entry", async ({ page }) => {
   await page.goto("/#library");
-  const recycleEntry = page.locator('[data-nav-action="trash"]');
+  const recycleEntry = page.locator("#library-open-trash");
+  await page.locator(".library-tools-more > summary").click();
   await recycleEntry.click();
   await expect(page.locator("#trash-dialog")).toBeVisible();
-  await expect(page.locator("#sidebar-trash-count")).not.toHaveText("");
+  await expect(page.locator("#library-trash-count")).not.toHaveText("");
   await page.keyboard.press("Escape");
   await expect(page.locator("#trash-dialog")).toBeHidden();
   await expect(recycleEntry).toBeFocused();
@@ -179,6 +207,8 @@ test("switching workspaces resets the desktop scroll position", async ({ page })
 
 test("markdown toolbar and browser version history remain keyboard reachable", async ({ page }) => {
   await page.goto("/");
+  await page.locator(".workspace-create-menu > summary").click();
+  await page.locator('[data-tab="article"]').click();
   await page.locator("#article-body").fill("正文");
   await page.locator("#article-body").selectText();
   await page.locator('[data-markdown-action="bold"]').click();

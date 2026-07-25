@@ -999,7 +999,7 @@ async function inspectFlomoImport(fileData) {
       ...item,
       status,
       duplicate,
-      selectedByDefault: status !== "exact",
+      selectedByDefault: status === "ready",
     };
   });
 
