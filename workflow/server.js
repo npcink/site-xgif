@@ -39,6 +39,7 @@ import {
   runRecoveryDrill,
 } from "./recovery-drill.js";
 import { sanitizeArticleTitleSuggestions } from "./article-title-suggestions.js";
+import { isolatedContentSync } from "./isolated-content-sync.js";
 import {
   contentPublicationCounts,
   publicationFromDeployment,
@@ -2243,45 +2244,22 @@ async function syncBatchContent(input) {
     throw error;
   }
 
-  let branch = git.branch;
-  if (branch === "main") {
-    const changed = parseGitStatusPathSet(
-      (await runGit([
-        "status",
-        "--porcelain=v1",
-        "-z",
-        "--untracked-files=all",
-        "--",
-        ...eligible.map((item) => item.file),
-      ])).stdout,
-    );
-    if (!changed.size) {
-      const error = new Error("所选内容没有需要提交的本地变更，线上状态可直接刷新检查。");
-      error.statusCode = 422;
-      throw error;
-    }
-    const stamp = new Date().toISOString().replace(/[-:T.Z]/g, "").slice(0, 14);
-    branch = `content-sync/${stamp}-${randomUUID().slice(0, 6)}`;
-    await runGit(["switch", "-c", branch]);
-  }
-
-  const sync = await commitAndMaybePush(
-    eligible.map((item) => item.filePath),
-    `Sync ${eligible.length} content item${eligible.length === 1 ? "" : "s"}`,
-    true,
-  );
-  const refreshedGit = await getGitStatus();
+  const sync = await isolatedContentSync({
+    repoRoot,
+    files: eligible.map((item) => item.file),
+    message: `Sync ${eligible.length} content item${eligible.length === 1 ? "" : "s"}`,
+  });
   const result = {
     ok: sync.push.ok,
-    branch,
+    branch: sync.branch,
     synced: eligible.map(({ filePath, ...item }) => item),
     skipped,
     commitSha: sync.commitSha,
     push: sync.push,
-    compareUrl: githubCompareUrl(refreshedGit.remote, branch),
+    compareUrl: githubCompareUrl(git.remote, sync.branch),
   };
   localDataStore.recordOperation("sync_content", {
-    branch,
+    branch: sync.branch,
     count: eligible.length,
     files: eligible.map((item) => item.file),
     commitSha: sync.commitSha,
@@ -3247,6 +3225,7 @@ async function handleApi(req, res) {
       git,
       duplicates,
       indexWarning,
+      previewUrl: previewContentUrl("image", payload.contentId),
     });
     return;
   }
