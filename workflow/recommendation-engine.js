@@ -241,7 +241,10 @@ export async function loadPublicRecommendationContent(repoRoot) {
 
 export function recommendationSourceHash(documents) {
   return createHash("sha256")
-    .update(documents.map((document) => `${document.id}:${document.contentSha256}`).join("\n"))
+    .update(documents.map((document) => {
+      const group = recommendationDocument(document.entry).recommendationGroup;
+      return `${document.id}:${document.contentSha256}${group === "adult-humor" ? `:${group}` : ""}`;
+    }).join("\n"))
     .digest("hex");
 }
 
@@ -369,7 +372,8 @@ export function rankHybridCandidates(source, candidates, vectors) {
     })
     .sort(
       (left, right) =>
-        right.score - left.score
+        Number(right.groupMatch) - Number(left.groupMatch)
+        || right.score - left.score
         || right.vector - left.vector
         || right.relevance - left.relevance
         || left.id.localeCompare(right.id),
@@ -382,6 +386,30 @@ function ids(entries) {
 
 function rulesFor(source, candidates, options) {
   return ids(selectContentRecommendations(source, candidates, options));
+}
+
+function applyAdultHumorCoverage(documents, recommendations) {
+  const adultArticleIds = documents
+    .filter((document) => {
+      const entry = recommendationDocument(document.entry);
+      return document.type === "article"
+        && !entry.isDraft
+        && entry.isPublic
+        && entry.recommendationGroup === "adult-humor";
+    })
+    .map((document) => document.id)
+    .sort();
+  if (adultArticleIds.length < 2) return;
+
+  adultArticleIds.forEach((sourceId, index) => {
+    const coverageId = adultArticleIds[(index + 1) % adultArticleIds.length];
+    const current = recommendations[sourceId]?.articles || [];
+    if (!current.length || current.includes(coverageId)) return;
+    recommendations[sourceId].articles = [
+      ...current.slice(0, Math.max(0, current.length - 1)),
+      coverageId,
+    ];
+  });
 }
 
 export function buildRecommendationManifest(
@@ -459,6 +487,7 @@ export function buildRecommendationManifest(
     }
   }
 
+  applyAdultHumorCoverage(documents, recommendations);
   const sourceHash = recommendationSourceHash(documents);
   const dimensions = mode === "hybrid" ? vectors.values().next().value?.length || null : null;
   return {

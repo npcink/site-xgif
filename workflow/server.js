@@ -1052,6 +1052,7 @@ function normalizeImportedArticle(item, override = {}, { draft = true } = {}) {
     tags,
     pubDate: item.pubDate,
     readTime: item.readTime,
+    recommendationGroup: normalizeRecommendationGroup(override.recommendationGroup),
     editorNote: clampText(override.editorNote, 240),
     internalNote,
     internalReviewStatus: internalNote ? "unresolved" : "none",
@@ -1487,6 +1488,16 @@ function normalizeInternalReview(payload = {}) {
   return { note, status, resolvedAt };
 }
 
+function normalizeRecommendationGroup(value) {
+  const group = String(value || "general").trim();
+  if (!["general", "adult-humor"].includes(group)) {
+    const error = new Error("推荐分组无效。");
+    error.statusCode = 400;
+    throw error;
+  }
+  return group;
+}
+
 function buildArticleMarkdown(payload) {
   validateRequired(payload, ["contentId"]);
   if (!isContentId(payload.contentId)) {
@@ -1495,6 +1506,7 @@ function buildArticleMarkdown(payload) {
     throw error;
   }
   const tags = normalizeContentTags(payload.tags, { type: "article" });
+  const recommendationGroup = normalizeRecommendationGroup(payload.recommendationGroup);
   const date = payload.pubDate || todayIso();
   const sourceUrl = String(payload.sourceUrl || "").trim();
   const sourceUrlLine = sourceUrl ? `sourceUrl: ${yamlString(sourceUrl)}\n` : "";
@@ -1513,7 +1525,7 @@ function buildArticleMarkdown(payload) {
   const coverAlt = String(payload.coverAlt || "").trim();
   const coverImageLine = coverImage ? `coverImage: ${yamlString(coverImage)}\n` : "";
   const coverAltLine = coverImage && coverAlt ? `coverAlt: ${yamlString(coverAlt)}\n` : "";
-  return `---\ntitle: ${yamlString(payload.title)}\ncontentId: ${yamlString(payload.contentId)}\nsummary: ${yamlString(payload.summary)}\nsource: ${yamlString(payload.source)}\n${sourceUrlLine}sourceKind: ${yamlString(payload.sourceKind || "original")}\ntags: ${yamlArray(tags)}\npubDate: ${date}\nreadTime: ${yamlString(payload.readTime || "1 分钟")}\n${editorNoteLine}${internalNoteLine}${internalReviewStatusLine}${internalReviewResolvedAtLine}${coverImageLine}${coverAltLine}featured: ${Boolean(payload.featured)}\ndraft: ${Boolean(payload.draft)}\n---\n\n${markdownBody(payload.body)}`;
+  return `---\ntitle: ${yamlString(payload.title)}\ncontentId: ${yamlString(payload.contentId)}\nsummary: ${yamlString(payload.summary)}\nsource: ${yamlString(payload.source)}\n${sourceUrlLine}sourceKind: ${yamlString(payload.sourceKind || "original")}\ntags: ${yamlArray(tags)}\npubDate: ${date}\nreadTime: ${yamlString(payload.readTime || "1 分钟")}\nrecommendationGroup: ${yamlString(recommendationGroup)}\n${editorNoteLine}${internalNoteLine}${internalReviewStatusLine}${internalReviewResolvedAtLine}${coverImageLine}${coverAltLine}featured: ${Boolean(payload.featured)}\ndraft: ${Boolean(payload.draft)}\n---\n\n${markdownBody(payload.body)}`;
 }
 
 function validateArticleAttribution(payload) {
@@ -1526,6 +1538,7 @@ function validateArticleAttribution(payload) {
   const normalized = sourceKind === "unknown"
     ? { ...payload, sourceKind, source: String(payload.source || "").trim() || "来源待确认" }
     : { ...payload, sourceKind };
+  normalized.recommendationGroup = normalizeRecommendationGroup(normalized.recommendationGroup);
   validateRequired(normalized, ["title", "summary", "source"]);
   if (["publication", "editorial"].includes(sourceKind)) validateRequired(normalized, ["sourceUrl"]);
   if (String(normalized.sourceUrl || "").trim()) {

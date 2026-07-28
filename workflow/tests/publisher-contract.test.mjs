@@ -425,9 +425,13 @@ test("publisher writes the metadata required by Astro collections", async () => 
   assert.match(server, /sourceKind/);
   assert.match(server, /licenseUrl/);
   assert.match(server, /function normalizeImageAttribution/);
+  assert.match(server, /function normalizeRecommendationGroup/);
+  assert.match(server, /recommendationGroup: \$\{yamlString\(recommendationGroup\)\}/);
   assert.match(server, /user_provided/);
   assert.match(server, /群聊转存（来源待核实）/);
   assert.match(html, /name="sourceKind"/);
+  assert.match(html, /name="recommendationGroup"/);
+  assert.match(html, /value="adult-humor"/);
   assert.match(html, /value="unknown"/);
   assert.match(html, /id="unknown-source-note"/);
   assert.match(html, /用户提供素材/);

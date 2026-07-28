@@ -79,7 +79,17 @@ export function recommendationDocument(entry) {
     pubDate: normalizedDateValue(data.pubDate),
     isDraft: Boolean(data.draft),
     isPublic: data.public !== false,
+    recommendationGroup: data.recommendationGroup === "adult-humor" ? "adult-humor" : "general",
   };
+}
+
+function isSameRecommendationGroup(source, candidate) {
+  return source.recommendationGroup === candidate.recommendationGroup;
+}
+
+function allowsRecommendation(source, candidate) {
+  return source.recommendationGroup === "adult-humor"
+    || candidate.recommendationGroup !== "adult-humor";
 }
 
 function tagWeights(documents) {
@@ -130,6 +140,7 @@ export function rankRecommendationCandidates(sourceEntry, candidateEntries) {
         candidate.id === source.id ||
         candidate.isDraft ||
         !candidate.isPublic ||
+        !allowsRecommendation(source, candidate) ||
         seenCandidateIds.has(candidate.id)
       ) {
         return false;
@@ -154,10 +165,12 @@ export function rankRecommendationCandidates(sourceEntry, candidateEntries) {
         freshness,
         relevance,
         score: relevance + freshness * 0.1,
+        groupMatch: isSameRecommendationGroup(source, candidate),
       };
     })
     .sort(
       (left, right) =>
+        Number(right.groupMatch) - Number(left.groupMatch) ||
         right.score - left.score ||
         right.relevance - left.relevance ||
         recommendationDocument(right.entry).pubDate - recommendationDocument(left.entry).pubDate ||
@@ -165,16 +178,21 @@ export function rankRecommendationCandidates(sourceEntry, candidateEntries) {
     );
 }
 
-function preferredEntries(candidateEntries, preferredIds, sourceId) {
+function preferredEntries(source, candidateEntries, preferredIds) {
   const candidatesById = new Map(
     candidateEntries
       .map((entry) => [recommendationDocument(entry).id, entry])
       .filter(
         ([id, entry]) =>
           id &&
-          id !== sourceId &&
+          id !== source.id &&
           !recommendationDocument(entry).isDraft &&
-          recommendationDocument(entry).isPublic,
+          recommendationDocument(entry).isPublic &&
+          allowsRecommendation(source, recommendationDocument(entry)) &&
+          (
+            source.recommendationGroup !== "adult-humor"
+            || isSameRecommendationGroup(source, recommendationDocument(entry))
+          ),
       ),
   );
   const seen = new Set();
@@ -208,8 +226,9 @@ export function selectContentRecommendations(
   } = {},
 ) {
   if (!Number.isInteger(limit) || limit <= 0) return [];
-  const sourceId = recommendationDocument(sourceEntry).id;
-  const preferred = preferredEntries(candidateEntries, preferredIds, sourceId).slice(0, limit);
+  const source = recommendationDocument(sourceEntry);
+  const sourceId = source.id;
+  const preferred = preferredEntries(source, candidateEntries, preferredIds).slice(0, limit);
   const selectedIds = new Set(preferred.map((entry) => recommendationDocument(entry).id));
   if (preferred.length >= limit) return preferred;
 
@@ -217,14 +236,20 @@ export function selectContentRecommendations(
     (candidate) => !selectedIds.has(candidate.id),
   );
   const related = ranked
-    .filter((candidate) => candidate.relevance >= 0.045)
+    .filter(
+      (candidate) => candidate.relevance >= 0.045
+        || (source.recommendationGroup === "adult-humor" && candidate.groupMatch),
+    )
     .slice(0, Math.max(0, Math.min(relatedSlots, limit - preferred.length)));
   for (const candidate of related) selectedIds.add(candidate.id);
 
   const selected = [...preferred, ...related.map((candidate) => candidate.entry)];
   if (allowSurprise && selected.length < limit) {
-    const surprise = ranked
-      .filter((candidate) => !selectedIds.has(candidate.id))
+    const unselected = ranked.filter((candidate) => !selectedIds.has(candidate.id));
+    const groupCandidates = source.recommendationGroup === "adult-humor"
+      ? unselected.filter((candidate) => candidate.groupMatch)
+      : unselected;
+    const surprise = (groupCandidates.length ? groupCandidates : unselected)
       .sort(
         (left, right) =>
           stableRank(sourceId, left.id) - stableRank(sourceId, right.id) ||

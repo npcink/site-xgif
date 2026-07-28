@@ -208,6 +208,14 @@
                     标签
                     <input name="tags" required placeholder="AI, 产品, 热点" />
                   </label>
+                  <label>
+                    推荐分组
+                    <select name="recommendationGroup">
+                      <option value="general">通用内容</option>
+                      <option value="adult-humor">成人幽默（只在同类文章内推荐）</option>
+                    </select>
+                    <small class="field-note">请在人工复核后选择；不会自动由 AI 标记。</small>
+                  </label>
                   <div class="article-compact-fields">
                     <label>
                       发布日期
