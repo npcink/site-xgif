@@ -40,6 +40,7 @@ sourceKind: ${JSON.stringify(sourceKind)}
 tags: ["生活"]
 pubDate: "2026-07-23"
 readTime: "2 分钟"
+recommendationGroup: "general"
 ${internalNote ? `internalNote: ${JSON.stringify(internalNote)}\n` : ""}${internalReviewStatus ? `internalReviewStatus: ${JSON.stringify(internalReviewStatus)}\n` : ""}draft: ${draft}
 ---
 
@@ -81,6 +82,7 @@ test("content audit classifies ready, review, and blocked articles", async () =>
     review: 1,
     blocked: 0,
     legacyReviewDebt: 0,
+    recommendationGroupDebt: 0,
   });
   assert.equal(report.items.find((item) => item.title === "可发布文章").status, "ready");
   assert.match(
@@ -180,6 +182,39 @@ test("content audit blocks unresolved drafts and marks published legacy review d
   assert.match(legacyDebt.warnings.join(" "), /保持现有线上状态/);
   assert.equal(resolved.status, "ready");
   assert.equal(report.counts.legacyReviewDebt, 1);
+});
+
+test("content audit blocks ungrouped drafts and queues published group debt", async () => {
+  const dirs = await fixture();
+  const withoutGroup = (markdown) => markdown.replace('recommendationGroup: "general"\n', "");
+  await Promise.all([
+    writeFile(
+      path.join(dirs.articlesDir, "20260723-0030.md"),
+      withoutGroup(article({
+        contentId: "20260723-0030",
+        title: "未确认分组草稿",
+        draft: true,
+      })),
+      "utf8",
+    ),
+    writeFile(
+      path.join(dirs.articlesDir, "20260723-0031.md"),
+      withoutGroup(article({
+        contentId: "20260723-0031",
+        title: "历史分组债务",
+      })),
+      "utf8",
+    ),
+  ]);
+
+  const report = await auditContentLibrary({ repoRoot: dirs.repoRoot });
+  const draft = report.items.find((item) => item.title === "未确认分组草稿");
+  const published = report.items.find((item) => item.title === "历史分组债务");
+  assert.equal(draft.status, "blocked");
+  assert.match(draft.blockers.join(" "), /推荐分组尚未人工确认/u);
+  assert.equal(published.status, "review");
+  assert.equal(published.recommendationGroupDebt, true);
+  assert.equal(report.counts.recommendationGroupDebt, 1);
 });
 
 test("content audit blocks invalid source links and missing local image files", async () => {

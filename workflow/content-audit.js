@@ -7,6 +7,10 @@ import {
 } from "./article-publication.js";
 import { isContentId } from "./content-id.js";
 import { CANONICAL_TAGS } from "./content-taxonomy.js";
+import {
+  localAssetFileFromUrl,
+  referencedLocalAssetFiles,
+} from "./publication-bundle.js";
 
 const internalNotePatterns = [
   /flomo\s*私人(?:笔记|收藏)?导入/iu,
@@ -101,7 +105,7 @@ function createItem(type, file, parsed, repoRoot) {
   };
 }
 
-function auditArticle(item) {
+async function auditArticle(item, repoRoot) {
   const { data, body, file, sourceKind, sourceUrl } = item;
   if (!String(data.title || "").trim()) item.blockers.push("缺少标题。");
   if (!String(data.summary || "").trim()) item.blockers.push("缺少摘要。");
@@ -112,6 +116,17 @@ function auditArticle(item) {
   if (!Array.isArray(data.tags) || data.tags.length === 0) item.blockers.push("缺少标签。");
   if (Array.isArray(data.tags) && data.tags.some((tag) => !CANONICAL_TAGS.includes(tag))) {
     item.blockers.push("包含未纳入规范词表的标签。");
+  }
+  const recommendationGroup = String(data.recommendationGroup || "").trim();
+  if (!recommendationGroup) {
+    if (item.draft) {
+      item.blockers.push("推荐分组尚未人工确认，发布前必须选择“通用内容”或“成人幽默”。");
+    } else {
+      item.recommendationGroupDebt = true;
+      item.warnings.push("历史已发布内容缺少推荐分组；保持现有线上状态，但下次编辑或同步前必须人工确认。");
+    }
+  } else if (!["general", "adult-humor"].includes(recommendationGroup)) {
+    item.blockers.push("推荐分组无效，只允许“通用内容”或“成人幽默”。");
   }
   if (["publication", "editorial"].includes(sourceKind) && !sourceUrl) {
     item.blockers.push("外部来源文章缺少来源链接。");
@@ -159,6 +174,17 @@ function auditArticle(item) {
   }
   const urls = bodyUrls(body).filter((url) => url !== sourceUrl);
   if (urls.length) item.warnings.push(`正文仍含 ${urls.length} 个未结构化链接，需要人工判断用途。`);
+  const localAssetFiles = [
+    localAssetFileFromUrl(data.coverImage),
+    ...referencedLocalAssetFiles(body),
+  ].filter(Boolean);
+  for (const assetFile of [...new Set(localAssetFiles)]) {
+    try {
+      await access(path.join(repoRoot, assetFile));
+    } catch {
+      item.blockers.push(`文章引用的本地图片不存在：${assetFile}。`);
+    }
+  }
 
   const legacyNote = String(data.note || "");
   if (legacyNote && internalNotePatterns.some((pattern) => pattern.test(legacyNote))) {
@@ -280,7 +306,7 @@ export async function auditContentLibrary({ repoRoot }) {
         continue;
       }
       const item = createItem(source.type, file, parsed, repoRoot);
-      if (source.type === "article") auditArticle(item);
+      if (source.type === "article") await auditArticle(item, repoRoot);
       else await auditImage(item, repoRoot);
       items.push(item);
     }
@@ -293,6 +319,7 @@ export async function auditContentLibrary({ repoRoot }) {
     review: items.filter((item) => item.status === "review").length,
     blocked: items.filter((item) => item.status === "blocked").length,
     legacyReviewDebt: items.filter((item) => item.legacyReviewDebt).length,
+    recommendationGroupDebt: items.filter((item) => item.recommendationGroupDebt).length,
   };
   return { generatedAt: new Date().toISOString(), counts, items };
 }
@@ -311,6 +338,7 @@ export function renderContentAuditMarkdown(report) {
     `- 需要人工确认：${report.counts.review}`,
     `- 阻断发布：${report.counts.blocked}`,
     `- 历史复核债务：${report.counts.legacyReviewDebt}`,
+    `- 推荐分组债务：${report.counts.recommendationGroupDebt}`,
     `- 总计：${report.counts.total}`,
     "",
   ];
