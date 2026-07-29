@@ -2887,12 +2887,12 @@ async function syncBatchContent(input) {
       push: retried.push,
       items,
       synced: retried.synced.map((receipt) => ({
-          type: receipt.file.startsWith("site/src/content/articles/") ? "article" : "image",
-          file: receipt.file,
-          contentId: receipt.contentId,
-          contentSha256: receipt.contentSha256,
-          publicationSha256: receipt.publicationSha256,
-        })),
+        type: receipt.file.startsWith("site/src/content/articles/") ? "article" : "image",
+        file: receipt.file,
+        contentId: receipt.contentId,
+        contentSha256: receipt.contentSha256,
+        publicationSha256: receipt.publicationSha256,
+      })),
     });
   }
 
