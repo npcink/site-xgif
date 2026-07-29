@@ -61,17 +61,30 @@ export class PublicationReceiptStore {
     }
   }
 
-  async latestByFileAndHash(items = []) {
+  async latestByFileAndHash(items = [], { action = "sync" } = {}) {
     const wanted = new Map(
       items.map((item) => [
         normalizedFile(item.file),
-        String(item.contentSha256 || ""),
+        new Set([
+          String(item.publicationSha256 || ""),
+          String(item.contentSha256 || ""),
+        ].filter(Boolean)),
       ]),
     );
     const latest = new Map();
     for (const receipt of await this.list()) {
       const file = normalizedFile(receipt.file);
-      if (!wanted.has(file) || wanted.get(file) !== receipt.contentSha256) continue;
+      const receiptVersion = String(receipt.publicationSha256 || receipt.contentSha256 || "");
+      if (!wanted.get(file)?.has(receiptVersion)) continue;
+      const receiptAction = String(receipt.action || "sync");
+      if (
+        receiptAction === "cancel"
+        || (action === "sync" && receiptAction === "restore")
+      ) {
+        latest.delete(file);
+        continue;
+      }
+      if (action && receiptAction !== action) continue;
       latest.set(file, receipt);
     }
     return latest;
@@ -113,6 +126,7 @@ export class PublicationReceiptStore {
       file: normalizedFile(item.file),
       contentId: String(item.contentId || ""),
       contentSha256: String(item.contentSha256 || ""),
+      publicationSha256: String(item.publicationSha256 || item.contentSha256 || ""),
       branch: String(branch || ""),
       commitSha: String(commitSha || ""),
       pushOk: Boolean(push?.ok),

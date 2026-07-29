@@ -58,6 +58,32 @@ test("publication receipts select only the latest matching content version", asy
   }
 });
 
+test("publication receipts match legacy content hashes after asset-aware versions are added", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "xgif-publication-legacy-"));
+  const filePath = path.join(root, "publication-events.jsonl");
+  const store = new PublicationReceiptStore({ filePath });
+  const file = "site/src/content/articles/legacy.md";
+  const contentHash = contentSha256("legacy body");
+  try {
+    await writeFile(filePath, `${JSON.stringify({
+      schemaVersion: 1,
+      action: "sync",
+      file,
+      contentSha256: contentHash,
+      branch: "content-sync/legacy",
+      pushOk: false,
+    })}\n`, "utf8");
+    const receipts = await store.latestByFileAndHash([{
+      file,
+      contentSha256: contentHash,
+      publicationSha256: contentSha256("legacy body with assets"),
+    }]);
+    assert.equal(receipts.get(file).branch, "content-sync/legacy");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("prepared and terminal receipts keep one batch and expose the latest phase", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "xgif-publication-phases-"));
   const store = new PublicationReceiptStore({
@@ -90,6 +116,58 @@ test("prepared and terminal receipts keep one batch and expose the latest phase"
     assert.equal(publicationReceiptState(latest.get(item.file)), "push_succeeded");
     assert.equal(terminal[0].batchId, prepared[0].batchId);
     assert.equal((await store.batchForReceipt(terminal[0])).length, 1);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("restore and cancellation events invalidate earlier publication facts", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "xgif-publication-invalidations-"));
+  const store = new PublicationReceiptStore({
+    filePath: path.join(root, "publication-events.jsonl"),
+  });
+  const item = {
+    file: "site/src/content/articles/restored.md",
+    contentId: "20260729-back",
+    contentSha256: contentSha256("body"),
+  };
+  try {
+    await store.appendBatch({
+      action: "sync",
+      branch: "content-sync/original",
+      commitSha: "e".repeat(40),
+      push: { ok: true },
+      items: [item],
+    });
+    await store.appendBatch({
+      action: "restore",
+      state: "restored",
+      branch: "",
+      commitSha: "",
+      push: { ok: true },
+      items: [item],
+    });
+    assert.equal((await store.latestByFileAndHash([item])).has(item.file), false);
+
+    await store.appendBatch({
+      action: "delete",
+      branch: "content-sync/delete",
+      commitSha: "f".repeat(40),
+      push: { ok: false, error: "offline" },
+      items: [item],
+    });
+    await store.appendBatch({
+      action: "cancel",
+      state: "canceled",
+      branch: "",
+      commitSha: "",
+      push: { ok: true },
+      items: [item],
+    });
+    assert.equal(
+      (await store.latestByFileAndHash([item], { action: "delete" })).has(item.file),
+      false,
+    );
   } finally {
     await rm(root, { recursive: true, force: true });
   }
