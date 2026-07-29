@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { LocalDataStore } from "./local-data-store.js";
 import { LocalContentBackup } from "./local-content-backup.js";
 import { runRecoveryDrill } from "./recovery-drill.js";
+import { publisherSourceVersion } from "./runtime-version.js";
 
 const workflowRoot = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(workflowRoot, "..");
@@ -15,6 +16,7 @@ try {
     console.log(JSON.stringify(await runRecoveryDrill({
       repoRoot,
       workflowRoot,
+      runtimeVersion: publisherSourceVersion(workflowRoot),
     }), null, 2));
   } else {
     await store.initialize();

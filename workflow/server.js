@@ -11,6 +11,11 @@ import {
   readEditableArticleBody,
 } from "./article-publication.js";
 import { safeParagraphSuggestion } from "./article-paragraph-formatting.js";
+import {
+  applyBatchParagraphSuggestion,
+  applyBatchReviewConfirmation,
+  inspectArticleBatchPreparation,
+} from "./batch-publication.js";
 import { auditContentLibrary } from "./content-audit.js";
 import { createContentId, isContentId } from "./content-id.js";
 import {
@@ -39,8 +44,26 @@ import {
   runRecoveryDrill,
 } from "./recovery-drill.js";
 import { sanitizeArticleTitleSuggestions } from "./article-title-suggestions.js";
-import { isolatedContentSync } from "./isolated-content-sync.js";
 import {
+  cleanupContentSyncBranch,
+  contentSyncBranchName,
+  isolatedContentSync,
+  retryContentSyncPush,
+} from "./isolated-content-sync.js";
+import { partitionSyncCandidates } from "./sync-readiness.js";
+import {
+  assertFileContentVersion,
+  assertExpectedContentVersion,
+  contentSha256,
+  PublicationReceiptStore,
+  publicationReceiptState,
+} from "./publication-receipts.js";
+import { SerialTaskQueue } from "./serial-task-queue.js";
+import { GitHubPublicationFacts } from "./github-publication-facts.js";
+import { safeProcessError } from "./safe-process-error.js";
+import { resolveAuthoritativeTrashSelection } from "./trash-selection.js";
+import {
+  contentVerificationAnchors,
   contentPublicationCounts,
   publicationFromDeployment,
   publicationFromWorkflow,
@@ -66,6 +89,7 @@ const target = {
   flomoImportLedger: path.join(__dirname, "records", "flomo-imports.jsonl"),
   r2AssetLedger: path.join(__dirname, "records", "r2-assets.jsonl"),
   r2PrivateAssets: path.join(__dirname, "private-sources", "r2-assets"),
+  publicationReceipts: path.join(__dirname, "records", "publication-events.jsonl"),
   trashContent: path.join(__dirname, "trash", "content"),
   trashLedger: path.join(__dirname, "trash", "manifest.jsonl"),
 };
@@ -78,6 +102,12 @@ const localDataStore = new LocalDataStore({
     : {}),
 });
 const localContentBackup = new LocalContentBackup({ repoRoot, workflowRoot: __dirname });
+const publicationReceipts = new PublicationReceiptStore({
+  filePath: target.publicationReceipts,
+});
+const contentMutationQueue = new SerialTaskQueue();
+const contentBackupQueue = new SerialTaskQueue();
+const githubPublicationFacts = new GitHubPublicationFacts({ repoRoot });
 
 const port = Number(process.env.PORT || 8787);
 const maxBodyBytes = Number(process.env.PUBLISHER_MAX_BODY_BYTES || 50 * 1024 * 1024);
@@ -103,6 +133,8 @@ const csrfToken = randomUUID();
 const recoveryDrillStatusPath = path.join(__dirname, ".runtime", "recovery-drill.json");
 const staticAssetCache = new Map();
 let recommendationRefreshPromise = null;
+let contentBackupPushPromise = null;
+let contentBackupPushRequested = false;
 
 const mimeTypes = new Map([
   [".html", "text/html; charset=utf-8"],
@@ -150,6 +182,22 @@ function safeDisplayUrl(value) {
   }
 }
 
+function safeGitRemote(value) {
+  const remote = String(value || "").trim();
+  if (!remote) return "";
+  if (/^git@[^:]+:[^\s]+$/u.test(remote)) return remote;
+  try {
+    const url = new URL(remote);
+    url.username = "";
+    url.password = "";
+    url.search = "";
+    url.hash = "";
+    return url.toString();
+  } catch {
+    return "已配置远端";
+  }
+}
+
 async function readJson(req) {
   const chunks = [];
   let total = 0;
@@ -165,12 +213,22 @@ async function readJson(req) {
   }
 
   const raw = Buffer.concat(chunks).toString("utf8");
-  return raw ? JSON.parse(raw) : {};
+  if (!raw) return {};
+  try {
+    return JSON.parse(raw);
+  } catch {
+    const error = new Error("请求内容不是有效的 JSON。");
+    error.statusCode = 400;
+    throw error;
+  }
 }
 
-function runGit(args) {
+function runGit(args, { timeoutMs = 0 } = {}) {
   return new Promise((resolve, reject) => {
-    execFile("git", args, { cwd: repoRoot }, (error, stdout, stderr) => {
+    execFile("git", args, {
+      cwd: repoRoot,
+      ...(timeoutMs ? { timeout: timeoutMs, killSignal: "SIGTERM" } : {}),
+    }, (error, stdout, stderr) => {
       if (error) {
         error.stdout = stdout;
         error.stderr = stderr;
@@ -345,20 +403,66 @@ async function writeBufferAtomic(filePath, value) {
 async function refreshLocalIndexes(action, details = {}) {
   const warnings = [];
   try {
-    await localDataStore.rebuildAll();
+    const content = await localDataStore.syncContentIndex();
+    const trash = await localDataStore.rebuildTrashIndex();
     if (action) localDataStore.recordOperation(action, details);
+    if (!action && (content.changed || content.removed)) {
+      localDataStore.recordOperation("index_sync", { ...content, trash });
+    }
   } catch (error) {
     warnings.push(`内容文件已经保存，但本地 SQLite 索引刷新失败：${error.message}`);
   }
   try {
-    const snapshot = await localContentBackup.snapshot(`Content change: ${action || "update"}`);
-    if (snapshot.offsite?.configured && !snapshot.offsite.ok) {
-      warnings.push(`内容文件和本机私有 Git 已保存，但私有内容 GitHub 尚未同步：${snapshot.offsite.error || "请稍后重试。"}`);
-    }
+    await localContentBackup.snapshot(
+      `Content change: ${action || "update"}`,
+      { pushOffsite: false },
+    );
+    scheduleContentBackupPush();
   } catch (error) {
     warnings.push(`内容文件已经保存，但本地私有 Git 快照失败：${error.message}`);
   }
   return warnings.join("\n");
+}
+
+function scheduleContentBackupPush() {
+  contentBackupPushRequested = true;
+  if (contentBackupPushPromise) return;
+  contentBackupPushPromise = (async () => {
+    while (contentBackupPushRequested) {
+      contentBackupPushRequested = false;
+      const push = await contentBackupQueue.run(() => localContentBackup.pushOffsite());
+      if (push.configured && !push.ok) {
+        console.warn(`私有内容远端同步待重试：${push.error || "远端暂不可用。"}`);
+      }
+    }
+  })()
+    .catch((error) => {
+      console.warn(`私有内容远端同步待重试：${safeProcessError(error, {
+        fallback: "远端暂不可用。",
+        redactPaths: [repoRoot],
+      })}`);
+    })
+    .finally(() => {
+      contentBackupPushPromise = null;
+      if (contentBackupPushRequested) scheduleContentBackupPush();
+    });
+}
+
+async function appendPublicationReceiptBatch(input) {
+  const records = await publicationReceipts.appendBatch(input);
+  try {
+    await localContentBackup.snapshot(
+      `Publication receipt: ${input.state || input.action || "update"}`,
+      { pushOffsite: false },
+    );
+    scheduleContentBackupPush();
+  } catch (error) {
+    console.warn(`发布回执私有快照待修复：${safeProcessError(error, {
+      fallback: "本地私有快照失败。",
+      redactPaths: [repoRoot],
+    })}`);
+  }
+  return records;
 }
 
 function localDataStatus() {
@@ -368,7 +472,10 @@ function localDataStatus() {
     return {
       ok: false,
       database: path.relative(repoRoot, localDataStore.databasePath),
-      error: `SQLite 索引暂不可用：${error.message}`,
+      error: `SQLite 索引暂不可用：${safeProcessError(error, {
+        fallback: "数据库状态读取失败。",
+        redactPaths: [repoRoot],
+      })}`,
       recovery: "重启发布台会隔离损坏数据库并从 Markdown 自动重建。",
     };
   }
@@ -381,7 +488,10 @@ async function localContentBackupStatus() {
     return {
       ready: false,
       gitDir: path.relative(repoRoot, localContentBackup.gitDir),
-      error: `本机私有内容快照暂不可用：${error.message}`,
+      error: `本机私有内容快照暂不可用：${safeProcessError(error, {
+        fallback: "快照状态读取失败。",
+        redactPaths: [repoRoot],
+      })}`,
     };
   }
 }
@@ -531,7 +641,8 @@ async function listContent(type = "all") {
   for (const kind of kinds) {
     const directory = managedDirectory(kind);
     for (const file of await listMarkdownFiles(directory)) {
-      const parsed = parseFrontmatter(await readFile(file, "utf8"));
+      const markdown = await readFile(file, "utf8");
+      const parsed = parseFrontmatter(markdown);
       items.push({
         type: kind,
         file: path.relative(repoRoot, file),
@@ -546,6 +657,7 @@ async function listContent(type = "all") {
         publicUrl: publicContentUrl(kind, parsed.data.contentId),
         previewUrl: previewContentUrl(kind, parsed.data.contentId),
         bodyExcerpt: parsed.body.replace(/\s+/g, " ").slice(0, 140),
+        contentSha256: contentSha256(markdown),
       });
     }
   }
@@ -575,6 +687,10 @@ async function getContentWorkflowStates(items) {
   let trackedPaths = new Set();
   let aheadPaths = new Set();
   let hasUpstream = false;
+  const receipts = await publicationReceipts.latestByFileAndHash(items);
+  const remoteFacts = await githubPublicationFacts.forBranches(
+    [...receipts.values()].filter((receipt) => receipt.pushOk).map((receipt) => receipt.branch),
+  );
 
   try {
     const [status, tracked] = await Promise.all([
@@ -600,6 +716,41 @@ async function getContentWorkflowStates(items) {
     if (item.draft || (item.type === "image" && !item.public)) {
       return { ...item, workflow: workflowState("draft", "草稿", "只保存在本地内容库。") };
     }
+    const receipt = receipts.get(item.file);
+    const receiptState = publicationReceiptState(receipt);
+    if (receipt && receiptState === "push_succeeded") {
+      const remote = remoteFacts.get(receipt.branch);
+      return {
+        ...item,
+        workflow: {
+          ...workflowState(
+            "pending_deploy",
+            remote?.label || "已推送",
+            remote?.description || "当前内容版本已经进入独立内容分支，等待 PR、部署和线上核验。",
+          ),
+          syncReceipt: receipt,
+          remote,
+        },
+      };
+    }
+    if (receipt && receiptState === "prepared") {
+      return {
+        ...item,
+        workflow: {
+          ...workflowState("pending_push", "同步待恢复", "当前内容版本已提交到隔离分支，但最终推送结果尚未记录。"),
+          syncReceipt: receipt,
+        },
+      };
+    }
+    if (receipt && receiptState === "push_failed") {
+      return {
+        ...item,
+        workflow: {
+          ...workflowState("pending_push", "同步未完成", "当前内容版本已经提交到隔离分支，但远程推送失败。"),
+          syncReceipt: receipt,
+        },
+      };
+    }
     if (dirtyPaths.has(item.file) || !trackedPaths.has(item.file)) {
       return { ...item, workflow: workflowState("pending_commit", "待提交", "本地内容尚未进入 Git 记录。") };
     }
@@ -610,10 +761,26 @@ async function getContentWorkflowStates(items) {
   });
 }
 
+async function mapWithConcurrency(items, limit, mapper) {
+  const results = new Array(items.length);
+  let nextIndex = 0;
+  async function worker() {
+    while (nextIndex < items.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      results[index] = await mapper(items[index], index);
+    }
+  }
+  await Promise.all(
+    Array.from({ length: Math.min(Math.max(1, limit), items.length) }, () => worker()),
+  );
+  return results;
+}
+
 async function computeContentPublicationStates(items) {
   const workflowItems = await getContentWorkflowStates(items);
 
-  return Promise.all(workflowItems.map(async (item) => {
+  return mapWithConcurrency(workflowItems, 8, async (item) => {
     const localPublication = publicationFromWorkflow(item.workflow);
     if (item.workflow?.state !== "pending_deploy") {
       return { ...item, publication: localPublication };
@@ -626,6 +793,7 @@ async function computeContentPublicationStates(items) {
       item.summary,
       item.bodyExcerpt,
       item.pubDate,
+      item.contentSha256,
     ].join("\0");
     const cached = livePublicationCache.get(cacheKey);
     if (cached && Date.now() - cached.checkedAt < livePublicationCacheTtlMs) {
@@ -635,17 +803,9 @@ async function computeContentPublicationStates(items) {
     const filePath = resolveManagedFile(item.type, item.file);
     let deploymentPromise = livePublicationProbePromises.get(cacheKey);
     if (!deploymentPromise) {
-      deploymentPromise = verifyLiveContent(item.type, filePath, {
-        data: {
-          title: item.title,
-          summary: item.summary,
-          description: item.summary,
-          contentId: item.contentId,
-          draft: false,
-          public: true,
-        },
-        body: item.bodyExcerpt,
-      }).finally(() => livePublicationProbePromises.delete(cacheKey));
+      deploymentPromise = readFile(filePath, "utf8")
+        .then((markdown) => verifyLiveContent(item.type, filePath, parseFrontmatter(markdown)))
+        .finally(() => livePublicationProbePromises.delete(cacheKey));
       livePublicationProbePromises.set(cacheKey, deploymentPromise);
     }
     const deployment = await deploymentPromise;
@@ -656,14 +816,7 @@ async function computeContentPublicationStates(items) {
     });
     livePublicationCache.set(cacheKey, { checkedAt: Date.now(), publication });
     return { ...item, publication };
-  }));
-}
-
-async function getContentLocalPublicationStates(items) {
-  return (await getContentWorkflowStates(items)).map((item) => ({
-    ...item,
-    publication: publicationFromWorkflow(item.workflow),
-  }));
+  });
 }
 
 function publicationStateSnapshotKey(items) {
@@ -675,6 +828,7 @@ function publicationStateSnapshotKey(items) {
     item.summary,
     item.bodyExcerpt,
     item.pubDate,
+    item.contentSha256,
     item.draft,
     item.public,
   ].join("\0")).join("\n");
@@ -744,7 +898,10 @@ async function getGitStatus() {
     dirty = Boolean((await runGit(["status", "--short"])).stdout.trim());
     remote = (await runGit(["remote", "get-url", "--push", "origin"])).stdout.trim();
   } catch (error) {
-    pushError = String(error.stderr || error.stdout || "").trim();
+    pushError = safeProcessError(error, {
+      fallback: "无法读取 Git 远端状态。",
+      redactPaths: [repoRoot],
+    });
   }
 
   return { branch, dirty, remote, canPush: Boolean(remote), pushError };
@@ -783,7 +940,13 @@ async function getContentGitSafety() {
         : "",
     };
   } catch (error) {
-    return { ok: false, error: `无法检查内容 Git 状态：${error.message}` };
+    return {
+      ok: false,
+      error: `无法检查内容 Git 状态：${safeProcessError(error, {
+        fallback: "Git 状态读取失败。",
+        redactPaths: [repoRoot],
+      })}`,
+    };
   }
 }
 
@@ -802,35 +965,21 @@ function workflowState(state, label, description) {
 }
 
 async function getFileWorkflowState(type, filePath, data) {
-  if (data.draft || (type === "image" && data.public === false)) {
-    return workflowState("draft", "草稿", "只保存在本地内容库，不会进入公开站点。");
-  }
-
   const relativeFile = path.relative(repoRoot, filePath);
-  try {
-    const status = (await runGit(["status", "--short", "--", relativeFile])).stdout.trim();
-    if (status) {
-      return workflowState("pending_commit", "已发布 · 待提交", "本地站点可以预览，Git 尚未记录这次修改。");
-    }
-
-    const fileCommit = (await runGit(["log", "-1", "--format=%H", "--", relativeFile])).stdout.trim();
-    if (!fileCommit) {
-      return workflowState("pending_commit", "已发布 · 待提交", "内容文件尚未进入 Git 历史。");
-    }
-
-    const upstream = (await runGit(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"])).stdout.trim();
-    const remoteBranches = (await runGit(["branch", "-r", "--contains", fileCommit])).stdout
-      .split(/\r?\n/)
-      .map((line) => line.replace(/^[*+\s]+/, "").trim())
-      .filter(Boolean);
-    if (!remoteBranches.includes(upstream)) {
-      return workflowState("pending_push", "已提交 · 待推送", "本地已有 Git 记录，但远程分支还没有这次修改。");
-    }
-  } catch {
-    return workflowState("pending_push", "已发布 · Git 待确认", "无法确认远程是否已经包含这篇内容。");
-  }
-
-  return workflowState("pending_deploy", "已同步 · 待验证", "远程已包含这篇内容，正在核对线上页面。");
+  const markdown = await readFile(filePath, "utf8");
+  const [item] = await getContentWorkflowStates([{
+    type,
+    file: relativeFile,
+    title: String(data.title || ""),
+    summary: String(data.summary || data.description || ""),
+    contentId: String(data.contentId || ""),
+    pubDate: String(data.pubDate || ""),
+    draft: Boolean(data.draft),
+    public: data.public !== false,
+    bodyExcerpt: parseFrontmatter(markdown).body.replace(/\s+/g, " ").slice(0, 140),
+    contentSha256: contentSha256(markdown),
+  }]);
+  return item.workflow;
 }
 
 async function probeUrl(url, timeoutMs = 1200) {
@@ -881,11 +1030,11 @@ async function verifyLiveContent(type, filePath, parsed) {
     );
     const title = normalizeComparableText(parsed.data.title);
     const summary = normalizeComparableText(parsed.data.summary || parsed.data.description);
-    const bodyExcerpt = normalizeComparableText(parsed.body).slice(0, 48);
-    const matches = [title, summary, bodyExcerpt].filter(Boolean).every((value) => pageText.includes(value));
+    const bodyAnchors = contentVerificationAnchors(normalizeComparableText(parsed.body));
+    const matches = [title, summary, ...bodyAnchors].filter(Boolean).every((value) => pageText.includes(value));
     return {
       ...(matches
-        ? workflowState("live", "线上已生效", "线上页面已匹配当前标题、摘要和正文片段。")
+        ? workflowState("live", "线上已生效", "线上页面已匹配当前标题、摘要和正文首中尾关键片段。")
         : workflowState("pending_deploy", "等待线上部署", "线上地址可访问，但内容还没有匹配当前本地版本。")),
       url,
     };
@@ -1116,7 +1265,7 @@ async function importFlomoDrafts(payload) {
     article.contentId = await allocateContentId(article.pubDate);
     const filePath = path.join(target.articles, `${article.contentId}.md`);
     const prepared = await prepareArticlePublication(article, { workflowRoot: __dirname });
-    await writeFile(filePath, buildArticleMarkdown(prepared.payload), "utf8");
+    await writeTextAtomic(filePath, buildArticleMarkdown(prepared.payload));
     const relativeFile = path.relative(repoRoot, filePath);
     const importedAt = new Date().toISOString();
     const ledgerRecord = {
@@ -1797,10 +1946,20 @@ function normalizeImageAttribution(payload) {
   return { ...payload, sourceKind };
 }
 
-async function updateManagedContent(type, file, payload, { refreshIndexes = true } = {}) {
+async function updateManagedContent(
+  type,
+  file,
+  payload,
+  {
+    refreshIndexes = true,
+    expectedContentSha256 = "",
+  } = {},
+) {
   const filePath = resolveManagedFile(type, file);
   await assertGitAutomationAllowed(payload);
-  const existing = parseFrontmatter(await readFile(filePath, "utf8"));
+  const existingMarkdown = await readFile(filePath, "utf8");
+  assertExpectedContentVersion(expectedContentSha256, contentSha256(existingMarkdown));
+  const existing = parseFrontmatter(existingMarkdown);
   let markdown = "";
   let quality = null;
 
@@ -1842,7 +2001,9 @@ async function updateManagedContent(type, file, payload, { refreshIndexes = true
     markdown = buildImageMarkdown(imagePayload);
   }
 
-  await writeFile(filePath, markdown, "utf8");
+  await assertFileContentVersion(filePath, contentSha256(existingMarkdown));
+  await writeTextAtomic(filePath, markdown);
+  clearPublicationStateCaches();
   const git = payload.commit
     ? await commitAndMaybePush([filePath], `Update ${type}: ${payload.title}`, Boolean(payload.push))
     : null;
@@ -1863,6 +2024,7 @@ async function updateManagedContent(type, file, payload, { refreshIndexes = true
     publicUrl: publicContentUrl(type, parsed.data.contentId),
     previewUrl: previewContentUrl(type, parsed.data.contentId),
     workflow: await getFileWorkflowState(type, filePath, parsed.data),
+    contentSha256: contentSha256(markdown),
   };
 }
 
@@ -1994,9 +2156,20 @@ async function inspectBatchDrafts(input) {
 
   for (const item of normalizedItems) {
     try {
-      const parsed = parseFrontmatter(await readFile(item.filePath, "utf8"));
+      const markdown = await readFile(item.filePath, "utf8");
+      const parsed = parseFrontmatter(markdown);
       const isDraft = Boolean(parsed.data.draft) || (item.type === "image" && parsed.data.public === false);
-      if (!isDraft) throw new Error("只有草稿可以使用这项批量操作。");
+      if (!isDraft) {
+        results.push({
+          type: item.type,
+          file: item.file,
+          title: String(parsed.data.title || "未命名内容"),
+          eligible: false,
+          ok: true,
+          issues: [],
+        });
+        continue;
+      }
 
       const payload = {
         ...parsed.data,
@@ -2008,11 +2181,32 @@ async function inspectBatchDrafts(input) {
       const quality = item.type === "article"
         ? await checkArticleQuality(payload)
         : await checkImageQuality(payload);
+      const preparation = item.type === "article"
+        ? inspectArticleBatchPreparation(parsed.data, parsed.body)
+        : {
+          needsParagraphs: false,
+          longParagraphCount: 0,
+          longestParagraph: 0,
+          needsInternalReview: false,
+          internalNote: "",
+        };
+      const manualBlockers = quality.issues.filter((issue) => (
+        issue.level === "error"
+        && !/超过 180 字的长段落|内部复核备注尚未确认/u.test(issue.message)
+      ));
       results.push({
         type: item.type,
         file: item.file,
         title: String(parsed.data.title || "未命名内容"),
+        summary: String(parsed.data.summary || parsed.data.description || "").trim(),
+        body: parsed.body,
+        source: String(parsed.data.source || "").trim(),
+        sourceUrl: String(parsed.data.sourceUrl || "").trim(),
+        eligible: true,
         ok: quality.ok,
+        ...preparation,
+        manualBlockers,
+        contentSha256: contentSha256(markdown),
         issues: quality.issues,
       });
     } catch (error) {
@@ -2020,16 +2214,22 @@ async function inspectBatchDrafts(input) {
         type: item.type,
         file: item.file,
         title: path.basename(item.file, path.extname(item.file)),
+        eligible: true,
         ok: false,
         issues: [qualityIssue("error", error.message)],
       });
     }
   }
 
+  const eligible = results.filter((item) => item.eligible);
   return {
     total: results.length,
-    ready: results.filter((item) => item.ok).length,
-    blocked: results.filter((item) => !item.ok).length,
+    eligible: eligible.length,
+    skipped: results.length - eligible.length,
+    ready: eligible.filter((item) => item.ok).length,
+    blocked: eligible.filter((item) => !item.ok).length,
+    needsParagraphs: eligible.filter((item) => item.needsParagraphs).length,
+    needsInternalReview: eligible.filter((item) => item.needsInternalReview).length,
     warnings: results.reduce(
       (count, item) => count + item.issues.filter((issue) => issue.level === "warning").length,
       0,
@@ -2039,26 +2239,97 @@ async function inspectBatchDrafts(input) {
 }
 
 async function publishBatchDrafts(input) {
-  const inspection = await inspectBatchDrafts(input);
+  if (!Array.isArray(input.items)) {
+    const error = new Error("批量发布必须使用刚刚检查过的明确内容清单。");
+    error.statusCode = 400;
+    throw error;
+  }
+  const expectedVersions = new Map(input.items.map((item) => {
+    const filePath = resolveManagedFile(String(item?.type || ""), String(item?.file || ""));
+    const file = path.relative(repoRoot, filePath);
+    const expectedContentSha256 = String(item?.expectedContentSha256 || "");
+    if (!/^[a-f0-9]{64}$/u.test(expectedContentSha256)) {
+      const error = new Error(`缺少有效的内容版本：${file}`);
+      error.statusCode = 400;
+      throw error;
+    }
+    return [file, expectedContentSha256];
+  }));
+  const normalizedItems = await resolveBatchItems(input);
   const succeeded = [];
-  const failed = inspection.results.filter((item) => !item.ok);
+  const failed = [];
+  const skipped = [];
+  let paragraphsOrganized = 0;
+  let reviewsResolved = 0;
 
-  for (const item of inspection.results.filter((result) => result.ok)) {
+  for (const item of normalizedItems) {
+    let title = path.basename(item.file, path.extname(item.file));
     try {
-      const filePath = resolveManagedFile(item.type, item.file);
-      const parsed = parseFrontmatter(await readFile(filePath, "utf8"));
-      await updateManagedContent(item.type, item.file, {
+      const markdown = await readFile(item.filePath, "utf8");
+      assertExpectedContentVersion(
+        expectedVersions.get(item.file),
+        contentSha256(markdown),
+      );
+      const parsed = parseFrontmatter(markdown);
+      title = String(parsed.data.title || "未命名内容");
+      const isDraft = Boolean(parsed.data.draft)
+        || (item.type === "image" && parsed.data.public === false);
+      if (!isDraft) {
+        skipped.push({ type: item.type, file: item.file, title, reason: "已经处于本地发布状态。" });
+        continue;
+      }
+
+      const next = {
         ...parsed.data,
         body: parsed.body,
         draft: false,
         public: true,
         commit: false,
         push: false,
-      }, { refreshIndexes: false });
-      succeeded.push(item);
+      };
+      let itemParagraphsOrganized = false;
+      let itemReviewResolved = false;
+
+      if (item.type === "article") {
+        const longParagraphs = overlongMarkdownParagraphs(next.body);
+        if (longParagraphs.length) {
+          if (input.autoOrganizeParagraphs !== true) {
+            throw new Error("正文仍有长段落；请允许发布流程调用 AI 安全分段。");
+          }
+          const suggestion = await createArticleSuggestion(next);
+          next.body = applyBatchParagraphSuggestion(next.body, suggestion);
+          itemParagraphsOrganized = true;
+        }
+
+        if (inspectArticleBatchPreparation(next, next.body).needsInternalReview) {
+          Object.assign(next, applyBatchReviewConfirmation(next, {
+            confirmed: input.confirmInternalReview === true,
+          }));
+          itemReviewResolved = true;
+        }
+      }
+
+      const updated = await updateManagedContent(item.type, item.file, {
+        ...next,
+      }, {
+        refreshIndexes: false,
+        expectedContentSha256: contentSha256(markdown),
+      });
+      if (itemParagraphsOrganized) paragraphsOrganized += 1;
+      if (itemReviewResolved) reviewsResolved += 1;
+      succeeded.push({
+        type: item.type,
+        file: item.file,
+        title,
+        paragraphsOrganized: itemParagraphsOrganized,
+        reviewResolved: itemReviewResolved,
+        contentSha256: updated.contentSha256,
+      });
     } catch (error) {
       failed.push({
-        ...item,
+        type: item.type,
+        file: item.file,
+        title,
         ok: false,
         issues: [qualityIssue("error", error.message)],
       });
@@ -2067,15 +2338,35 @@ async function publishBatchDrafts(input) {
 
   clearPublicationStateCaches();
   const indexWarning = await refreshLocalIndexes("publish_batch", {
+    batchId: randomUUID(),
     succeeded: succeeded.length,
+    skipped: skipped.length,
     failed: failed.length,
+    paragraphsOrganized,
+    reviewsResolved,
+    files: succeeded.map((item) => ({
+      file: item.file,
+      contentSha256: item.contentSha256,
+    })),
+    errors: failed.map((item) => ({
+      file: item.file,
+      reason: item.issues?.map((issue) => issue.message).join("；") || "发布失败",
+    })),
   });
-  return { ok: true, succeeded, failed, indexWarning };
+  return {
+    ok: true,
+    succeeded,
+    skipped,
+    failed,
+    paragraphsOrganized,
+    reviewsResolved,
+    indexWarning,
+  };
 }
 
 async function transitionBatchContent(input, targetState) {
-  if (!["draft", "local"].includes(targetState)) {
-    const error = new Error("批量状态只能修改为草稿或本地发布。");
+  if (targetState !== "draft") {
+    const error = new Error("批量发布必须使用专用发布流程；通用状态切换只允许退回草稿。");
     error.statusCode = 400;
     throw error;
   }
@@ -2087,7 +2378,8 @@ async function transitionBatchContent(input, targetState) {
 
   for (const item of normalizedItems) {
     try {
-      const parsed = parseFrontmatter(await readFile(item.filePath, "utf8"));
+      const markdown = await readFile(item.filePath, "utf8");
+      const parsed = parseFrontmatter(markdown);
       const isDraft = Boolean(parsed.data.draft) || (item.type === "image" && parsed.data.public === false);
       if ((targetState === "draft" && isDraft) || (targetState === "local" && !isDraft)) {
         skipped.push({
@@ -2098,18 +2390,22 @@ async function transitionBatchContent(input, targetState) {
         continue;
       }
 
-      await updateManagedContent(item.type, item.file, {
+      const updated = await updateManagedContent(item.type, item.file, {
         ...parsed.data,
         body: parsed.body,
         draft: targetState === "draft",
         public: targetState === "local",
         commit: false,
         push: false,
-      }, { refreshIndexes: false });
+      }, {
+        refreshIndexes: false,
+        expectedContentSha256: contentSha256(markdown),
+      });
       succeeded.push({
         type: item.type,
         file: item.file,
         title: String(parsed.data.title || "未命名内容"),
+        contentSha256: updated.contentSha256,
       });
     } catch (error) {
       failed.push({
@@ -2123,10 +2419,16 @@ async function transitionBatchContent(input, targetState) {
 
   clearPublicationStateCaches();
   const indexWarning = await refreshLocalIndexes("transition_batch", {
+    batchId: randomUUID(),
     targetState,
     succeeded: succeeded.length,
     skipped: skipped.length,
     failed: failed.length,
+    files: succeeded.map((item) => ({
+      file: item.file,
+      contentSha256: item.contentSha256,
+    })),
+    errors: failed.map((item) => ({ file: item.file, reason: item.error })),
   });
   return { ok: true, target: targetState, succeeded, skipped, failed, indexWarning };
 }
@@ -2174,18 +2476,23 @@ async function updateBatchMetadata(input, changes) {
 
   for (const item of normalizedItems) {
     try {
-      const parsed = parseFrontmatter(await readFile(item.filePath, "utf8"));
+      const markdown = await readFile(item.filePath, "utf8");
+      const parsed = parseFrontmatter(markdown);
       const data = applyMetadataChanges(parsed.data, changes);
-      await updateManagedContent(item.type, item.file, {
+      const updated = await updateManagedContent(item.type, item.file, {
         ...data,
         body: parsed.body,
         commit: false,
         push: false,
-      }, { refreshIndexes: false });
+      }, {
+        refreshIndexes: false,
+        expectedContentSha256: contentSha256(markdown),
+      });
       succeeded.push({
         type: item.type,
         file: item.file,
         title: String(data.title || "未命名内容"),
+        contentSha256: updated.contentSha256,
       });
     } catch (error) {
       failed.push({
@@ -2199,9 +2506,15 @@ async function updateBatchMetadata(input, changes) {
 
   clearPublicationStateCaches();
   const indexWarning = await refreshLocalIndexes("metadata_batch", {
+    batchId: randomUUID(),
     fields: Object.keys(changes),
     succeeded: succeeded.length,
     failed: failed.length,
+    files: succeeded.map((item) => ({
+      file: item.file,
+      contentSha256: item.contentSha256,
+    })),
+    errors: failed.map((item) => ({ file: item.file, reason: item.error })),
   });
   return { ok: true, succeeded, failed, indexWarning };
 }
@@ -2212,40 +2525,94 @@ function githubCompareUrl(remote, branch) {
   return `https://github.com/${match[1]}/${match[2]}/compare/main...${encodeURIComponent(branch)}?expand=1`;
 }
 
-async function syncBatchContent(input) {
-  const normalizedItems = await resolveBatchItems(input);
+function syncQueueFrom(publicationItems, auditItems) {
+  const localCandidates = publicationItems
+    .filter((item) => matchesContentStatus(item, "local"))
+    .map((item) => ({
+      type: item.type,
+      file: item.file,
+      title: item.title,
+      pubDate: item.pubDate,
+      workflow: item.workflow,
+    }));
+  const retryItems = localCandidates.filter((item) => (
+    item.workflow?.state === "pending_push" && item.workflow?.syncReceipt
+  ));
+  const retryFiles = new Set(retryItems.map((item) => item.file));
+  const { ready, needsAttention } = partitionSyncCandidates(
+    localCandidates.filter((item) => !retryFiles.has(item.file)),
+    auditItems,
+  );
+  needsAttention.push(...retryItems.map((item) => ({
+    ...item,
+    auditStatus: "retry",
+    blockers: [],
+    warnings: [],
+    reason: "上次推送失败，请从内容详情重试原内容分支。",
+  })));
+  return {
+    counts: {
+      total: localCandidates.length,
+      ready: ready.length,
+      attention: needsAttention.length,
+    },
+    items: ready,
+    needsAttention,
+  };
+}
+
+async function inspectSyncReadiness(normalizedItems) {
   const eligible = [];
   const skipped = [];
 
   for (const item of normalizedItems) {
-    const parsed = parseFrontmatter(await readFile(item.filePath, "utf8"));
+    const markdown = await readFile(item.filePath, "utf8");
+    const parsed = parseFrontmatter(markdown);
     const isDraft = Boolean(parsed.data.draft) || (item.type === "image" && parsed.data.public === false);
     const descriptor = {
       type: item.type,
       file: item.file,
       title: String(parsed.data.title || "未命名内容"),
+      contentId: String(parsed.data.contentId || ""),
+      contentSha256: contentSha256(markdown),
     };
     if (isDraft) skipped.push({ ...descriptor, reason: "草稿不会同步到公开站点。" });
     else eligible.push({ ...descriptor, filePath: item.filePath });
   }
 
-  if (!eligible.length) {
-    const error = new Error("所选内容中没有可以同步的本地已发布内容。");
-    error.statusCode = 422;
-    throw error;
-  }
+  const audit = eligible.length ? await auditContentLibrary({ repoRoot }) : { items: [] };
+  const { ready, needsAttention } = partitionSyncCandidates(eligible, audit.items);
+  return {
+    ready,
+    needsAttention,
+    skipped: [
+      ...skipped,
+      ...needsAttention.map(({ filePath, ...item }) => item),
+    ],
+  };
+}
 
-  const audit = await auditContentLibrary({ repoRoot });
-  const auditByFile = new Map(audit.items.map((item) => [item.file, item]));
-  const needsReview = eligible
-    .map((item) => auditByFile.get(item.file))
-    .filter((item) => item && item.status !== "ready");
-  if (needsReview.length) {
-    const error = new Error(`${needsReview.length} 条内容未通过上线体检，已停止同步。`);
+async function inspectBatchSync(input) {
+  const normalizedItems = await resolveBatchItems(input);
+  const readiness = await inspectSyncReadiness(normalizedItems);
+  return {
+    total: normalizedItems.length,
+    ready: readiness.ready.length,
+    attention: readiness.needsAttention.length,
+    skipped: readiness.skipped.length - readiness.needsAttention.length,
+    needsAttention: readiness.needsAttention.map(({ filePath, ...item }) => item),
+  };
+}
+
+async function syncBatchContent(input) {
+  const normalizedItems = await resolveBatchItems(input);
+  const readiness = await inspectSyncReadiness(normalizedItems);
+  if (!readiness.ready.length) {
+    const error = new Error("所选内容中没有通过上线体检的内容。");
     error.statusCode = 422;
-    error.detail = needsReview
+    error.detail = readiness.skipped
       .slice(0, 8)
-      .map((item) => `${item.title}：${[...item.blockers, ...item.warnings].join("；")}`)
+      .map((item) => `${item.title}：${item.reason}`)
       .join("\n");
     throw error;
   }
@@ -2257,29 +2624,185 @@ async function syncBatchContent(input) {
     throw error;
   }
 
+  const latestReceipts = await publicationReceipts.latestByFileAndHash(readiness.ready);
+  const alreadyPushed = readiness.ready.filter((item) => (
+    publicationReceiptState(latestReceipts.get(item.file)) === "push_succeeded"
+  ));
+  const failedPrevious = readiness.ready.filter((item) => {
+    const receipt = latestReceipts.get(item.file);
+    return receipt && publicationReceiptState(receipt) !== "push_succeeded";
+  });
+  const syncable = readiness.ready.filter((item) => !latestReceipts.has(item.file));
+  if (!syncable.length) {
+    if (failedPrevious.length) {
+      const error = new Error("所选内容存在失败的同步分支，请从内容详情执行“重新同步”。");
+      error.statusCode = 409;
+      throw error;
+    }
+    return {
+      ok: true,
+      reused: alreadyPushed.map(({ filePath, ...item }) => item),
+      synced: [],
+      skipped: readiness.skipped,
+      branch: latestReceipts.get(alreadyPushed[0].file)?.branch || "",
+      commitSha: latestReceipts.get(alreadyPushed[0].file)?.commitSha || "",
+      push: { attempted: false, ok: true, error: "" },
+      compareUrl: githubCompareUrl(git.remote, latestReceipts.get(alreadyPushed[0].file)?.branch),
+    };
+  }
+
+  const branch = contentSyncBranchName();
+  let preparedReceipts = [];
   const sync = await isolatedContentSync({
     repoRoot,
-    files: eligible.map((item) => item.file),
-    message: `Sync ${eligible.length} content item${eligible.length === 1 ? "" : "s"}`,
+    files: syncable.map((item) => item.file),
+    message: `Sync ${syncable.length} content item${syncable.length === 1 ? "" : "s"}`,
+    branch,
+    expectedContentSha256: Object.fromEntries(
+      syncable.map((item) => [item.file, item.contentSha256]),
+    ),
+    onPrepared: async ({ commitSha }) => {
+      preparedReceipts = await appendPublicationReceiptBatch({
+        action: "sync",
+        state: "prepared",
+        branch,
+        commitSha,
+        push: { attempted: false, ok: false, error: "" },
+        items: syncable,
+      });
+    },
   });
+  const receipts = await appendPublicationReceiptBatch({
+    action: "sync",
+    state: sync.push.ok ? "push_succeeded" : "push_failed",
+    branch: sync.branch,
+    commitSha: sync.commitSha,
+    push: sync.push,
+    items: syncable,
+    batchId: preparedReceipts[0]?.batchId,
+  });
+  if (sync.push.ok) {
+    await cleanupContentSyncBranch({ repoRoot, branch: sync.branch });
+  }
+  clearPublicationStateCaches();
   const result = {
     ok: sync.push.ok,
     branch: sync.branch,
-    synced: eligible.map(({ filePath, ...item }) => item),
-    skipped,
+    synced: syncable.map(({ filePath, ...item }) => item),
+    reused: alreadyPushed.map(({ filePath, ...item }) => item),
+    skipped: [
+      ...readiness.skipped,
+      ...failedPrevious.map(({ filePath, ...item }) => ({
+        ...item,
+        reason: "上次推送失败，请重试原内容分支。",
+      })),
+    ],
     commitSha: sync.commitSha,
     push: sync.push,
+    receipts,
     compareUrl: githubCompareUrl(git.remote, sync.branch),
   };
   localDataStore.recordOperation("sync_content", {
+    batchId: receipts[0]?.batchId || randomUUID(),
     branch: sync.branch,
-    count: eligible.length,
-    files: eligible.map((item) => item.file),
+    count: syncable.length,
+    reused: alreadyPushed.length,
+    skipped: readiness.skipped.length + failedPrevious.length,
+    files: syncable.map((item) => ({
+      file: item.file,
+      contentSha256: item.contentSha256,
+    })),
     commitSha: sync.commitSha,
     pushOk: Boolean(sync.push.ok),
     compareUrl: result.compareUrl,
   });
   return result;
+}
+
+async function retryFailedContentSync(input) {
+  const normalizedItems = await resolveBatchItems(input);
+  const selected = [];
+  for (const item of normalizedItems) {
+    const markdown = await readFile(item.filePath, "utf8");
+    const parsed = parseFrontmatter(markdown);
+    selected.push({
+      ...item,
+      title: String(parsed.data.title || "未命名内容"),
+      contentId: String(parsed.data.contentId || ""),
+      contentSha256: contentSha256(markdown),
+    });
+  }
+  const receipts = await publicationReceipts.latestByFileAndHash(selected);
+  const failed = selected.map((item) => ({
+    item,
+    receipt: receipts.get(item.file),
+  })).filter(({ receipt }) => (
+    receipt && publicationReceiptState(receipt) !== "push_succeeded"
+  ));
+  if (!failed.length) {
+    const error = new Error("当前内容版本没有可重试的失败同步记录。");
+    error.statusCode = 409;
+    throw error;
+  }
+  const branches = [...new Set(failed.map(({ receipt }) => receipt.branch))];
+  if (branches.length !== 1 || failed.length !== selected.length) {
+    const error = new Error("一次只能重试属于同一个失败内容分支的选择。");
+    error.statusCode = 409;
+    throw error;
+  }
+  const batchReceipts = await publicationReceipts.batchForReceipt(failed[0].receipt);
+  const current = [];
+  for (const receipt of batchReceipts) {
+    const type = receipt.file.startsWith("site/src/content/articles/") ? "article" : "image";
+    const filePath = resolveManagedFile(type, receipt.file);
+    const markdown = await readFile(filePath, "utf8");
+    const currentSha256 = contentSha256(markdown);
+    if (currentSha256 !== receipt.contentSha256) {
+      const error = new Error(`失败分支中的内容已经变化，不能重试：${receipt.file}`);
+      error.statusCode = 409;
+      throw error;
+    }
+    current.push({
+      type,
+      file: receipt.file,
+      filePath,
+      contentId: receipt.contentId,
+      contentSha256: currentSha256,
+    });
+  }
+  const sync = await retryContentSyncPush({
+    repoRoot,
+    branch: branches[0],
+  });
+  const recorded = await appendPublicationReceiptBatch({
+    action: "retry",
+    state: sync.push.ok ? "push_succeeded" : "push_failed",
+    branch: sync.branch,
+    commitSha: sync.commitSha,
+    push: sync.push,
+    items: current,
+  });
+  if (sync.push.ok) {
+    await cleanupContentSyncBranch({ repoRoot, branch: sync.branch });
+  }
+  clearPublicationStateCaches();
+  localDataStore.recordOperation("sync_retry", {
+    batchId: recorded[0]?.batchId || randomUUID(),
+    branch: sync.branch,
+    commitSha: sync.commitSha,
+    pushOk: Boolean(sync.push.ok),
+    files: current.map((item) => ({
+      file: item.file,
+      contentSha256: item.contentSha256,
+    })),
+  });
+  return {
+    ok: sync.push.ok,
+    branch: sync.branch,
+    commitSha: sync.commitSha,
+    push: sync.push,
+    receipts: recorded,
+  };
 }
 
 async function trashBatchDrafts(input) {
@@ -2361,15 +2884,15 @@ async function trashBatchDrafts(input) {
 }
 
 async function restoreBatchDrafts(items) {
-  if (!Array.isArray(items) || items.length === 0 || items.length > 500) {
-    const error = new Error("没有可以恢复的内容。");
-    error.statusCode = 400;
-    throw error;
-  }
+  await localDataStore.rebuildTrashIndex();
+  const authoritativeItems = resolveAuthoritativeTrashSelection(
+    items,
+    localDataStore.listTrashItems(),
+  );
 
   const succeeded = [];
   const failed = [];
-  for (const item of items) {
+  for (const item of authoritativeItems) {
     try {
       const originalPath = resolveManagedFile(String(item?.type || ""), String(item?.file || ""));
       const trashPath = path.resolve(repoRoot, String(item?.trashFile || ""));
@@ -2449,15 +2972,15 @@ async function purgeTrashItems(items, confirmation) {
     error.statusCode = 400;
     throw error;
   }
-  if (!Array.isArray(items) || items.length === 0 || items.length > 500) {
-    const error = new Error("没有可以永久删除的回收站内容。");
-    error.statusCode = 400;
-    throw error;
-  }
+  await localDataStore.rebuildTrashIndex();
+  const authoritativeItems = resolveAuthoritativeTrashSelection(
+    items,
+    localDataStore.listTrashItems(),
+  );
 
   const succeeded = [];
   const failed = [];
-  for (const item of items) {
+  for (const item of authoritativeItems) {
     try {
       const trashPath = path.resolve(repoRoot, String(item?.trashFile || ""));
       const metadataPath = path.resolve(repoRoot, String(item?.metadataFile || `${trashPath}.meta.json`));
@@ -2520,11 +3043,14 @@ async function commitAndMaybePush(files, message, shouldPush) {
       const hasUpstream = await runGit(["rev-parse", "--verify", "@{upstream}"])
         .then(() => true)
         .catch(() => false);
-      if (hasUpstream) await runGit(["push"]);
-      else await runGit(["push", "-u", "origin", branch]);
+      if (hasUpstream) await runGit(["push"], { timeoutMs: 60_000 });
+      else await runGit(["push", "-u", "origin", branch], { timeoutMs: 60_000 });
       push.ok = true;
     } catch (error) {
-      push.error = String(error.stderr || error.stdout || error.message || "推送失败。").trim();
+      push.error = safeProcessError(error, {
+        fallback: "推送失败。",
+        redactPaths: [repoRoot],
+      });
     }
   }
 
@@ -2600,6 +3126,7 @@ async function handleApi(req, res) {
       contentSafety,
       localContentHistory,
       publicationItems,
+      contentAudit,
       recommendations,
     ] = await Promise.all([
       getGitStatus(),
@@ -2607,16 +3134,18 @@ async function handleApi(req, res) {
       getContentGitSafety(),
       localContentBackupStatus(),
       listContent("all").then((items) => getContentPublicationStates(items)),
+      auditContentLibrary({ repoRoot }),
       recommendationStatusForApi(),
     ]);
     sendJson(res, 200, {
       repoRoot,
       branch: git.branch,
       hasUncommittedChanges: git.dirty,
-      git,
+      git: { ...git, remote: safeGitRemote(git.remote) },
       gitCompareUrl: githubCompareUrl(git.remote, git.branch),
       contentSafety,
       publicationCounts: contentStatusCounts(publicationItems),
+      syncQueue: syncQueueFrom(publicationItems, contentAudit.items),
       localContentHistory,
       services: {
         publisher: { available: true, url: `http://127.0.0.1:${port}` },
@@ -2670,15 +3199,36 @@ async function handleApi(req, res) {
       readRecoveryDrillStatus(recoveryDrillStatusPath),
       reconcileR2Assets({ repoRoot }),
     ]);
+    const localData = localDataStatus();
+    const latestBackup = backups[0] || null;
+    const recoveryMatchesCurrent = Boolean(
+      recoveryDrill.ok
+      && recoveryDrill.content === localData.content
+      && recoveryDrill.trash === localData.trash
+      && recoveryDrill.sourceFingerprint === localDataStore.getRecoveryFingerprint()
+      && recoveryDrill.runtimeVersion === runtimeVersion,
+    );
+    const backupFresh = Boolean(
+      latestBackup
+      && localData.lastMutationAt
+      && Date.parse(latestBackup.modifiedAt) >= Date.parse(localData.lastMutationAt),
+    );
     sendJson(res, 200, {
       generatedAt: new Date().toISOString(),
-      localData: localDataStatus(),
+      localData,
       contentHistory,
       sqliteBackups: {
         count: backups.length,
-        latest: backups[0] || null,
+        latest: latestBackup,
+        fresh: backupFresh,
+        databaseModifiedAt: localData.lastMutationAt,
       },
-      recoveryDrill,
+      recoveryDrill: {
+        ...recoveryDrill,
+        fresh: recoveryMatchesCurrent,
+        currentContent: localData.content,
+        currentTrash: localData.trash,
+      },
       r2: {
         ok: r2.ok,
         counts: r2.counts,
@@ -2693,6 +3243,7 @@ async function handleApi(req, res) {
       repoRoot,
       workflowRoot: __dirname,
       statusPath: recoveryDrillStatusPath,
+      runtimeVersion,
     });
     localDataStore.recordOperation("recovery_drill", {
       ok: result.ok,
@@ -2797,6 +3348,7 @@ async function handleApi(req, res) {
       items: localDataStore.listOperations({
         action: requestUrl.searchParams.get("action") || "",
         limit: requestUrl.searchParams.get("limit") || 20,
+        scope: requestUrl.searchParams.get("scope") === "all" ? "all" : "user",
       }),
     });
     return;
@@ -2805,8 +3357,9 @@ async function handleApi(req, res) {
   if (pathname === "/api/storage/backup" && req.method === "POST") {
     const [backupPath, contentHistory] = await Promise.all([
       localDataStore.createBackup(),
-      localContentBackup.snapshot("Manual safety backup"),
+      localContentBackup.snapshot("Manual safety backup", { pushOffsite: false }),
     ]);
+    scheduleContentBackupPush();
     sendJson(res, 200, {
       ok: true,
       backup: path.relative(repoRoot, backupPath),
@@ -2818,19 +3371,26 @@ async function handleApi(req, res) {
 
   if (pathname === "/api/storage/content-history/sync" && req.method === "POST") {
     await readJson(req);
-    const contentHistory = await localContentBackup.snapshot("Manual private content GitHub sync");
+    await contentMutationQueue.run(
+      () => localContentBackup.snapshot(
+        "Manual private content GitHub sync",
+        { pushOffsite: false },
+      ),
+    );
+    const push = await contentBackupQueue.run(() => localContentBackup.pushOffsite());
+    const contentHistory = await localContentBackup.status();
     sendJson(res, 200, {
-      ok: Boolean(contentHistory.ready && contentHistory.offsite?.ok),
+      ok: Boolean(contentHistory.ready && push.ok && contentHistory.offsite?.ok),
       contentHistory,
-      error: contentHistory.offsite?.ok
+      error: push.ok && contentHistory.offsite?.ok
         ? ""
-        : contentHistory.offsite?.error || "私有内容 GitHub 同步失败。",
+        : push.error || contentHistory.offsite?.error || "私有内容 GitHub 同步失败。",
     });
     return;
   }
 
   if (pathname === "/api/trash" && req.method === "GET") {
-    await localDataStore.rebuildTrashIndex();
+    await contentMutationQueue.run(() => localDataStore.rebuildTrashIndex());
     sendJson(res, 200, {
       items: localDataStore.listTrashItems(),
       status: localDataStore.getStatus(),
@@ -2843,25 +3403,10 @@ async function handleApi(req, res) {
     return;
   }
 
-  if (pathname === "/api/git/push" && req.method === "POST") {
-    const status = await getGitStatus();
-    if (!status.canPush) {
-      sendJson(res, 200, { ok: false, error: "尚未配置远程仓库，无法推送。", git: status });
-      return;
-    }
-    try {
-      await runGit(["push"]);
-      sendJson(res, 200, { ok: true, git: await getGitStatus() });
-    } catch (error) {
-      sendJson(res, 200, { ok: false, error: String(error.stderr || error.stdout || error.message || "推送失败。"), git: await getGitStatus() });
-    }
-    return;
-  }
-
   if (pathname === "/api/content" && req.method === "GET") {
     let indexWarning = "";
     try {
-      await localDataStore.syncContentIndex();
+      await contentMutationQueue.run(() => localDataStore.syncContentIndex());
     } catch (error) {
       indexWarning = `SQLite 增量索引刷新失败，当前使用最近一次可用索引：${error.message}`;
     }
@@ -2877,7 +3422,7 @@ async function handleApi(req, res) {
       publicUrl: publicContentUrl(item.type, item.contentId),
       previewUrl: previewContentUrl(item.type, item.contentId),
     }));
-    const searchableItems = await getContentLocalPublicationStates(indexedItems);
+    const searchableItems = await getContentPublicationStates(indexedItems);
     const counts = contentStatusCounts(searchableItems);
     const filteredItems = searchableItems.filter((item) => matchesContentStatus(item, status));
     const sortedItems = filteredItems;
@@ -2905,7 +3450,8 @@ async function handleApi(req, res) {
   if (pathname === "/api/content/read" && req.method === "GET") {
     const type = requestUrl.searchParams.get("type");
     const filePath = resolveManagedFile(type, requestUrl.searchParams.get("file"));
-    const parsed = parseFrontmatter(await readFile(filePath, "utf8"));
+    const markdown = await readFile(filePath, "utf8");
+    const parsed = parseFrontmatter(markdown);
     sendJson(res, 200, {
       type,
       file: path.relative(repoRoot, filePath),
@@ -2915,6 +3461,7 @@ async function handleApi(req, res) {
         : parsed.body,
       publicUrl: publicContentUrl(type, parsed.data.contentId),
       previewUrl: previewContentUrl(type, parsed.data.contentId),
+      contentSha256: contentSha256(markdown),
       workflow: await getFileWorkflowState(type, filePath, parsed.data),
     });
     return;
@@ -2980,7 +3527,17 @@ async function handleApi(req, res) {
 
   if (pathname === "/api/content/update" && req.method === "POST") {
     const payload = await readJson(req);
-    sendJson(res, 200, await updateManagedContent(payload.type, payload.file, payload.data || {}));
+    if (!/^[a-f0-9]{64}$/u.test(String(payload.expectedContentSha256 || ""))) {
+      const error = new Error("缺少有效的内容版本，请重新打开内容后再保存。");
+      error.statusCode = 400;
+      throw error;
+    }
+    sendJson(res, 200, await updateManagedContent(
+      payload.type,
+      payload.file,
+      payload.data || {},
+      { expectedContentSha256: payload.expectedContentSha256 },
+    ));
     return;
   }
 
@@ -2994,6 +3551,10 @@ async function handleApi(req, res) {
     const payload = await readJson(req);
     if (payload.action === "inspect-selection") {
       sendJson(res, 200, await inspectBatchSelection(payload));
+      return;
+    }
+    if (payload.action === "inspect-sync") {
+      sendJson(res, 200, await inspectBatchSync(payload));
       return;
     }
     if (payload.action === "inspect-publish") {
@@ -3014,6 +3575,10 @@ async function handleApi(req, res) {
     }
     if (payload.action === "sync") {
       sendJson(res, 200, await syncBatchContent(payload));
+      return;
+    }
+    if (payload.action === "retry-sync") {
+      sendJson(res, 200, await retryFailedContentSync(payload));
       return;
     }
     if (payload.action === "trash") {
@@ -3113,7 +3678,9 @@ async function handleApi(req, res) {
     payload.contentId = await allocateContentId(payload.pubDate || todayIso());
     const filePath = path.join(target.articles, `${payload.contentId}.md`);
     const prepared = await prepareArticlePublication(payload, { workflowRoot: __dirname });
-    await writeFile(filePath, buildArticleMarkdown(prepared.payload), "utf8");
+    const markdown = buildArticleMarkdown(prepared.payload);
+    await writeTextAtomic(filePath, markdown);
+    clearPublicationStateCaches();
 
     const git = payload.commit
       ? await commitAndMaybePush([filePath], `Add article: ${payload.title}`, Boolean(payload.push))
@@ -3133,6 +3700,7 @@ async function handleApi(req, res) {
       publicUrl: publicContentUrl("article", payload.contentId),
       previewUrl: previewContentUrl("article", payload.contentId),
       workflow: await getFileWorkflowState("article", filePath, prepared.payload),
+      contentSha256: contentSha256(markdown),
     });
     return;
   }
@@ -3201,6 +3769,7 @@ async function handleApi(req, res) {
         objectKey: r2Upload?.objectKey,
       });
       await writeTextAtomic(entryPath, entryMarkdown);
+      clearPublicationStateCaches();
     } catch (error) {
       if (assetPath) await unlink(assetPath).catch(() => {});
       throw new Error(
@@ -3239,6 +3808,7 @@ async function handleApi(req, res) {
       duplicates,
       indexWarning,
       previewUrl: previewContentUrl("image", payload.contentId),
+      contentSha256: contentSha256(entryMarkdown),
     });
     return;
   }
@@ -3275,7 +3845,9 @@ async function serveStatic(req, res) {
     const ext = path.extname(filePath);
     const headers = {
       "content-type": mimeTypes.get(ext) || "application/octet-stream",
-      "cache-control": ext === ".html" ? "no-cache" : "public, max-age=3600, must-revalidate",
+      "cache-control": [".html", ".js", ".css"].includes(ext)
+        ? "no-cache"
+        : "public, max-age=3600, must-revalidate",
       etag: asset.etag,
       "last-modified": new Date(fileStat.mtimeMs).toUTCString(),
       vary: "Accept-Encoding",
@@ -3312,15 +3884,23 @@ if (publisherTestMode) {
     files: 0,
   };
 } else try {
-  contentBackupStatus = await localContentBackup.snapshot("Publisher startup safety snapshot");
+  contentBackupStatus = await localContentBackup.snapshot(
+    "Publisher startup safety snapshot",
+    { pushOffsite: false },
+  );
+  scheduleContentBackupPush();
 } catch (error) {
+  const safeError = safeProcessError(error, {
+    fallback: "本机私有内容快照创建失败。",
+    redactPaths: [repoRoot],
+  });
   contentBackupStatus = {
     ready: false,
     gitDir: path.relative(repoRoot, localContentBackup.gitDir),
     files: 0,
-    error: error.message,
+    error: safeError,
   };
-  console.warn(`本机私有内容快照创建失败：${error.message}`);
+  console.warn(`本机私有内容快照创建失败：${safeError}`);
 }
 if (storageStatus.recovery?.recovered) {
   console.warn(`SQLite 已自动重建；损坏文件已隔离到 ${storageStatus.recovery.quarantinePath || "本地隔离区"}`);
@@ -3340,15 +3920,36 @@ const server = createServer(async (req, res) => {
     }
 
     if (req.url?.startsWith("/api/")) {
-      await handleApi(req, res);
+      const pathname = new URL(req.url, `http://localhost:${port}`).pathname;
+      const serializedMutation = req.method === "POST"
+        && !pathname.startsWith("/api/ai/")
+        && !pathname.startsWith("/api/quality/")
+        && !pathname.startsWith("/api/check/")
+        && pathname !== "/api/import/flomo/inspect"
+        && pathname !== "/api/storage/content-history/sync";
+      if (serializedMutation) {
+        await contentMutationQueue.run(() => handleApi(req, res));
+      } else {
+        await handleApi(req, res);
+      }
       return;
     }
 
     await serveStatic(req, res);
   } catch (error) {
+    const safeError = safeProcessError(error, {
+      fallback: "Server error",
+      redactPaths: [repoRoot],
+    });
     sendJson(res, error.statusCode || 500, {
-      error: error.message || "Server error",
-      detail: error.detail || error.stderr || error.stdout || "",
+      error: error.detail ? safeProcessError(error.message, {
+        fallback: "请求失败。",
+        redactPaths: [repoRoot],
+      }) : safeError,
+      detail: error.detail ? safeProcessError(error.detail, {
+        fallback: "",
+        redactPaths: [repoRoot],
+      }) : "",
     });
   }
 });

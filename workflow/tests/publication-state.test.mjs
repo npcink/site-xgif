@@ -1,10 +1,26 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  contentVerificationAnchors,
   contentPublicationCounts,
   publicationFromDeployment,
   publicationFromWorkflow,
 } from "../publication-state.js";
+
+test("content verification anchors cover the start, middle, and end of long content", () => {
+  const content = `${"a".repeat(60)}${"b".repeat(60)}${"c".repeat(60)}`;
+  const anchors = contentVerificationAnchors(content, 20);
+
+  assert.deepEqual(anchors, [
+    "a".repeat(20),
+    "b".repeat(20),
+    "c".repeat(20),
+  ]);
+});
+
+test("content verification anchors keep short content as one exact anchor", () => {
+  assert.deepEqual(contentVerificationAnchors("short content", 48), ["short content"]);
+});
 
 test("content lists derive publication progress without waiting for live verification", () => {
   assert.deepEqual(publicationFromWorkflow({ state: "draft" }), {

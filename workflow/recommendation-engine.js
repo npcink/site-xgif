@@ -316,6 +316,13 @@ export async function getRecommendationStatus({
     || covered !== total
   );
   const mode = manifest?.mode === "hybrid" ? "hybrid" : manifest ? "rules" : "missing";
+  const fallbackCode = String(manifest?.generation?.fallbackCode || "");
+  const degraded = Boolean(
+    manifest
+    && mode === "rules"
+    && embeddingConfig?.available
+    && (fallbackCode || !manifest.generation),
+  );
 
   return {
     available: Boolean(manifest),
@@ -328,6 +335,9 @@ export async function getRecommendationStatus({
     total,
     covered,
     stale,
+    degraded,
+    fallbackCode,
+    lastAttemptAt: manifest?.generation?.attemptedAt || manifest?.generatedAt || null,
     embeddingConfigured: Boolean(embeddingConfig?.available),
     embeddingModel: embeddingConfig?.model || null,
     configurationCode: (
@@ -419,6 +429,7 @@ export function buildRecommendationManifest(
     mode = "rules",
     model = null,
     generatedAt = new Date().toISOString(),
+    generation = {},
   } = {},
 ) {
   const articles = documents.filter((document) => document.type === "article");
@@ -499,6 +510,11 @@ export function buildRecommendationManifest(
       model: mode === "hybrid" ? model : null,
       dimensions,
     },
+    generation: {
+      fallbackCode: String(generation.fallbackCode || ""),
+      requestedModel: String(generation.requestedModel || model || ""),
+      attemptedAt: String(generation.attemptedAt || generatedAt),
+    },
     recommendations,
   };
 }
@@ -572,7 +588,13 @@ export async function generateRecommendationManifest({
   } catch (error) {
     if (requireEmbeddings) throw error;
     return {
-      manifest: buildRecommendationManifest(documents, { generatedAt }),
+      manifest: buildRecommendationManifest(documents, {
+        generatedAt,
+        generation: {
+          fallbackCode: error.code || "EMBEDDING_CONFIG_INVALID",
+          attemptedAt: generatedAt,
+        },
+      }),
       summary: {
         mode: "rules",
         documents: documents.length,
@@ -591,7 +613,14 @@ export async function generateRecommendationManifest({
       );
     }
     return {
-      manifest: buildRecommendationManifest(documents, { generatedAt }),
+      manifest: buildRecommendationManifest(documents, {
+        generatedAt,
+        generation: {
+          fallbackCode: rulesOnly ? "" : "EMBEDDING_CONFIG_UNAVAILABLE",
+          requestedModel: config.model,
+          attemptedAt: generatedAt,
+        },
+      }),
       summary: {
         mode: "rules",
         documents: documents.length,
@@ -610,6 +639,10 @@ export async function generateRecommendationManifest({
         mode: "hybrid",
         model: config.model,
         generatedAt,
+        generation: {
+          requestedModel: config.model,
+          attemptedAt: generatedAt,
+        },
       }),
       summary: {
         mode: "hybrid",
@@ -624,7 +657,14 @@ export async function generateRecommendationManifest({
   } catch (error) {
     if (requireEmbeddings) throw error;
     return {
-      manifest: buildRecommendationManifest(documents, { generatedAt }),
+      manifest: buildRecommendationManifest(documents, {
+        generatedAt,
+        generation: {
+          fallbackCode: error.code || "EMBEDDING_REQUEST_FAILED",
+          requestedModel: config.model,
+          attemptedAt: generatedAt,
+        },
+      }),
       summary: {
         mode: "rules",
         documents: documents.length,
@@ -644,7 +684,7 @@ export async function refreshRecommendationManifest({
   force = false,
 } = {}) {
   const before = await getRecommendationStatus({ repoRoot, env });
-  if (!force && before.available && !before.stale) {
+  if (!force && before.available && !before.stale && !before.degraded) {
     return {
       unchanged: true,
       summary: {

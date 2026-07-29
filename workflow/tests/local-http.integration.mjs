@@ -78,7 +78,7 @@ try {
   });
   assert.equal(staticAsset.status, 200);
   assert.equal(staticAsset.headers["content-encoding"], "br");
-  assert.match(staticAsset.headers["cache-control"], /max-age=3600/);
+  assert.match(staticAsset.headers["cache-control"], /no-cache/);
   assert.ok(staticAsset.headers.etag);
   assert.ok(staticAsset.rawBody.byteLength > 0);
   const unchangedAsset = await call({
@@ -121,6 +121,19 @@ try {
     body: "{}",
   });
   assert.equal(validCsrf.status, 404);
+
+  const malformedJson = await call({
+    method: "POST",
+    pathname: "/api/ai/article-title-suggestions",
+    headers: {
+      "content-type": "application/json",
+      "x-xgif-csrf": csrf,
+      origin: `http://127.0.0.1:${port}`,
+    },
+    body: "{broken",
+  });
+  assert.equal(malformedJson.status, 400);
+  assert.match(malformedJson.json().error, /有效的 JSON/u);
 
   const emptyTitleSuggestions = await call({
     method: "POST",

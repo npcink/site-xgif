@@ -75,7 +75,13 @@ test("content audit classifies ready, review, and blocked articles", async () =>
   ]);
 
   const report = await auditContentLibrary({ repoRoot: dirs.repoRoot });
-  assert.deepEqual(report.counts, { total: 3, ready: 2, review: 1, draft: 0 });
+  assert.deepEqual(report.counts, {
+    total: 3,
+    ready: 2,
+    review: 1,
+    blocked: 0,
+    legacyReviewDebt: 0,
+  });
   assert.equal(report.items.find((item) => item.title === "可发布文章").status, "ready");
   assert.match(
     report.items.find((item) => item.title === "需要确认来源").warnings.join(" "),
@@ -128,7 +134,7 @@ test("content audit names real duplicate sources but does not treat a site homep
   assert.doesNotMatch(homepage.warnings.join(" "), /同一原文拆分/);
 });
 
-test("content audit applies the same unresolved internal review gate as publishing", async () => {
+test("content audit blocks unresolved drafts and marks published legacy review debt", async () => {
   const dirs = await fixture();
   await Promise.all([
     writeFile(
@@ -137,6 +143,16 @@ test("content audit applies the same unresolved internal review gate as publishi
         contentId: "20260723-0010",
         title: "待内部复核",
         internalNote: "从 flomo 私人收藏导入，请在公开前复核来源和内容。",
+        draft: true,
+      }),
+      "utf8",
+    ),
+    writeFile(
+      path.join(dirs.articlesDir, "20260723-0012.md"),
+      article({
+        contentId: "20260723-0012",
+        title: "历史已发布待复核",
+        internalNote: "旧流程发布，仍需补充人工复核。",
       }),
       "utf8",
     ),
@@ -155,10 +171,15 @@ test("content audit applies the same unresolved internal review gate as publishi
 
   const report = await auditContentLibrary({ repoRoot: dirs.repoRoot });
   const unresolved = report.items.find((item) => item.title === "待内部复核");
+  const legacyDebt = report.items.find((item) => item.title === "历史已发布待复核");
   const resolved = report.items.find((item) => item.title === "已完成内部复核");
-  assert.equal(unresolved.status, "draft");
+  assert.equal(unresolved.status, "blocked");
   assert.match(unresolved.blockers.join(" "), /内部复核备注尚未确认/);
+  assert.equal(legacyDebt.status, "review");
+  assert.equal(legacyDebt.legacyReviewDebt, true);
+  assert.match(legacyDebt.warnings.join(" "), /保持现有线上状态/);
   assert.equal(resolved.status, "ready");
+  assert.equal(report.counts.legacyReviewDebt, 1);
 });
 
 test("content audit blocks invalid source links and missing local image files", async () => {
@@ -185,7 +206,7 @@ sourceKind: "unknown"
   );
 
   const report = await auditContentLibrary({ repoRoot: dirs.repoRoot });
-  assert.equal(report.counts.draft, 2);
+  assert.equal(report.counts.blocked, 2);
   assert.match(
     report.items.find((item) => item.title === "错误链接").blockers.join(" "),
     /HTTP\(S\)/,
@@ -210,7 +231,7 @@ test("content audit blocks a legacy external-article disclosure placeholder", as
 
   const report = await auditContentLibrary({ repoRoot: dirs.repoRoot });
   const item = report.items.find((entry) => entry.title === "尚未恢复正文");
-  assert.equal(item.status, "draft");
+  assert.equal(item.status, "blocked");
   assert.match(item.blockers.join(" "), /恢复完整正文/);
 });
 
@@ -228,7 +249,7 @@ test("content audit blocks all raw HTML imported from an external article", asyn
 
   const report = await auditContentLibrary({ repoRoot: dirs.repoRoot });
   const item = report.items.find((entry) => entry.title === "危险外部正文");
-  assert.equal(item.status, "draft");
+  assert.equal(item.status, "blocked");
   assert.match(item.blockers.join(" "), /原始 HTML/);
 });
 

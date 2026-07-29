@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -95,9 +95,14 @@ draft: false
   const store = new LocalDataStore(dirs);
   await store.initialize();
   const backupPath = await store.createBackup({ retain: 2 });
+  assert.ok(Date.parse(store.getStatus().lastMutationAt) <= (await stat(backupPath)).mtimeMs);
   const backupDb = new DatabaseSync(backupPath, { readOnly: true });
   assert.equal(backupDb.prepare("PRAGMA quick_check").get().quick_check, "ok");
   assert.equal(backupDb.prepare("SELECT COUNT(*) AS count FROM content_index").get().count, 1);
+  assert.equal(
+    backupDb.prepare("SELECT COUNT(*) AS count FROM operation_history WHERE action = 'backup'").get().count,
+    1,
+  );
   backupDb.close();
   store.close();
   const backupFiles = (await readdir(path.join(dirs.workflowRoot, "backups")))
@@ -124,6 +129,38 @@ test("operation history can filter sync records and tolerates damaged details", 
   store.close();
 });
 
+test("operation history hides maintenance noise unless explicitly requested", async () => {
+  const dirs = await fixture();
+  const store = new LocalDataStore(dirs);
+  await store.initialize();
+  store.recordOperation("rebuild", { content: 1 });
+  store.recordOperation("update_content", { file: "article.md" });
+
+  assert.deepEqual(store.listOperations().map((item) => item.action), ["update_content"]);
+  const all = store.listOperations({ scope: "all" });
+  assert.deepEqual(all.slice(0, 2).map((item) => [item.action, item.scope]), [
+    ["update_content", "user"],
+    ["rebuild", "maintenance"],
+  ]);
+  assert.ok(all.filter((item) => item.action === "rebuild").every((item) => item.scope === "maintenance"));
+  store.close();
+});
+
+test("unchanged trash sidecars do not rewrite the SQLite trash index", async () => {
+  const dirs = await fixture();
+  const store = new LocalDataStore(dirs);
+  await store.initialize();
+  const before = store.db.prepare(
+    "SELECT id, updated_at AS updatedAt FROM trash_items ORDER BY id",
+  ).all();
+  await store.rebuildTrashIndex();
+  const after = store.db.prepare(
+    "SELECT id, updated_at AS updatedAt FROM trash_items ORDER BY id",
+  ).all();
+  assert.deepEqual(after, before);
+  store.close();
+});
+
 test("content index supports incremental refresh and filtered ordering", async () => {
   const dirs = await fixture();
   await writeFile(path.join(dirs.articlesDir, "20260724-ab12.md"), `---
@@ -140,6 +177,7 @@ draft: false
 `);
   const store = new LocalDataStore(dirs);
   await store.initialize();
+  const initialFingerprint = store.getRecoveryFingerprint();
   const initial = store.listContentIndex({ type: "article", query: "独特搜索词" });
   assert.equal(initial.length, 1);
   assert.equal(initial[0].contentId, "20260724-ab12");
@@ -162,6 +200,7 @@ draft: true
   const refreshed = store.listContentIndex({ type: "article", query: "新的摘要" });
   assert.equal(refreshed[0].title, "已修改标题");
   assert.equal(refreshed[0].draft, true);
+  assert.notEqual(store.getRecoveryFingerprint(), initialFingerprint);
   store.close();
 });
 

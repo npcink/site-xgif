@@ -1,10 +1,14 @@
 import { execFile } from "node:child_process";
 import { mkdir, stat } from "node:fs/promises";
 import path from "node:path";
+import { safeProcessError } from "./safe-process-error.js";
 
-function run(command, args, cwd) {
+function run(command, args, cwd, { timeoutMs = 0 } = {}) {
   return new Promise((resolve, reject) => {
-    execFile(command, args, { cwd }, (error, stdout, stderr) => {
+    execFile(command, args, {
+      cwd,
+      ...(timeoutMs ? { timeout: timeoutMs, killSignal: "SIGTERM" } : {}),
+    }, (error, stdout, stderr) => {
       if (error) {
         error.stdout = stdout;
         error.stderr = stderr;
@@ -34,13 +38,6 @@ function remoteIdentity(remote) {
   } catch {
     return { provider: "git", repository: "已配置私有远端" };
   }
-}
-
-function safeGitError(error) {
-  return String(error?.stderr || error?.stdout || error?.message || "私有远程推送失败。")
-    .replace(/https?:\/\/[^@\s]+@/gi, "https://")
-    .replace(/\b(?:gh[opusr]_[A-Za-z0-9_]+|github_pat_[A-Za-z0-9_]+)\b/g, "[redacted]")
-    .trim();
 }
 
 async function exists(filePath) {
@@ -80,13 +77,15 @@ export class LocalContentBackup {
     await run("git", ["init", "--bare", "--initial-branch=history", this.gitDir], this.repoRoot);
   }
 
-  async snapshot(message = "Automatic content safety snapshot") {
+  async snapshot(message = "Automatic content safety snapshot", { pushOffsite = true } = {}) {
     await this.ensureRepository();
     await run("git", this.gitArgs(["add", "-A", "-f", "--", ...this.paths]), this.repoRoot);
     const staged = await run("git", this.gitArgs(["diff", "--cached", "--name-only"]), this.repoRoot);
     let changed = false;
     if (!staged.stdout.trim()) {
-      const push = await this.pushOffsite();
+      const push = pushOffsite
+        ? await this.pushOffsite()
+        : { configured: true, ok: false, error: "" };
       const status = await this.status();
       return {
         ok: true,
@@ -104,7 +103,9 @@ export class LocalContentBackup {
       ...this.gitArgs(["commit", "-m", message]),
     ], this.repoRoot);
     changed = true;
-    const push = await this.pushOffsite();
+    const push = pushOffsite
+      ? await this.pushOffsite()
+      : { configured: true, ok: false, error: "" };
     const status = await this.status();
     return {
       ok: true,
@@ -125,13 +126,21 @@ export class LocalContentBackup {
       return { configured: false, ok: false, error: "" };
     }
     try {
-      await run("git", this.gitArgs(["push", "origin", "history"]), this.repoRoot);
+      await run(
+        "git",
+        this.gitArgs(["push", "origin", "history"]),
+        this.repoRoot,
+        { timeoutMs: 30_000 },
+      );
       return { configured: true, ok: true, error: "" };
     } catch (error) {
       return {
         configured: true,
         ok: false,
-        error: safeGitError(error),
+        error: safeProcessError(error, {
+          fallback: "私有远程推送失败。",
+          redactPaths: [this.repoRoot, this.gitDir],
+        }),
       };
     }
   }

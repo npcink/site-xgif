@@ -3,6 +3,20 @@ function normalizeTimestamp(value) {
   return Number.isNaN(Date.parse(timestamp)) ? "" : timestamp;
 }
 
+export function contentVerificationAnchors(value, width = 48) {
+  const text = String(value || "");
+  const anchorWidth = Math.max(1, Number.parseInt(width, 10) || 48);
+  if (!text) return [];
+  if (text.length <= anchorWidth) return [text];
+
+  const lastStart = text.length - anchorWidth;
+  return [...new Set([
+    text.slice(0, anchorWidth),
+    text.slice(Math.floor(lastStart / 2), Math.floor(lastStart / 2) + anchorWidth),
+    text.slice(lastStart),
+  ])];
+}
+
 export function publicationFromWorkflow(workflow = {}) {
   if (workflow.state === "draft") {
     return {

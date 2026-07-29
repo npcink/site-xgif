@@ -313,6 +313,44 @@ draft: true
   });
   assert.equal(unavailableService.summary.mode, "rules");
   assert.equal(unavailableService.summary.fallbackCode, "EMBEDDING_REQUEST_FAILED");
+  assert.equal(
+    unavailableService.manifest.generation.fallbackCode,
+    "EMBEDDING_REQUEST_FAILED",
+  );
+
+  await writeRecommendationManifest(root, unavailableService.manifest);
+  const configuredEnv = {
+    XGIF_EMBEDDING_BASE_URL: "http://127.0.0.1:9/v1",
+    XGIF_EMBEDDING_MODEL: "embedding-test",
+    XGIF_EMBEDDING_TIMEOUT_MS: "100",
+  };
+  const degraded = await getRecommendationStatus({ repoRoot: root, env: configuredEnv });
+  assert.equal(degraded.stale, false);
+  assert.equal(degraded.degraded, true);
+  assert.equal(degraded.fallbackCode, "EMBEDDING_REQUEST_FAILED");
+
+  const recovered = await refreshRecommendationManifest({
+    repoRoot: root,
+    store: {
+      listRecommendationEmbeddings() {
+        return [];
+      },
+      upsertRecommendationEmbedding() {},
+      pruneRecommendationEmbeddings() {
+        return 0;
+      },
+    },
+    env: configuredEnv,
+    fetchImpl: async () => ({
+      ok: true,
+      async json() {
+        return { data: [{ index: 0, embedding: [1, 0] }] };
+      },
+    }),
+  });
+  assert.equal(recovered.unchanged, false);
+  assert.equal(recovered.status.mode, "hybrid");
+  assert.equal(recovered.status.degraded, false);
 });
 
 test("recommendation status detects changed public content and refreshes atomically", async () => {

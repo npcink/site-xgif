@@ -18,8 +18,16 @@ test("recovery drill rebuilds a temporary corrupted database and records the res
   ]);
   const workflowRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
   const statusPath = path.join(repoRoot, "recovery-drill.json");
-  const result = await runRecoveryDrill({ repoRoot, workflowRoot, statusPath });
+  const result = await runRecoveryDrill({
+    repoRoot,
+    workflowRoot,
+    statusPath,
+    runtimeVersion: "test-runtime-version",
+  });
   assert.equal(result.ok, true);
   assert.equal(result.corruptDatabaseWasQuarantined, true);
-  assert.equal((await readRecoveryDrillStatus(statusPath)).content, 0);
+  assert.match(result.sourceFingerprint, /^[a-f0-9]{64}$/u);
+  const recorded = await readRecoveryDrillStatus(statusPath);
+  assert.equal(recorded.content, 0);
+  assert.equal(recorded.runtimeVersion, "test-runtime-version");
 });

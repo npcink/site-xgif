@@ -128,7 +128,12 @@ function auditArticle(item) {
   const internalNote = String(data.internalNote || "").trim();
   const internalReviewStatus = String(data.internalReviewStatus || "unresolved").trim();
   if (internalNote && internalReviewStatus !== "resolved") {
-    item.blockers.push("内部复核备注尚未确认，不能进入发布流程。");
+    if (item.draft) {
+      item.blockers.push("内部复核备注尚未确认，不能进入发布流程。");
+    } else {
+      item.legacyReviewDebt = true;
+      item.warnings.push("历史已发布内容仍有内部复核备注未确认；保持现有线上状态，但下次编辑或同步前必须完成复核。");
+    }
   }
   if (sourceUrl && isGenericSourceUrl(sourceUrl)) {
     item.warnings.push("来源链接只指向网站首页，需要确认具体原文地址。");
@@ -233,7 +238,7 @@ function finalize(items) {
     for (const item of group) item.blockers.push("正文与另一篇文章完全相同，不能重复发布。");
   }
   for (const item of items) {
-    item.status = item.blockers.length ? "draft" : item.warnings.length ? "review" : "ready";
+    item.status = item.blockers.length ? "blocked" : item.warnings.length ? "review" : "ready";
     delete item.data;
     delete item.body;
     delete item.contentHash;
@@ -270,7 +275,7 @@ export async function auditContentLibrary({ repoRoot }) {
           blockers: ["无法解析 Markdown frontmatter。"],
           warnings: [],
           notices: [],
-          status: "draft",
+          status: "blocked",
         });
         continue;
       }
@@ -286,7 +291,8 @@ export async function auditContentLibrary({ repoRoot }) {
     total: items.length,
     ready: items.filter((item) => item.status === "ready").length,
     review: items.filter((item) => item.status === "review").length,
-    draft: items.filter((item) => item.status === "draft").length,
+    blocked: items.filter((item) => item.status === "blocked").length,
+    legacyReviewDebt: items.filter((item) => item.legacyReviewDebt).length,
   };
   return { generatedAt: new Date().toISOString(), counts, items };
 }
@@ -303,12 +309,13 @@ export function renderContentAuditMarkdown(report) {
     "",
     `- 可直接上线：${report.counts.ready}`,
     `- 需要人工确认：${report.counts.review}`,
-    `- 建议退回草稿：${report.counts.draft}`,
+    `- 阻断发布：${report.counts.blocked}`,
+    `- 历史复核债务：${report.counts.legacyReviewDebt}`,
     `- 总计：${report.counts.total}`,
     "",
   ];
   for (const [status, title] of [
-    ["draft", "建议退回草稿"],
+    ["blocked", "阻断发布"],
     ["review", "需要人工确认"],
     ["ready", "可直接上线"],
   ]) {
