@@ -408,3 +408,70 @@ draft: false
   assert.equal(refreshed.summary.fallbackCode, "EMBEDDING_CONFIG_UNAVAILABLE");
   assert.equal(refreshed.status.stale, false);
 });
+
+test("failed embedding refresh preserves the last successful hybrid manifest", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "xgif-recommendation-last-good-"));
+  const articlesDir = path.join(root, "site", "src", "content", "articles");
+  await mkdir(articlesDir, { recursive: true });
+  await writeFile(path.join(articlesDir, "one.md"), `---
+title: "保留成功结果"
+contentId: "20260729-last-good"
+summary: "刷新失败时不降级覆盖"
+tags: ["测试"]
+pubDate: "2026-07-29"
+recommendationGroup: "general"
+draft: false
+---
+正文
+`, "utf8");
+
+  const env = {
+    XGIF_EMBEDDING_BASE_URL: "http://127.0.0.1:9/v1",
+    XGIF_EMBEDDING_MODEL: "embedding-test",
+    XGIF_EMBEDDING_TIMEOUT_MS: "100",
+  };
+  const store = {
+    listRecommendationEmbeddings() {
+      return [];
+    },
+    upsertRecommendationEmbedding() {},
+    pruneRecommendationEmbeddings() {
+      return 0;
+    },
+  };
+  const successful = await generateRecommendationManifest({
+    repoRoot: root,
+    store,
+    env,
+    fetchImpl: async () => response({
+      data: [{ index: 0, embedding: [1, 0] }],
+    }),
+    generatedAt: "2026-07-29T00:00:00.000Z",
+  });
+  await writeRecommendationManifest(root, successful.manifest);
+  const before = await readFile(
+    path.join(root, "site", "src", "data", "recommendations.json"),
+    "utf8",
+  );
+
+  const failed = await refreshRecommendationManifest({
+    repoRoot: root,
+    store,
+    env,
+    force: true,
+    fetchImpl: async () => {
+      throw new Error("service offline");
+    },
+  });
+
+  assert.equal(failed.unchanged, true);
+  assert.equal(failed.preservedLastGood, true);
+  assert.equal(failed.status.mode, "hybrid");
+  assert.equal(failed.status.degraded, true);
+  assert.equal(failed.status.preservedLastGood, true);
+  assert.equal(failed.status.fallbackCode, "EMBEDDING_REQUEST_FAILED");
+  assert.equal(
+    await readFile(path.join(root, "site", "src", "data", "recommendations.json"), "utf8"),
+    before,
+  );
+});
