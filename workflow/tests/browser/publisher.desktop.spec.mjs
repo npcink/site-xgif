@@ -443,6 +443,70 @@ test("sync publishing is a dedicated workspace and browser back restores the pre
   await page.unrouteAll({ behavior: "wait" });
 });
 
+test("a failed withdrawal remains actionable when it is the only sync queue item", async ({ page }) => {
+  let requestedBatch = null;
+  await page.route("**/api/status", async (route) => {
+    const response = await route.fetch();
+    const status = await response.json();
+    await route.fulfill({
+      response,
+      json: {
+        ...status,
+        publicationCounts: { ...status.publicationCounts, local: 0 },
+        syncQueue: {
+          counts: {
+            total: 1,
+            ready: 1,
+            attention: 0,
+            deletions: 1,
+            deletionReady: 0,
+            deletionRetry: 1,
+          },
+          items: [{
+            action: "delete",
+            auditStatus: "retry",
+            file: "site/src/content/articles/withdrawn.md",
+            type: "article",
+            title: "需要重试下架的文章",
+            deletedAt: "2026-07-29T00:00:00.000Z",
+          }],
+          needsAttention: [],
+        },
+      },
+    });
+  });
+  await page.route("**/api/content/batch", async (route) => {
+    requestedBatch = route.request().postDataJSON();
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: true,
+        noChange: false,
+        branch: "content-sync/retry-withdrawal",
+        branches: ["content-sync/retry-withdrawal"],
+        synced: [],
+        deleted: [{ file: "site/src/content/articles/withdrawn.md" }],
+        skipped: [],
+        push: { attempted: true, ok: true, error: "" },
+      }),
+    });
+  });
+  page.on("dialog", (dialog) => dialog.accept());
+
+  await page.goto("/#sync");
+  const retryButton = page.locator("#sync-all-local");
+  await expect(retryButton).toBeEnabled();
+  await expect(retryButton).toHaveText("重试 1 条下架");
+  await expect(page.locator("#sync-queue-list")).toContainText("重试下架");
+  await retryButton.click();
+  await expect.poll(() => requestedBatch).not.toBeNull();
+  expect(requestedBatch).toMatchObject({
+    action: "sync",
+    includePendingDeletions: true,
+  });
+  await page.unrouteAll({ behavior: "wait" });
+});
+
 test("recycle bin remains a focused dialog and returns focus to its library entry", async ({ page }) => {
   await page.goto("/#library");
   const recycleEntry = page.locator("#library-open-trash");

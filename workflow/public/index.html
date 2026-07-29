@@ -1015,6 +1015,13 @@
             <span class="batch-edit-enable"><input type="checkbox" name="applyPubDate" />修改发布日期</span>
             <input type="date" name="pubDate" />
           </label>
+          <label class="batch-edit-field">
+            <span class="batch-edit-enable"><input type="checkbox" name="applyRecommendationGroup" />确认推荐分组</span>
+            <select name="recommendationGroup">
+              <option value="general">通用内容</option>
+              <option value="adult-humor">成人幽默</option>
+            </select>
+          </label>
         </div>
         <div class="trash-dialog-actions">
           <span id="batch-edit-summary" role="status"></span>

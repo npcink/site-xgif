@@ -193,9 +193,10 @@ async function api(path, payload, options) {
   return apiRequest(path, payload, options);
 }
 
-async function fetchPublisherStatus() {
+async function fetchPublisherStatus({ refreshRemote = false } = {}) {
   if (!publisherStatusRequest) {
-    publisherStatusRequest = api("/api/status")
+    const path = refreshRemote ? "/api/status?refresh=remote" : "/api/status";
+    publisherStatusRequest = api(path)
       .then((status) => {
         publisherStatus = status;
         return status;
@@ -1174,6 +1175,13 @@ function renderFlomoInspection(inspection) {
           <div class="import-editor-content">
             <div class="import-fields">
               <label>候选标题<input data-import-field="title" value="${escapeHtml(item.title)}" /></label>
+              <label>推荐分组
+                <select data-import-field="recommendationGroup">
+                  <option value="">请选择推荐分组</option>
+                  <option value="general">通用内容</option>
+                  <option value="adult-humor">成人幽默</option>
+                </select>
+              </label>
               <label>标签<input data-import-field="tags" value="${escapeHtml(item.tags.join(", "))}" /></label>
               <label class="import-summary-field">摘要<textarea rows="2" data-import-field="summary">${escapeHtml(item.summary)}</textarea></label>
               <label>来源链接<input type="url" data-import-field="sourceUrl" value="${escapeHtml(item.sourceUrl)}" placeholder="https://example.com/article" /></label>
@@ -1336,6 +1344,15 @@ async function applyFlomoImport(mode = "draft") {
   const items = selectedImportItems();
   if (!items.length) throw new Error("请至少选择一条内容。");
   const publishing = mode === "publish";
+  if (publishing) {
+    const overrides = collectImportOverrides();
+    const missingGroups = items.filter(
+      (item) => !String(overrides[item.contentHash]?.recommendationGroup || "").trim(),
+    );
+    if (missingGroups.length) {
+      throw new Error(`还有 ${missingGroups.length} 条内容没有确认推荐分组；请在“复核并编辑”中逐条选择后再发布。`);
+    }
+  }
   const action = publishing ? "先由 AI 安全分段后发布到本地" : "保存为本地 Markdown 草稿";
   if (!window.confirm(`将${action} ${items.length} 条选中内容，不会提交或推送。是否继续？`)) return;
   if (publishing) await ensureImportParagraphsBeforePublish(items);
@@ -1688,7 +1705,7 @@ async function loadContentAudit() {
     const report = await api("/api/content/audit");
     contentAuditItemsByFile = new Map(report.items.map((item) => [item.file, item]));
     $("#content-audit-summary").textContent =
-      `可直接上线 ${report.counts.ready} 条 · 需要确认 ${report.counts.review} 条 · 阻断发布 ${report.counts.blocked} 条 · 历史复核债务 ${report.counts.legacyReviewDebt} 条`;
+      `可直接上线 ${report.counts.ready} 条 · 需要确认 ${report.counts.review} 条 · 阻断发布 ${report.counts.blocked} 条 · 历史复核债务 ${report.counts.legacyReviewDebt} 条 · 推荐分组债务 ${report.counts.recommendationGroupDebt} 条`;
     $("#content-audit-list").innerHTML = [
       renderContentAuditGroup(report, "blocked", "阻断发布"),
       renderContentAuditGroup(report, "review", "需要人工确认"),
@@ -1813,6 +1830,9 @@ function renderSyncWorkspace(status, history = []) {
   const syncCounts = syncQueue.counts || {};
   const local = Number(syncCounts.ready || 0);
   const attention = Number(syncCounts.attention || 0);
+  const deletionReady = Number(syncCounts.deletionReady || 0);
+  const deletionRetry = Number(syncCounts.deletionRetry || 0);
+  const actionableDeletions = deletionReady + deletionRetry;
   const pending = Number(counts.pending || 0);
   const unverified = Number(counts.unverified || 0);
   const cloud = Number(counts.cloud || 0);
@@ -1827,7 +1847,13 @@ function renderSyncWorkspace(status, history = []) {
 
   const button = $("#sync-all-local");
   button.disabled = !local || !status.git?.canPush;
-  button.textContent = local ? `同步 ${local} 条到 GitHub` : "没有可同步内容";
+  button.textContent = !local
+    ? "没有可同步内容"
+    : deletionRetry === local
+      ? `重试 ${deletionRetry} 条下架`
+      : actionableDeletions
+        ? `同步/下架 ${local} 项到 GitHub`
+        : `同步 ${local} 条到 GitHub`;
   const attentionButton = $("#sync-open-attention");
   attentionButton.hidden = !attention;
   attentionButton.textContent = attention ? `查看待处理（${attention}）` : "查看待处理";
@@ -1845,9 +1871,13 @@ function renderSyncWorkspace(status, history = []) {
         <article class="sync-queue-item">
           <div>
             <strong>${escapeHtml(item.title)}</strong>
-            <span>${item.type === "article" ? "文章" : "图片"} · ${escapeHtml(item.pubDate || "日期未定")}</span>
+            <span>${item.type === "article" ? "文章" : "图片"} · ${item.action === "delete" ? "待下架" : escapeHtml(item.pubDate || "日期未定")}</span>
           </div>
-          <span class="workflow-state compact" data-state="local">待同步</span>
+          <span class="workflow-state compact" data-state="local">${
+            item.action === "delete"
+              ? item.auditStatus === "retry" ? "重试下架" : "待下架"
+              : "待同步"
+          }</span>
         </article>`).join("")
     : '<p class="library-empty">待同步队列为空。</p>';
 
@@ -1878,9 +1908,14 @@ async function syncAllLocalContent() {
   const button = $("#sync-all-local");
   const local = Number(publisherStatus?.syncQueue?.counts?.ready || 0);
   const attention = Number(publisherStatus?.syncQueue?.counts?.attention || 0);
+  const deletionRetry = Number(publisherStatus?.syncQueue?.counts?.deletionRetry || 0);
+  const deletionReady = Number(publisherStatus?.syncQueue?.counts?.deletionReady || 0);
   if (!local) return;
+  const deletionSummary = deletionRetry || deletionReady
+    ? `\n其中 ${deletionReady} 条等待下架，${deletionRetry} 条重试原下架分支。`
+    : "";
   if (!window.confirm(
-    `将 ${local} 条已通过上线体检的内容提交到内容分支并推送 GitHub。${attention ? `\n${attention} 条待处理内容不会参与本次同步。` : ""}\nPR 合并后由 Cloudflare Workers Builds 自动部署，是否继续？`,
+    `将 ${local} 项已通过检查的内容变更提交或重试并推送 GitHub。${deletionSummary}${attention ? `\n${attention} 条待处理内容不会参与本次同步。` : ""}\nPR 合并后由 Cloudflare Workers Builds 自动部署，是否继续？`,
   )) return;
   button.disabled = true;
   button.setAttribute("aria-busy", "true");
@@ -1891,11 +1926,14 @@ async function syncAllLocalContent() {
     const result = await api("/api/content/batch", {
       action: "sync",
       selection: { type: "all", status: "local", query: "", exclude: [] },
+      includePendingDeletions: true,
     });
-    $("#sync-workspace-result").dataset.state = result.push?.ok ? "ready" : "error";
+    $("#sync-workspace-result").dataset.state = result.ok ? "ready" : "error";
     $("#sync-workspace-result").textContent = [
-      result.push?.ok
-        ? `已推送 ${result.synced.length} 条内容到 ${result.branch}。下一步合并 GitHub PR，Cloudflare 将自动部署。`
+      result.ok
+        ? result.noChange
+          ? `${result.deleted?.length || 0} 条内容在远程主分支已经不存在；已转入线上 404/410 核验。`
+          : `已推送 ${result.synced.length} 条内容更新和 ${result.deleted?.length || 0} 条下架${result.branches?.length > 1 ? `，涉及 ${result.branches.length} 个恢复/新建分支` : `到 ${result.branch}`}。下一步合并 GitHub PR，Cloudflare 将自动部署。`
         : `本地提交已完成，但推送失败：${result.push?.error || "未知错误"}`,
       ...syncSkippedMessages(result.skipped),
     ].filter(Boolean).join("\n");
@@ -3030,6 +3068,7 @@ function collectBatchMetadataChanges() {
     ["applyCategory", "category"],
     ["applySource", "source"],
     ["applyPubDate", "pubDate"],
+    ["applyRecommendationGroup", "recommendationGroup"],
   ]) {
     if ($(`[name="${toggle}"]`, batchEditForm).checked) {
       changes[field] = { value: $(`[name="${field}"]`, batchEditForm).value };
@@ -3239,7 +3278,10 @@ $("#content-audit-list").addEventListener("click", async (event) => {
   finally { button.disabled = false; }
 });
 $("#library-open-trash").addEventListener("click", openRecycleBin);
-$("#sync-workspace-refresh").addEventListener("click", () => Promise.all([loadSyncWorkspace(), loadStatus()]));
+$("#sync-workspace-refresh").addEventListener("click", () => Promise.all([
+  loadSyncWorkspace(),
+  loadStatus({ refreshRemote: true }),
+]));
 $("#sync-open-attention").addEventListener("click", () => switchTab("audit"));
 $("#sync-all-local").addEventListener("click", syncAllLocalContent);
 $("#article-version-history").addEventListener("click", () => openVersionHistory(articleForm));
@@ -3547,7 +3589,7 @@ $("#open-site-preview").addEventListener("click", () => {
   if (!sitePreviewAvailable) return;
   window.open(sitePreviewUrl, "_blank", "noopener");
 });
-$("#refresh-services").addEventListener("click", loadStatus);
+$("#refresh-services").addEventListener("click", () => loadStatus({ refreshRemote: true }));
 $("#recommendation-refresh").addEventListener("click", refreshRecommendations);
 $("#retry-push").addEventListener("click", async () => {
   if (!activeContent) return;
@@ -3692,7 +3734,9 @@ function renderRecommendationStatus(recommendations) {
     ? `更新时优先使用本地向量模型 ${status.embeddingModel || ""}`.trim()
     : "本地向量未连接时会自动使用规则推荐";
   $("#recommendation-status-summary").textContent = status.degraded
-    ? `当前已安全降级为规则推荐；向量服务恢复后可再次更新。${vectorDetail}`
+    ? status.preservedLastGood
+      ? `最近一次更新失败，当前继续使用最后成功的混合推荐。${vectorDetail}`
+      : `当前已安全降级为规则推荐；向量服务恢复后可再次更新。${vectorDetail}`
     : current && !status.stale
       ? `已是最新。${vectorDetail}`
     : `清单与当前公开内容不一致，需要更新。${vectorDetail}`;
@@ -3709,7 +3753,9 @@ async function refreshRecommendations() {
     const response = await api("/api/recommendations", {});
     renderRecommendationStatus(response.recommendations);
     result.dataset.state = response.fallback ? "attention" : "ready";
-    if (response.unchanged) {
+    if (response.preservedLastGood) {
+      result.textContent = "本次向量刷新失败；没有覆盖推荐清单，当前继续使用最后成功的混合结果。";
+    } else if (response.unchanged) {
       result.textContent = "相关推荐已是最新，没有改写推荐清单。";
     } else if (response.fallback) {
       result.textContent = "本地向量服务不可用，已安全回退到规则推荐。站点构建不受影响。";
@@ -3727,28 +3773,41 @@ async function refreshRecommendations() {
   }
 }
 
-async function loadStatus() {
+async function loadStatus({ refreshRemote = false } = {}) {
   try {
-    const status = await fetchPublisherStatus();
+    const status = await fetchPublisherStatus({ refreshRemote });
     aiAvailable = Boolean(status.ai?.available);
     aiModel = status.ai?.model || "";
     syncAiAvailability();
-    const ai = status.ai?.available ? `AI：${status.ai.model}` : "AI：未配置";
+    const ai = status.ai?.available
+      ? `AI：${status.ai.model}`
+      : status.ai?.configurationError
+        ? "AI：配置无效"
+        : "AI：未配置";
     $("#network-ai-detail").textContent = status.ai?.available
       ? `${status.ai.model}。仅在点击 AI 按钮时发送当前表单内容`
-      : "未配置，不会发送内容";
-    $("#connection-ai").textContent = status.ai?.available ? "已配置" : "未配置";
+      : status.ai?.configurationError || "未配置，不会发送内容";
+    $("#connection-ai").textContent = status.ai?.available
+      ? "已配置"
+      : status.ai?.configurationError
+        ? "配置无效"
+        : "未配置";
     const aiEndpoint = typeof status.ai?.baseUrl === "string" && status.ai.baseUrl.trim()
       ? status.ai.baseUrl
       : "OpenAI 兼容接口";
     $("#connection-ai-detail").textContent = status.ai?.available
       ? `${status.ai.model}，${aiEndpoint}`
-      : "需要 API 密钥与模型名称，不会在页面显示密钥";
+      : status.ai?.configurationError || "需要 API 密钥与模型名称，不会在页面显示密钥";
     $("#connection-public-git").textContent = status.git?.canPush
       ? `${status.branch} · 远程已配置`
       : `${status.branch} · 远程未配置`;
+    const remoteCurrent = Number(
+      status.contentSafety?.remoteCurrent
+      ?? status.contentSafety?.currentVersionInGit
+      ?? 0,
+    );
     $("#connection-public-git-detail").textContent = status.contentSafety?.ok
-      ? `公开内容 ${status.contentSafety.currentVersionInGit}/${status.contentSafety.total} 已进入公开 Git；${status.contentSafety.privateContent || 0} 条私有内容不在此仓库`
+      ? `公开内容 ${remoteCurrent}/${status.contentSafety.total} 已进入公开 Git；${status.contentSafety.privateContent || 0} 条私有内容不在此仓库`
       : status.contentSafety?.error || "公开内容 Git 状态待检查";
     const privateGit = privateContentGitState(status.localContentHistory);
     $("#connection-private-git").textContent = privateGit.label;
@@ -3771,10 +3830,14 @@ async function loadStatus() {
     const remote = status.git?.canPush ? "远程：已配置" : "远程：未配置";
     const localIndex = status.localData?.ok ? "索引：正常" : "索引：需重启恢复";
     const gitContent = status.contentSafety?.ok
-      ? `公开 Git：${status.contentSafety.currentVersionInGit}/${status.contentSafety.total}`
+      ? `公开 Git：${remoteCurrent}/${status.contentSafety.total}`
       : "公开 Git：待检查";
     const privateHistory = privateGit.ready ? "私有 GitHub：已同步" : `私有 GitHub：${privateGit.label}`;
-    $("#status").textContent = `仓库：${status.repoRoot} · 分支：${status.branch} · ${ai} · ${remote} · ${localIndex} · ${gitContent} · ${privateHistory}`;
+    const statusFreshness = status.statusMeta?.stale ? " · 远程状态：缓存更新中" : "";
+    const trashSchema = status.trashSchema?.migrationRequired
+      ? ` · 回收站旧格式：${status.trashSchema.legacy || status.trashSchema.invalid} 条`
+      : "";
+    $("#status").textContent = `仓库：${status.repoRoot} · 分支：${status.branch} · ${ai} · ${remote} · ${localIndex} · ${gitContent} · ${privateHistory}${trashSchema}${statusFreshness}`;
     updateTrashCount(status.localData?.trash || 0);
     const publisher = $("#publisher-service");
     publisher.dataset.state = "ready";
