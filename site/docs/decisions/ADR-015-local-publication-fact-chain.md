@@ -21,7 +21,7 @@
 ## 决策
 
 1. Markdown 继续作为内容真相，SQLite 继续作为可重建索引。
-2. 每次隔离同步按 `contentId + Markdown SHA-256` 写入追加式发布凭据，记录批次、分支、提交、阶段、推送结果和失败原因。
+2. 每次隔离同步按 `contentId + 发布包 SHA-256` 写入追加式发布凭据。发布包由 Markdown 和其中实际引用的白名单本地图片组成；凭据记录批次、分支、提交、阶段、推送结果和失败原因。
 3. 同一内容版本已有成功凭据时不得重复创建同步分支；内容发生变化后自动形成新的版本。
 4. 推送失败只重试凭据记录的 `content-sync/*` 分支，不能退化为推送当前工作分支。
 5. 系统状态、内容库、详情与批量选择统一使用同一个发布状态查询；列表可以使用缓存，但不能使用另一套状态定义。
@@ -40,6 +40,9 @@
 18. 本地安全备份不等待私有远端；显式私有远端同步使用独立队列，不占用内容写队列。
 19. 回收站恢复与永久删除只接受记录 ID，路径和内容类型以服务端索引为准。
 20. AI 分段结果在批量发布边界重新做字符级验证，不能只信任上游状态标记。
+21. 已进入远程发布链路的内容移入回收站时写入下架墓碑；隔离同步使用 `git rm`，推送成功后继续以线上 404/410 作为最终下架事实。
+22. 系统状态中的公开内容统计直接复用逐条发布工作流结果，不再通过当前开发工作区的 tracked/dirty 状态重新推导。
+23. 外部 AI 与向量服务只允许 HTTPS；HTTP 仅允许 `localhost`、`127.0.0.1` 与 `::1` 回环地址，URL 不得携带凭据、查询参数或片段。
 
 ## 替代方案
 
@@ -62,6 +65,8 @@
 ## 后果
 
 - 同一内容版本的同步具有幂等性，失败重试有准确目标；
+- 内容引用的本地图片不会遗漏，图片变化会形成新的发布版本；
+- 远端删除拥有可重试、可核验的下架事实链；
 - 状态展示以事实阶段为准，不再把“已推送”描述为“已上线”；
 - 历史复核问题可以治理，但不会意外下线既有内容；
 - 编辑冲突会显式返回，用户需要重新打开内容后再保存；
@@ -78,6 +83,9 @@
 
 - `workflow/tests/publication-receipts.test.mjs` 覆盖版本凭据与编辑冲突；
 - `workflow/tests/isolated-content-sync.test.mjs` 覆盖失败分支的准确重试；
+- `workflow/tests/publication-bundle.test.mjs` 覆盖 Markdown 与本地图片发布包；
+- `workflow/tests/publication-deletions.test.mjs` 覆盖下架墓碑队列；
+- `workflow/tests/service-url-policy.test.mjs` 覆盖外部服务传输边界；
 - `workflow/tests/github-publication-facts.test.mjs` 覆盖 PR、检查、合并和部署阶段；
 - `workflow/tests/serial-task-queue.test.mjs` 覆盖写操作串行化与失败后继续执行；
 - `workflow/tests/content-audit.test.mjs` 覆盖阻断状态和历史复核债务；

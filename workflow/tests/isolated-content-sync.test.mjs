@@ -110,8 +110,76 @@ test("isolated content sync rejects files outside the public Markdown allowlist"
       files: ["workflow/server.js"],
       message: "Must not run",
     }),
-    /不在公开内容白名单/u,
+    /不在公开(?:内容|资产)白名单/u,
   );
+});
+
+test("isolated content sync carries referenced public assets without development files", async () => {
+  const dirs = await createRepository();
+  const article = "site/src/content/articles/existing.md";
+  const asset = "site/public/images/articles/asset.webp";
+  const branch = "content-sync/test-assets";
+  try {
+    await mkdir(path.join(dirs.repoRoot, path.dirname(asset)), { recursive: true });
+    await writeFile(path.join(dirs.repoRoot, article), "article with asset\n");
+    await writeFile(path.join(dirs.repoRoot, asset), "asset bytes\n");
+    const result = await isolatedContentSync({
+      repoRoot: dirs.repoRoot,
+      files: [article, asset],
+      message: "Sync content bundle",
+      branch,
+    });
+    assert.equal(result.push.ok, true);
+    assert.equal(await run(dirs.repoRoot, ["show", `origin/${branch}:${asset}`]), "asset bytes");
+    assert.deepEqual(
+      (await run(dirs.repoRoot, ["diff", "--name-only", `origin/main..origin/${branch}`])).split("\n"),
+      [asset, article].sort(),
+    );
+  } finally {
+    await rm(dirs.root, { recursive: true, force: true });
+  }
+});
+
+test("isolated content sync represents remote withdrawal with git rm", async () => {
+  const dirs = await createRepository();
+  const article = "site/src/content/articles/existing.md";
+  const branch = "content-sync/test-delete";
+  try {
+    const result = await isolatedContentSync({
+      repoRoot: dirs.repoRoot,
+      files: [],
+      deleteFiles: [article],
+      message: "Withdraw content",
+      branch,
+    });
+    assert.equal(result.push.ok, true);
+    await assert.rejects(run(dirs.repoRoot, ["show", `origin/${branch}:${article}`]));
+    assert.equal(
+      await run(dirs.repoRoot, ["diff", "--name-status", `origin/main..origin/${branch}`]),
+      `D\t${article}`,
+    );
+  } finally {
+    await rm(dirs.root, { recursive: true, force: true });
+  }
+});
+
+test("an already absent remote file completes withdrawal without an empty commit", async () => {
+  const dirs = await createRepository();
+  const file = "site/src/content/articles/already-gone.md";
+  try {
+    const result = await isolatedContentSync({
+      repoRoot: dirs.repoRoot,
+      files: [],
+      deleteFiles: [file],
+      expectedDeletionContentIds: { [file]: "20260729-gone" },
+      message: "Withdraw already absent article",
+    });
+    assert.equal(result.noChange, true);
+    assert.deepEqual(result.push, { attempted: false, ok: true, error: "" });
+    assert.equal(await run(dirs.repoRoot, ["branch", "--show-current"]), "main");
+  } finally {
+    await rm(dirs.root, { recursive: true, force: true });
+  }
 });
 
 test("isolated content sync cleans up an empty temporary branch", async () => {

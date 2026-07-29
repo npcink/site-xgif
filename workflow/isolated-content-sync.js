@@ -3,12 +3,14 @@ import { execFile } from "node:child_process";
 import { copyFile, mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import {
+  isPublicContentFile,
+  normalizePublicAssetFile,
+  normalizePublicContentFile,
+  publicAssetPrefixes,
+  publicContentPrefixes,
+} from "./publication-bundle.js";
 import { safeProcessError } from "./safe-process-error.js";
-
-const publicContentPrefixes = [
-  "site/src/content/articles/",
-  "site/src/content/images/",
-];
 
 function git(cwd, args, { timeoutMs = 0 } = {}) {
   return new Promise((resolve, reject) => {
@@ -27,20 +29,18 @@ function git(cwd, args, { timeoutMs = 0 } = {}) {
   });
 }
 
-function normalizedContentFiles(files) {
+function normalizedContentFiles(files, { allowEmpty = false } = {}) {
   const unique = [...new Set((files || []).map((file) => String(file || "").replaceAll("\\", "/")))];
-  if (!unique.length) throw new Error("没有可以同步的公开内容文件。");
-  for (const file of unique) {
-    if (
-      path.isAbsolute(file)
-      || file.includes("../")
-      || !publicContentPrefixes.some((prefix) => file.startsWith(prefix))
-      || !file.endsWith(".md")
-    ) {
-      throw new Error(`同步文件不在公开内容白名单中：${file}`);
-    }
-  }
-  return unique;
+  if (!unique.length && !allowEmpty) throw new Error("没有可以同步的公开内容文件。");
+  return unique.map((file) => (
+    isPublicContentFile(file)
+      ? normalizePublicContentFile(file)
+      : normalizePublicAssetFile(file)
+  ));
+}
+
+function normalizedDeletionFiles(files) {
+  return [...new Set((files || []).map(normalizePublicContentFile))];
 }
 
 export function contentSyncBranchName(date = new Date()) {
@@ -55,10 +55,16 @@ export async function isolatedContentSync({
   baseRef = "origin/main",
   remote = "origin",
   branch = contentSyncBranchName(),
+  deleteFiles = [],
   expectedContentSha256 = {},
+  expectedFileSha256 = expectedContentSha256,
+  expectedDeletionContentIds = {},
   onPrepared = null,
 }) {
-  const relativeFiles = normalizedContentFiles(files);
+  const deletionFiles = normalizedDeletionFiles(deleteFiles);
+  const relativeFiles = normalizedContentFiles(files, { allowEmpty: deletionFiles.length > 0 });
+  const overlap = relativeFiles.filter((file) => deletionFiles.includes(file));
+  if (overlap.length) throw new Error(`同一发布批次不能同时更新和删除：${overlap.join("、")}`);
   const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), "xgif-content-sync-"));
   const worktreePath = path.join(temporaryRoot, "checkout");
   let worktreeAdded = false;
@@ -77,7 +83,7 @@ export async function isolatedContentSync({
       const destination = path.join(worktreePath, relativeFile);
       await mkdir(path.dirname(destination), { recursive: true });
       await copyFile(source, destination);
-      const expected = String(expectedContentSha256[relativeFile] || "");
+      const expected = String(expectedFileSha256[relativeFile] || "");
       if (expected) {
         const actual = createHash("sha256").update(await readFile(destination)).digest("hex");
         if (actual !== expected) {
@@ -88,19 +94,56 @@ export async function isolatedContentSync({
       }
     }
 
-    await git(worktreePath, ["add", "--", ...relativeFiles]);
-    const changed = (await git(worktreePath, ["status", "--porcelain=v1", "--", ...relativeFiles])).stdout.trim();
+    for (const relativeFile of deletionFiles) {
+      const expectedContentId = String(expectedDeletionContentIds[relativeFile] || "");
+      if (expectedContentId) {
+        try {
+          const markdown = await readFile(path.join(worktreePath, relativeFile), "utf8");
+          const actualContentId = markdown.match(/^contentId:\s*["']?([^"'\n]+)["']?\s*$/mu)?.[1]?.trim() || "";
+          if (actualContentId !== expectedContentId) {
+            const error = new Error(`待下架路径已被另一条内容占用：${relativeFile}`);
+            error.statusCode = 409;
+            throw error;
+          }
+        } catch (error) {
+          if (error?.code !== "ENOENT") throw error;
+        }
+      }
+    }
+
+    if (relativeFiles.length) await git(worktreePath, ["add", "--", ...relativeFiles]);
+    if (deletionFiles.length) {
+      await git(worktreePath, ["rm", "--ignore-unmatch", "--", ...deletionFiles]);
+    }
+    const changedFiles = [...relativeFiles, ...deletionFiles];
+    const changed = (await git(
+      worktreePath,
+      ["status", "--porcelain=v1", "--", ...changedFiles],
+    )).stdout.trim();
     if (!changed) {
+      if (!relativeFiles.length && deletionFiles.length) {
+        commitSha = (await git(worktreePath, ["rev-parse", "HEAD"])).stdout.trim();
+        push = { attempted: false, ok: true, error: "" };
+        return {
+          branch,
+          relativeFiles,
+          deletionFiles,
+          commitSha,
+          push,
+          baseRef,
+          noChange: true,
+        };
+      }
       const error = new Error("所选内容与 origin/main 完全一致，没有需要同步的变更。");
       error.statusCode = 422;
       throw error;
     }
 
-    await git(worktreePath, ["commit", "-m", message, "--", ...relativeFiles]);
+    await git(worktreePath, ["commit", "-m", message, "--", ...changedFiles]);
     commitCreated = true;
     commitSha = (await git(worktreePath, ["rev-parse", "HEAD"])).stdout.trim();
     if (typeof onPrepared === "function") {
-      await onPrepared({ branch, commitSha, relativeFiles, baseRef });
+      await onPrepared({ branch, commitSha, relativeFiles, deletionFiles, baseRef });
     }
     preparedRecorded = true;
     push.attempted = true;
@@ -117,6 +160,7 @@ export async function isolatedContentSync({
     return {
       branch,
       relativeFiles,
+      deletionFiles,
       commitSha,
       push,
       baseRef,
@@ -169,4 +213,5 @@ export async function cleanupContentSyncBranch({ repoRoot, branch }) {
 export const isolatedContentSyncPolicy = {
   baseRef: "origin/main",
   publicContentPrefixes,
+  publicAssetPrefixes,
 };
