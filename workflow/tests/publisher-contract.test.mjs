@@ -389,7 +389,8 @@ test("draft publishing uses explicit states, protected-branch guards, and mandat
   assert.match(server, /retryFailedContentSync/);
   assert.match(server, /publicationFromDeployment/);
   assert.match(server, /contentPublicationCounts/);
-  assert.match(server, /async function getContentGitSafety/);
+  assert.match(server, /function getContentGitSafety/);
+  assert.match(server, /workflow\?\.state === "pending_deploy"/);
   assert.match(server, /function contentStatusCounts/);
   assert.match(server, /async function inspectBatchDrafts/);
   assert.match(server, /async function publishBatchDrafts/);
@@ -407,7 +408,7 @@ test("draft publishing uses explicit states, protected-branch guards, and mandat
   assert.match(server, /auditContentLibrary/);
   assert.match(server, /function syncQueueFrom/);
   assert.match(server, /partitionSyncCandidates/);
-  assert.match(server, /files: syncable\.map/);
+  assert.match(server, /files: result\.synced\.map/);
   assert.match(server, /syncQueue: syncQueueFrom/);
   assert.doesNotMatch(server, /未通过上线体检，已停止同步/);
   assert.match(server, /function overlongMarkdownParagraphs/);
@@ -457,6 +458,10 @@ test("publisher writes the metadata required by Astro collections", async () => 
   assert.match(server, /群聊转存（来源待核实）/);
   assert.match(html, /name="sourceKind"/);
   assert.match(html, /name="recommendationGroup"/);
+  assert.match(app, /data-import-field="recommendationGroup"/);
+  assert.match(app, /请选择推荐分组/);
+  assert.match(server, /公开导入前必须人工确认推荐分组/);
+  assert.match(server, /公开文章必须人工确认推荐分组/);
   assert.match(html, /value="adult-humor"/);
   assert.match(html, /value="unknown"/);
   assert.match(html, /id="unknown-source-note"/);

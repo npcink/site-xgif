@@ -72,6 +72,24 @@ import {
   getRecommendationStatus,
   refreshRecommendationManifest,
 } from "./recommendation-engine.js";
+import {
+  buildPublicationBundle,
+  publicationVersion,
+  verifiablePublicAssetUrls,
+} from "./publication-bundle.js";
+import { retryPublicationBatch } from "./publication-batch-recovery.js";
+import { validateServiceBaseUrl } from "./service-url-policy.js";
+import {
+  listPublicationDeletionTombstones,
+  publicationDeletionQueue,
+  publicationTrashSchemaStatus,
+  publicationTrashSchemaVersion,
+} from "./publication-deletions.js";
+import {
+  assertTrashPurgeAllowed,
+  planTrashRestore,
+} from "./publication-trash-policy.js";
+import { StaleSnapshot } from "./stale-snapshot.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..");
@@ -127,6 +145,10 @@ const livePublicationCacheTtlMs = 60_000;
 const publicationStateSnapshotCache = new Map();
 const publicationStateSnapshotTtlMs = 5_000;
 const maxPublicationStateSnapshots = 12;
+const publisherStatusSnapshot = new StaleSnapshot({
+  load: buildPublisherStatusPayload,
+  ttlMs: 15_000,
+});
 const runtimeStartedAt = new Date().toISOString();
 const runtimeVersion = publisherSourceVersion(__dirname);
 const csrfToken = randomUUID();
@@ -643,6 +665,11 @@ async function listContent(type = "all") {
     for (const file of await listMarkdownFiles(directory)) {
       const markdown = await readFile(file, "utf8");
       const parsed = parseFrontmatter(markdown);
+      const version = await publicationVersion({
+        repoRoot,
+        file: path.relative(repoRoot, file),
+        markdown,
+      });
       items.push({
         type: kind,
         file: path.relative(repoRoot, file),
@@ -657,7 +684,9 @@ async function listContent(type = "all") {
         publicUrl: publicContentUrl(kind, parsed.data.contentId),
         previewUrl: previewContentUrl(kind, parsed.data.contentId),
         bodyExcerpt: parsed.body.replace(/\s+/g, " ").slice(0, 140),
-        contentSha256: contentSha256(markdown),
+        contentSha256: version.contentSha256,
+        publicationSha256: version.publicationSha256,
+        localAssetFiles: version.assetFiles,
       });
     }
   }
@@ -777,6 +806,25 @@ async function mapWithConcurrency(items, limit, mapper) {
   return results;
 }
 
+async function verifyPendingPublicationDeletions(queue) {
+  const checked = await mapWithConcurrency(queue.pending || [], 8, async (item) => {
+    if (!item.contentId || !["article", "image"].includes(item.type)) {
+      return { ...item, onlineState: "unknown", statusCode: null };
+    }
+    const result = await probeUrl(liveContentUrl(item.type, item.contentId), 3000);
+    return {
+      ...item,
+      onlineState: [404, 410].includes(result.statusCode) ? "withdrawn" : "pending",
+      statusCode: result.statusCode,
+    };
+  });
+  return {
+    ...queue,
+    pending: checked.filter((item) => item.onlineState !== "withdrawn"),
+    withdrawn: checked.filter((item) => item.onlineState === "withdrawn"),
+  };
+}
+
 async function computeContentPublicationStates(items) {
   const workflowItems = await getContentWorkflowStates(items);
 
@@ -794,6 +842,7 @@ async function computeContentPublicationStates(items) {
       item.bodyExcerpt,
       item.pubDate,
       item.contentSha256,
+      item.publicationSha256,
     ].join("\0");
     const cached = livePublicationCache.get(cacheKey);
     if (cached && Date.now() - cached.checkedAt < livePublicationCacheTtlMs) {
@@ -804,7 +853,12 @@ async function computeContentPublicationStates(items) {
     let deploymentPromise = livePublicationProbePromises.get(cacheKey);
     if (!deploymentPromise) {
       deploymentPromise = readFile(filePath, "utf8")
-        .then((markdown) => verifyLiveContent(item.type, filePath, parseFrontmatter(markdown)))
+        .then((markdown) => verifyLiveContent(
+          item.type,
+          filePath,
+          parseFrontmatter(markdown),
+          markdown,
+        ))
         .finally(() => livePublicationProbePromises.delete(cacheKey));
       livePublicationProbePromises.set(cacheKey, deploymentPromise);
     }
@@ -829,6 +883,7 @@ function publicationStateSnapshotKey(items) {
     item.bodyExcerpt,
     item.pubDate,
     item.contentSha256,
+    item.publicationSha256,
     item.draft,
     item.public,
   ].join("\0")).join("\n");
@@ -870,6 +925,7 @@ function matchesContentStatus(item, status) {
 function clearPublicationStateCaches() {
   livePublicationCache.clear();
   publicationStateSnapshotCache.clear();
+  publisherStatusSnapshot.invalidate();
 }
 
 function contentStatusCounts(items) {
@@ -907,47 +963,31 @@ async function getGitStatus() {
   return { branch, dirty, remote, canPush: Boolean(remote), pushError };
 }
 
-async function getContentGitSafety() {
-  const items = await listContent("all");
+function getContentGitSafety(items) {
   const publicItems = items.filter(
     (item) => !item.draft && (item.type !== "image" || item.public),
   );
   const privateItems = items.filter(
     (item) => item.draft || (item.type === "image" && !item.public),
   );
-  const contentDirectories = [
-    path.relative(repoRoot, target.articles),
-    path.relative(repoRoot, target.imageEntries),
-  ];
-  try {
-    const [trackedResult, statusResult] = await Promise.all([
-      runGit(["ls-files", "-z", "--", ...contentDirectories]),
-      runGit(["status", "--porcelain=v1", "-z", "--untracked-files=all", "--", ...contentDirectories]),
-    ]);
-    const tracked = parseGitPathSet(trackedResult.stdout);
-    const changed = parseGitStatusPathSet(statusResult.stdout);
-    const currentVersionInGit = publicItems.filter((item) => tracked.has(item.file) && !changed.has(item.file));
-    const pending = publicItems.filter((item) => !tracked.has(item.file) || changed.has(item.file));
-    return {
-      ok: true,
-      total: publicItems.length,
-      currentVersionInGit: currentVersionInGit.length,
-      pending: pending.length,
-      publicPending: pending.length,
-      privateContent: privateItems.length,
-      warning: pending.length
-        ? `${pending.length} 条公开内容的当前版本尚未进入公开 Git。`
-        : "",
-    };
-  } catch (error) {
-    return {
-      ok: false,
-      error: `无法检查内容 Git 状态：${safeProcessError(error, {
-        fallback: "Git 状态读取失败。",
-        redactPaths: [repoRoot],
-      })}`,
-    };
-  }
+  const remoteCurrent = publicItems.filter(
+    (item) => item.workflow?.state === "pending_deploy",
+  );
+  const pending = publicItems.filter(
+    (item) => item.workflow?.state !== "pending_deploy",
+  );
+  return {
+    ok: true,
+    total: publicItems.length,
+    currentVersionInGit: remoteCurrent.length,
+    remoteCurrent: remoteCurrent.length,
+    pending: pending.length,
+    publicPending: pending.length,
+    privateContent: privateItems.length,
+    warning: pending.length
+      ? `${pending.length} 条公开内容的当前版本尚未进入远程发布链路。`
+      : "",
+  };
 }
 
 async function assertGitAutomationAllowed(payload) {
@@ -967,6 +1007,11 @@ function workflowState(state, label, description) {
 async function getFileWorkflowState(type, filePath, data) {
   const relativeFile = path.relative(repoRoot, filePath);
   const markdown = await readFile(filePath, "utf8");
+  const version = await publicationVersion({
+    repoRoot,
+    file: relativeFile,
+    markdown,
+  });
   const [item] = await getContentWorkflowStates([{
     type,
     file: relativeFile,
@@ -977,7 +1022,8 @@ async function getFileWorkflowState(type, filePath, data) {
     draft: Boolean(data.draft),
     public: data.public !== false,
     bodyExcerpt: parseFrontmatter(markdown).body.replace(/\s+/g, " ").slice(0, 140),
-    contentSha256: contentSha256(markdown),
+    contentSha256: version.contentSha256,
+    publicationSha256: version.publicationSha256,
   }]);
   return item.workflow;
 }
@@ -1001,7 +1047,7 @@ async function probeUrl(url, timeoutMs = 1200) {
   }
 }
 
-async function verifyLiveContent(type, filePath, parsed) {
+async function verifyLiveContent(type, filePath, parsed, markdown = "") {
   if (parsed.data.draft || (type === "image" && parsed.data.public === false)) {
     return workflowState("draft", "草稿", "草稿不会请求或暴露线上地址。");
   }
@@ -1031,11 +1077,37 @@ async function verifyLiveContent(type, filePath, parsed) {
     const title = normalizeComparableText(parsed.data.title);
     const summary = normalizeComparableText(parsed.data.summary || parsed.data.description);
     const bodyAnchors = contentVerificationAnchors(normalizeComparableText(parsed.body));
-    const matches = [title, summary, ...bodyAnchors].filter(Boolean).every((value) => pageText.includes(value));
+    const textMatches = [title, summary, ...bodyAnchors].filter(Boolean).every((value) => pageText.includes(value));
+    const assetUrls = verifiablePublicAssetUrls(markdown, {
+      siteBaseUrl: publicSiteUrl,
+      assetBaseUrls: [r2Storage.publicBaseUrl].filter(Boolean),
+    }).slice(0, 24);
+    const assetChecks = await Promise.all(assetUrls.map(async (value) => {
+      try {
+        const assetResponse = await fetch(new URL(value, publicSiteUrl), {
+          method: "GET",
+          cache: "no-store",
+          redirect: "follow",
+          signal: controller.signal,
+        });
+        await assetResponse.body?.cancel();
+        return assetResponse.ok;
+      } catch {
+        return false;
+      }
+    }));
+    const assetsMatch = assetChecks.every(Boolean);
+    const matches = textMatches && assetsMatch;
     return {
       ...(matches
-        ? workflowState("live", "线上已生效", "线上页面已匹配当前标题、摘要和正文首中尾关键片段。")
-        : workflowState("pending_deploy", "等待线上部署", "线上地址可访问，但内容还没有匹配当前本地版本。")),
+        ? workflowState("live", "线上已生效", "线上页面文字与本站/R2引用图片均已匹配当前内容。")
+        : workflowState(
+          "pending_deploy",
+          "等待线上部署",
+          textMatches && !assetsMatch
+            ? "线上正文已经更新，但至少一张引用图片尚不可用。"
+            : "线上地址可访问，但内容还没有匹配当前本地版本。",
+        )),
       url,
     };
   } catch {
@@ -1177,6 +1249,13 @@ function normalizeImportedArticle(item, override = {}, { draft = true } = {}) {
     : /^原创(?:内容)?$/u.test(source)
       ? "original"
       : "unknown";
+  const recommendationGroupConfirmed = Object.hasOwn(override, "recommendationGroup")
+    && String(override.recommendationGroup || "").trim();
+  if (!draft && !recommendationGroupConfirmed) {
+    const error = new Error("公开导入前必须人工确认推荐分组。");
+    error.statusCode = 422;
+    throw error;
+  }
   let body = item.body;
   if (Object.hasOwn(override, "body")) {
     if (typeof override.body !== "string") {
@@ -1201,7 +1280,9 @@ function normalizeImportedArticle(item, override = {}, { draft = true } = {}) {
     tags,
     pubDate: item.pubDate,
     readTime: item.readTime,
-    recommendationGroup: normalizeRecommendationGroup(override.recommendationGroup),
+    ...(recommendationGroupConfirmed
+      ? { recommendationGroup: normalizeRecommendationGroup(override.recommendationGroup) }
+      : {}),
     editorNote: clampText(override.editorNote, 240),
     internalNote,
     internalReviewStatus: internalNote ? "unresolved" : "none",
@@ -1246,6 +1327,17 @@ async function importFlomoDrafts(payload) {
         contentHash: item.contentHash,
         title: item.title || "未命名内容",
         reason: item.duplicate?.reason || item.sourceReviewReason || "请补充标题、来源或正文后再发布",
+      });
+      continue;
+    }
+    if (
+      mode === "publish"
+      && !String(overrides[item.contentHash]?.recommendationGroup || "").trim()
+    ) {
+      blocked.push({
+        contentHash: item.contentHash,
+        title: item.title || "未命名内容",
+        reason: "公开导入前必须人工确认推荐分组。",
       });
       continue;
     }
@@ -1414,14 +1506,35 @@ function isGenericArticleSourceUrl(value) {
 function getAiConfig() {
   const apiKey = String(process.env.XGIF_AI_API_KEY || "").trim();
   const model = String(process.env.XGIF_AI_MODEL || "").trim();
-  const baseUrl = String(process.env.XGIF_AI_BASE_URL || "https://api.openai.com/v1").trim().replace(/\/+$/, "");
+  let baseUrl = "";
+  let configurationError = "";
+  try {
+    baseUrl = validateServiceBaseUrl(
+      process.env.XGIF_AI_BASE_URL || "https://api.openai.com/v1",
+      { label: "XGIF_AI_BASE_URL" },
+    );
+  } catch (error) {
+    configurationError = error.message;
+  }
 
   return {
     apiKey,
     model,
     baseUrl,
-    available: Boolean(apiKey && model),
+    available: Boolean(apiKey && model && baseUrl),
+    configurationError,
   };
+}
+
+function assertAiConfigured(config) {
+  if (config.available) return;
+  const error = new Error(
+    config.configurationError
+      ? `AI 服务地址配置无效：${config.configurationError}`
+      : "尚未配置 AI。请设置 XGIF_AI_API_KEY 与 XGIF_AI_MODEL 后重启发布器。",
+  );
+  error.statusCode = config.configurationError ? 500 : 503;
+  throw error;
 }
 
 async function recommendationStatusForApi() {
@@ -1491,11 +1604,7 @@ function sanitizeArticleSuggestion(value, fallbackSource, originalBody) {
 
 async function createArticleSuggestion(payload) {
   const config = getAiConfig();
-  if (!config.available) {
-    const error = new Error("尚未配置 AI。请设置 XGIF_AI_API_KEY 与 XGIF_AI_MODEL 后重启发布器。");
-    error.statusCode = 503;
-    throw error;
-  }
+  assertAiConfigured(config);
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), aiTimeoutMs);
@@ -1560,11 +1669,7 @@ async function createArticleSuggestion(payload) {
 
 async function createArticleTitleSuggestions(payload) {
   const config = getAiConfig();
-  if (!config.available) {
-    const error = new Error("尚未配置 AI。请设置 XGIF_AI_API_KEY 与 XGIF_AI_MODEL 后重启发布器。");
-    error.statusCode = 503;
-    throw error;
-  }
+  assertAiConfigured(config);
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), aiTimeoutMs);
@@ -1655,7 +1760,14 @@ function buildArticleMarkdown(payload) {
     throw error;
   }
   const tags = normalizeContentTags(payload.tags, { type: "article" });
-  const recommendationGroup = normalizeRecommendationGroup(payload.recommendationGroup);
+  const hasRecommendationGroup = Object.hasOwn(payload, "recommendationGroup")
+    && String(payload.recommendationGroup || "").trim();
+  const recommendationGroup = hasRecommendationGroup
+    ? normalizeRecommendationGroup(payload.recommendationGroup)
+    : "";
+  const recommendationGroupLine = recommendationGroup
+    ? `recommendationGroup: ${yamlString(recommendationGroup)}\n`
+    : "";
   const date = payload.pubDate || todayIso();
   const sourceUrl = String(payload.sourceUrl || "").trim();
   const sourceUrlLine = sourceUrl ? `sourceUrl: ${yamlString(sourceUrl)}\n` : "";
@@ -1674,7 +1786,7 @@ function buildArticleMarkdown(payload) {
   const coverAlt = String(payload.coverAlt || "").trim();
   const coverImageLine = coverImage ? `coverImage: ${yamlString(coverImage)}\n` : "";
   const coverAltLine = coverImage && coverAlt ? `coverAlt: ${yamlString(coverAlt)}\n` : "";
-  return `---\ntitle: ${yamlString(payload.title)}\ncontentId: ${yamlString(payload.contentId)}\nsummary: ${yamlString(payload.summary)}\nsource: ${yamlString(payload.source)}\n${sourceUrlLine}sourceKind: ${yamlString(payload.sourceKind || "original")}\ntags: ${yamlArray(tags)}\npubDate: ${date}\nreadTime: ${yamlString(payload.readTime || "1 分钟")}\nrecommendationGroup: ${yamlString(recommendationGroup)}\n${editorNoteLine}${internalNoteLine}${internalReviewStatusLine}${internalReviewResolvedAtLine}${coverImageLine}${coverAltLine}featured: ${Boolean(payload.featured)}\ndraft: ${Boolean(payload.draft)}\n---\n\n${markdownBody(payload.body)}`;
+  return `---\ntitle: ${yamlString(payload.title)}\ncontentId: ${yamlString(payload.contentId)}\nsummary: ${yamlString(payload.summary)}\nsource: ${yamlString(payload.source)}\n${sourceUrlLine}sourceKind: ${yamlString(payload.sourceKind || "original")}\ntags: ${yamlArray(tags)}\npubDate: ${date}\nreadTime: ${yamlString(payload.readTime || "1 分钟")}\n${recommendationGroupLine}${editorNoteLine}${internalNoteLine}${internalReviewStatusLine}${internalReviewResolvedAtLine}${coverImageLine}${coverAltLine}featured: ${Boolean(payload.featured)}\ndraft: ${Boolean(payload.draft)}\n---\n\n${markdownBody(payload.body)}`;
 }
 
 function validateArticleAttribution(payload) {
@@ -1687,7 +1799,16 @@ function validateArticleAttribution(payload) {
   const normalized = sourceKind === "unknown"
     ? { ...payload, sourceKind, source: String(payload.source || "").trim() || "来源待确认" }
     : { ...payload, sourceKind };
-  normalized.recommendationGroup = normalizeRecommendationGroup(normalized.recommendationGroup);
+  const hasRecommendationGroup = Object.hasOwn(normalized, "recommendationGroup")
+    && String(normalized.recommendationGroup || "").trim();
+  if (!Boolean(normalized.draft) && !hasRecommendationGroup) {
+    const error = new Error("公开文章必须人工确认推荐分组。");
+    error.statusCode = 422;
+    throw error;
+  }
+  if (hasRecommendationGroup) {
+    normalized.recommendationGroup = normalizeRecommendationGroup(normalized.recommendationGroup);
+  }
   validateRequired(normalized, ["title", "summary", "source"]);
   if (["publication", "editorial"].includes(sourceKind)) validateRequired(normalized, ["sourceUrl"]);
   if (String(normalized.sourceUrl || "").trim()) {
@@ -1829,11 +1950,7 @@ function sanitizeImageSuggestion(value) {
 
 async function createImageSuggestion(payload) {
   const config = getAiConfig();
-  if (!config.available) {
-    const error = new Error("尚未配置 AI。请设置 XGIF_AI_API_KEY 与 XGIF_AI_MODEL 后重启发布器。");
-    error.statusCode = 503;
-    throw error;
-  }
+  assertAiConfigured(config);
   if (!String(payload.fileData || "").startsWith("data:image/")) {
     const error = new Error("请选择图片后再使用 AI 整理。");
     error.statusCode = 400;
@@ -2194,6 +2311,14 @@ async function inspectBatchDrafts(input) {
         issue.level === "error"
         && !/超过 180 字的长段落|内部复核备注尚未确认/u.test(issue.message)
       ));
+      if (
+        item.type === "article"
+        && !String(parsed.data.recommendationGroup || "").trim()
+      ) {
+        manualBlockers.push(
+          qualityIssue("error", "推荐分组尚未人工确认；请先批量编辑或打开文章选择“通用内容/成人幽默”。"),
+        );
+      }
       results.push({
         type: item.type,
         file: item.file,
@@ -2203,7 +2328,7 @@ async function inspectBatchDrafts(input) {
         source: String(parsed.data.source || "").trim(),
         sourceUrl: String(parsed.data.sourceUrl || "").trim(),
         eligible: true,
-        ok: quality.ok,
+        ok: quality.ok && manualBlockers.length === 0,
         ...preparation,
         manualBlockers,
         contentSha256: contentSha256(markdown),
@@ -2277,6 +2402,9 @@ async function publishBatchDrafts(input) {
       if (!isDraft) {
         skipped.push({ type: item.type, file: item.file, title, reason: "已经处于本地发布状态。" });
         continue;
+      }
+      if (item.type === "article" && !String(parsed.data.recommendationGroup || "").trim()) {
+        throw new Error("推荐分组尚未人工确认；请先批量编辑或打开文章选择推荐分组。");
       }
 
       const next = {
@@ -2433,7 +2561,7 @@ async function transitionBatchContent(input, targetState) {
   return { ok: true, target: targetState, succeeded, skipped, failed, indexWarning };
 }
 
-function applyMetadataChanges(data, changes) {
+function applyMetadataChanges(data, changes, { type = "" } = {}) {
   const next = { ...data };
   if (changes.tags) {
     const mode = String(changes.tags.mode || "");
@@ -2461,6 +2589,13 @@ function applyMetadataChanges(data, changes) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(pubDate)) throw new Error("发布日期格式无效。");
     next.pubDate = pubDate;
   }
+  if (
+    type === "article"
+    && changes.recommendationGroup
+    && Object.hasOwn(changes.recommendationGroup, "value")
+  ) {
+    next.recommendationGroup = normalizeRecommendationGroup(changes.recommendationGroup.value);
+  }
   return next;
 }
 
@@ -2478,7 +2613,7 @@ async function updateBatchMetadata(input, changes) {
     try {
       const markdown = await readFile(item.filePath, "utf8");
       const parsed = parseFrontmatter(markdown);
-      const data = applyMetadataChanges(parsed.data, changes);
+      const data = applyMetadataChanges(parsed.data, changes, { type: item.type });
       const updated = await updateManagedContent(item.type, item.file, {
         ...data,
         body: parsed.body,
@@ -2525,7 +2660,7 @@ function githubCompareUrl(remote, branch) {
   return `https://github.com/${match[1]}/${match[2]}/compare/main...${encodeURIComponent(branch)}?expand=1`;
 }
 
-function syncQueueFrom(publicationItems, auditItems) {
+function syncQueueFrom(publicationItems, auditItems, deletionQueue = {}) {
   const localCandidates = publicationItems
     .filter((item) => matchesContentStatus(item, "local"))
     .map((item) => ({
@@ -2550,14 +2685,39 @@ function syncQueueFrom(publicationItems, auditItems) {
     warnings: [],
     reason: "上次推送失败，请从内容详情重试原内容分支。",
   })));
+  const deletionReady = (deletionQueue.ready || []).map((item) => ({
+    ...item,
+    action: "delete",
+    pubDate: item.deletedAt,
+  }));
+  const deletionRetries = (deletionQueue.retry || []).map((item) => ({
+    ...item,
+    action: "delete",
+    auditStatus: "retry",
+    blockers: [],
+    warnings: [],
+    reason: "上次下架分支推送未完成；再次执行“同步上线”会重试原分支。",
+    pubDate: item.deletedAt,
+  }));
+  const activeDeletionCount = (
+    (deletionQueue.ready || []).length
+    + (deletionQueue.retry || []).length
+    + (deletionQueue.pending || []).length
+  );
   return {
     counts: {
-      total: localCandidates.length,
-      ready: ready.length,
+      total: localCandidates.length + activeDeletionCount,
+      ready: ready.length + deletionReady.length + deletionRetries.length,
       attention: needsAttention.length,
+      deletions: activeDeletionCount,
+      deletionReady: deletionReady.length,
+      deletionRetry: deletionRetries.length,
+      deletionPending: (deletionQueue.pending || []).length,
+      deletionVerified: (deletionQueue.withdrawn || []).length,
     },
-    items: ready,
+    items: [...deletionRetries, ...deletionReady, ...ready],
     needsAttention,
+    pendingDeletions: deletionQueue.pending || [],
   };
 }
 
@@ -2604,10 +2764,75 @@ async function inspectBatchSync(input) {
   };
 }
 
+async function validatePublicationRetryReceipt(receipt) {
+  const action = String(receipt?.action || "sync");
+  if (action === "sync") {
+    const version = await publicationVersion({
+      repoRoot,
+      file: receipt.file,
+      strictAssets: true,
+    });
+    const expected = String(receipt.publicationSha256 || receipt.contentSha256 || "");
+    const actual = receipt.publicationSha256
+      ? version.publicationSha256
+      : version.contentSha256;
+    if (!expected || expected !== actual) {
+      const error = new Error(`失败分支中的内容或图片已经变化，不能重试：${receipt.file}`);
+      error.statusCode = 409;
+      throw error;
+    }
+    return;
+  }
+
+  if (action === "delete") {
+    const tombstones = await listPublicationDeletionTombstones({
+      trashRoot: target.trashContent,
+    });
+    const tombstone = tombstones.find((item) => item.file === receipt.file);
+    const expected = String(receipt.publicationSha256 || receipt.contentSha256 || "");
+    const actual = String(tombstone?.publicationSha256 || tombstone?.contentSha256 || "");
+    if (
+      !tombstone
+      || !expected
+      || expected !== actual
+      || (receipt.contentId && receipt.contentId !== tombstone.contentId)
+    ) {
+      const error = new Error(`失败分支中的下架凭据已经变化，不能重试：${receipt.file}`);
+      error.statusCode = 409;
+      throw error;
+    }
+  }
+}
+
+async function retryPublicationBatchFromReceipt(referenceReceipt) {
+  return retryPublicationBatch({
+    referenceReceipt,
+    receiptStore: publicationReceipts,
+    retryPush: ({ branch }) => retryContentSyncPush({ repoRoot, branch }),
+    appendReceiptBatch: appendPublicationReceiptBatch,
+    cleanupBranch: ({ branch }) => cleanupContentSyncBranch({ repoRoot, branch }),
+    validateReceipt: validatePublicationRetryReceipt,
+  });
+}
+
 async function syncBatchContent(input) {
-  const normalizedItems = await resolveBatchItems(input);
+  const includePendingDeletions = input?.includePendingDeletions === true;
+  let normalizedItems = [];
+  try {
+    normalizedItems = await resolveBatchItems(input);
+  } catch (error) {
+    if (!includePendingDeletions || error?.statusCode !== 400 || !/至少选择一条内容/u.test(error.message)) {
+      throw error;
+    }
+  }
   const readiness = await inspectSyncReadiness(normalizedItems);
-  if (!readiness.ready.length) {
+  const deletionQueue = includePendingDeletions
+    ? await publicationDeletionQueue({
+      trashRoot: target.trashContent,
+      receiptStore: publicationReceipts,
+    })
+    : { ready: [], retry: [], pending: [], total: 0 };
+  if (!readiness.ready.length && !deletionQueue.ready.length && !deletionQueue.retry.length) {
     const error = new Error("所选内容中没有通过上线体检的内容。");
     error.statusCode = 422;
     error.detail = readiness.skipped
@@ -2615,6 +2840,14 @@ async function syncBatchContent(input) {
       .map((item) => `${item.title}：${item.reason}`)
       .join("\n");
     throw error;
+  }
+
+  if (readiness.ready.length) {
+    const readyBundle = await buildPublicationBundle({
+      repoRoot,
+      items: readiness.ready,
+    });
+    readiness.ready = readyBundle.items;
   }
 
   const git = await getGitStatus();
@@ -2633,62 +2866,164 @@ async function syncBatchContent(input) {
     return receipt && publicationReceiptState(receipt) !== "push_succeeded";
   });
   const syncable = readiness.ready.filter((item) => !latestReceipts.has(item.file));
-  if (!syncable.length) {
-    if (failedPrevious.length) {
+
+  const deletionRetries = [];
+  const retryGroups = new Map();
+  for (const item of deletionQueue.retry) {
+    const branch = String(item.receipt?.branch || "");
+    if (!branch) {
+      const error = new Error(`下架回执缺少可重试分支：${item.file}`);
+      error.statusCode = 409;
+      throw error;
+    }
+    const group = retryGroups.get(branch) || [];
+    group.push(item);
+    retryGroups.set(branch, group);
+  }
+  for (const items of retryGroups.values()) {
+    const retried = await retryPublicationBatchFromReceipt(items[0]?.receipt);
+    deletionRetries.push({
+      ...retried,
+      push: retried.push,
+      items,
+      synced: retried.synced.map((receipt) => ({
+          type: receipt.file.startsWith("site/src/content/articles/") ? "article" : "image",
+          file: receipt.file,
+          contentId: receipt.contentId,
+          contentSha256: receipt.contentSha256,
+          publicationSha256: receipt.publicationSha256,
+        })),
+    });
+  }
+
+  const deletionSyncable = deletionQueue.ready;
+  if (!syncable.length && !deletionSyncable.length) {
+    if (failedPrevious.length && !deletionRetries.length) {
       const error = new Error("所选内容存在失败的同步分支，请从内容详情执行“重新同步”。");
       error.statusCode = 409;
       throw error;
     }
+    const referenceReceipt = latestReceipts.get(alreadyPushed[0]?.file);
+    const failedRetry = deletionRetries.find((item) => !item.push.ok);
+    const representativeRetry = failedRetry || deletionRetries.at(-1);
+    const retryBranches = [...new Set(deletionRetries.map((item) => item.branch))];
     return {
-      ok: true,
+      ok: !failedRetry,
       reused: alreadyPushed.map(({ filePath, ...item }) => item),
-      synced: [],
+      synced: deletionRetries.flatMap((item) => (item.push.ok ? item.synced : [])),
+      deleted: deletionRetries.flatMap((item) => (
+        item.push.ok ? item.items.map(({ receipt, sidecarPath, ...entry }) => entry) : []
+      )),
       skipped: readiness.skipped,
-      branch: latestReceipts.get(alreadyPushed[0].file)?.branch || "",
-      commitSha: latestReceipts.get(alreadyPushed[0].file)?.commitSha || "",
-      push: { attempted: false, ok: true, error: "" },
-      compareUrl: githubCompareUrl(git.remote, latestReceipts.get(alreadyPushed[0].file)?.branch),
+      branch: representativeRetry?.branch || referenceReceipt?.branch || "",
+      branches: retryBranches,
+      commitSha: representativeRetry?.commitSha || referenceReceipt?.commitSha || "",
+      push: representativeRetry?.push || { attempted: false, ok: true, error: "" },
+      compareUrl: githubCompareUrl(
+        git.remote,
+        representativeRetry?.branch || referenceReceipt?.branch,
+      ),
     };
   }
 
   const branch = contentSyncBranchName();
+  const batchId = randomUUID();
   let preparedReceipts = [];
+  let preparedDeletionReceipts = [];
+  const syncBundle = syncable.length
+    ? await buildPublicationBundle({ repoRoot, items: syncable })
+    : { files: [], expectedFileSha256: {} };
   const sync = await isolatedContentSync({
     repoRoot,
-    files: syncable.map((item) => item.file),
-    message: `Sync ${syncable.length} content item${syncable.length === 1 ? "" : "s"}`,
-    branch,
-    expectedContentSha256: Object.fromEntries(
-      syncable.map((item) => [item.file, item.contentSha256]),
+    files: syncBundle.files,
+    deleteFiles: deletionSyncable.map((item) => item.file),
+    expectedDeletionContentIds: Object.fromEntries(
+      deletionSyncable.map((item) => [item.file, item.contentId]),
     ),
+    message: `Publish ${syncable.length} update${syncable.length === 1 ? "" : "s"} and ${deletionSyncable.length} withdrawal${deletionSyncable.length === 1 ? "" : "s"}`,
+    branch,
+    expectedFileSha256: syncBundle.expectedFileSha256,
     onPrepared: async ({ commitSha }) => {
-      preparedReceipts = await appendPublicationReceiptBatch({
-        action: "sync",
-        state: "prepared",
-        branch,
-        commitSha,
-        push: { attempted: false, ok: false, error: "" },
-        items: syncable,
-      });
+      if (syncable.length) {
+        preparedReceipts = await appendPublicationReceiptBatch({
+          action: "sync",
+          state: "prepared",
+          branch,
+          commitSha,
+          push: { attempted: false, ok: false, error: "" },
+          items: syncable,
+          batchId,
+        });
+      }
+      if (deletionSyncable.length) {
+        preparedDeletionReceipts = await appendPublicationReceiptBatch({
+          action: "delete",
+          state: "prepared",
+          branch,
+          commitSha,
+          push: { attempted: false, ok: false, error: "" },
+          items: deletionSyncable,
+          batchId,
+        });
+      }
     },
   });
-  const receipts = await appendPublicationReceiptBatch({
-    action: "sync",
-    state: sync.push.ok ? "push_succeeded" : "push_failed",
-    branch: sync.branch,
-    commitSha: sync.commitSha,
-    push: sync.push,
-    items: syncable,
-    batchId: preparedReceipts[0]?.batchId,
-  });
+  const receipts = syncable.length
+    ? await appendPublicationReceiptBatch({
+      action: "sync",
+      state: sync.push.ok ? "push_succeeded" : "push_failed",
+      branch: sync.branch,
+      commitSha: sync.commitSha,
+      push: sync.push,
+      items: syncable,
+      batchId: preparedReceipts[0]?.batchId || batchId,
+    })
+    : [];
+  const deletionReceipts = deletionSyncable.length
+    ? await appendPublicationReceiptBatch({
+      action: "delete",
+      state: sync.push.ok ? "push_succeeded" : "push_failed",
+      branch: sync.noChange ? "" : sync.branch,
+      commitSha: sync.commitSha,
+      push: sync.push,
+      items: deletionSyncable,
+      batchId: preparedDeletionReceipts[0]?.batchId || batchId,
+    })
+    : [];
   if (sync.push.ok) {
     await cleanupContentSyncBranch({ repoRoot, branch: sync.branch });
   }
   clearPublicationStateCaches();
+  const retriedDeletionSuccesses = deletionRetries.flatMap((item) => (
+    item.push.ok ? item.items.map(({ receipt, sidecarPath, ...entry }) => entry) : []
+  ));
+  const retriedSyncSuccesses = deletionRetries.flatMap((item) => (
+    item.push.ok ? item.synced : []
+  ));
+  const deletionRetryFailed = deletionRetries.some((item) => !item.push.ok);
+  const failedDeletionRetry = deletionRetries.find((item) => !item.push.ok);
+  const resultBranches = [
+    ...deletionRetries.map((item) => item.branch),
+    ...(sync.noChange ? [] : [sync.branch]),
+  ];
+  const uniqueResultBranches = [...new Set(resultBranches)];
+  const primaryResultBranch = failedDeletionRetry?.branch
+    || (sync.noChange ? uniqueResultBranches.at(-1) || "" : sync.branch);
   const result = {
-    ok: sync.push.ok,
-    branch: sync.branch,
-    synced: syncable.map(({ filePath, ...item }) => item),
+    ok: sync.push.ok && !deletionRetryFailed,
+    branch: primaryResultBranch,
+    branches: uniqueResultBranches,
+    noChange: Boolean(sync.noChange && !deletionRetries.length),
+    synced: [
+      ...retriedSyncSuccesses,
+      ...syncable.map(({ filePath, ...item }) => item),
+    ],
+    deleted: [
+      ...retriedDeletionSuccesses,
+      ...(sync.push.ok
+        ? deletionSyncable.map(({ sidecarPath, ...item }) => item)
+        : []),
+    ],
     reused: alreadyPushed.map(({ filePath, ...item }) => item),
     skipped: [
       ...readiness.skipped,
@@ -2698,22 +3033,23 @@ async function syncBatchContent(input) {
       })),
     ],
     commitSha: sync.commitSha,
-    push: sync.push,
-    receipts,
-    compareUrl: githubCompareUrl(git.remote, sync.branch),
+    push: failedDeletionRetry?.push || sync.push,
+    receipts: [...receipts, ...deletionReceipts],
+    compareUrl: githubCompareUrl(git.remote, primaryResultBranch),
   };
   localDataStore.recordOperation("sync_content", {
-    batchId: receipts[0]?.batchId || randomUUID(),
-    branch: sync.branch,
-    count: syncable.length,
+    batchId: receipts[0]?.batchId || deletionReceipts[0]?.batchId || batchId,
+    branch: result.branch,
+    count: result.synced.length,
+    deleted: result.deleted.length,
     reused: alreadyPushed.length,
     skipped: readiness.skipped.length + failedPrevious.length,
-    files: syncable.map((item) => ({
+    files: result.synced.map((item) => ({
       file: item.file,
       contentSha256: item.contentSha256,
     })),
     commitSha: sync.commitSha,
-    pushOk: Boolean(sync.push.ok),
+    pushOk: Boolean(result.ok),
     compareUrl: result.compareUrl,
   });
   return result;
@@ -2725,11 +3061,18 @@ async function retryFailedContentSync(input) {
   for (const item of normalizedItems) {
     const markdown = await readFile(item.filePath, "utf8");
     const parsed = parseFrontmatter(markdown);
+    const version = await publicationVersion({
+      repoRoot,
+      file: item.file,
+      markdown,
+      strictAssets: true,
+    });
     selected.push({
       ...item,
       title: String(parsed.data.title || "未命名内容"),
       contentId: String(parsed.data.contentId || ""),
-      contentSha256: contentSha256(markdown),
+      contentSha256: version.contentSha256,
+      publicationSha256: version.publicationSha256,
     });
   }
   const receipts = await publicationReceipts.latestByFileAndHash(selected);
@@ -2750,63 +3093,28 @@ async function retryFailedContentSync(input) {
     error.statusCode = 409;
     throw error;
   }
-  const batchReceipts = await publicationReceipts.batchForReceipt(failed[0].receipt);
-  const current = [];
-  for (const receipt of batchReceipts) {
-    const type = receipt.file.startsWith("site/src/content/articles/") ? "article" : "image";
-    const filePath = resolveManagedFile(type, receipt.file);
-    const markdown = await readFile(filePath, "utf8");
-    const currentSha256 = contentSha256(markdown);
-    if (currentSha256 !== receipt.contentSha256) {
-      const error = new Error(`失败分支中的内容已经变化，不能重试：${receipt.file}`);
-      error.statusCode = 409;
-      throw error;
-    }
-    current.push({
-      type,
-      file: receipt.file,
-      filePath,
-      contentId: receipt.contentId,
-      contentSha256: currentSha256,
-    });
-  }
-  const sync = await retryContentSyncPush({
-    repoRoot,
-    branch: branches[0],
-  });
-  const recorded = await appendPublicationReceiptBatch({
-    action: "retry",
-    state: sync.push.ok ? "push_succeeded" : "push_failed",
-    branch: sync.branch,
-    commitSha: sync.commitSha,
-    push: sync.push,
-    items: current,
-  });
-  if (sync.push.ok) {
-    await cleanupContentSyncBranch({ repoRoot, branch: sync.branch });
-  }
+  const retried = await retryPublicationBatchFromReceipt(failed[0].receipt);
   clearPublicationStateCaches();
   localDataStore.recordOperation("sync_retry", {
-    batchId: recorded[0]?.batchId || randomUUID(),
-    branch: sync.branch,
-    commitSha: sync.commitSha,
-    pushOk: Boolean(sync.push.ok),
-    files: current.map((item) => ({
+    batchId: retried.receipts[0]?.batchId || failed[0].receipt.batchId || randomUUID(),
+    branch: retried.branch,
+    commitSha: retried.commitSha,
+    pushOk: Boolean(retried.push.ok),
+    files: retried.synced.map((item) => ({
       file: item.file,
       contentSha256: item.contentSha256,
     })),
+    deleted: retried.deleted.length,
   });
-  return {
-    ok: sync.push.ok,
-    branch: sync.branch,
-    commitSha: sync.commitSha,
-    push: sync.push,
-    receipts: recorded,
-  };
+  return retried;
 }
 
 async function trashBatchDrafts(input) {
   const normalizedItems = await resolveBatchItems(input);
+  const workflowByFile = new Map(
+    (await getContentWorkflowStates(await listContent("all")))
+      .map((item) => [item.file, item.workflow]),
+  );
   const batchId = new Date().toISOString().replace(/[:.]/g, "-");
   const batchDirectory = path.join(target.trashContent, batchId);
   const succeeded = [];
@@ -2818,7 +3126,9 @@ async function trashBatchDrafts(input) {
     try {
       const parsed = parseFrontmatter(await readFile(item.filePath, "utf8"));
       const isDraft = Boolean(parsed.data.draft) || (item.type === "image" && parsed.data.public === false);
-      if (!isDraft) requiresSync = true;
+      const workflow = workflowByFile.get(item.file);
+      const requiresRemoteDeletion = !isDraft && workflow?.state === "pending_deploy";
+      if (requiresRemoteDeletion) requiresSync = true;
 
       const trashPath = await uniquePath(
         batchDirectory,
@@ -2826,19 +3136,28 @@ async function trashBatchDrafts(input) {
         path.extname(item.file),
       );
       const sourceContent = await readFile(item.filePath);
+      const version = await publicationVersion({
+        repoRoot,
+        file: item.file,
+        markdown: sourceContent.toString("utf8"),
+      });
       const deletedAt = new Date().toISOString();
       const sha256 = createHash("sha256").update(sourceContent).digest("hex");
       const id = `xgif-trash-${randomUUID()}`;
       const metadataPath = `${trashPath}.meta.json`;
       const sidecar = {
-        schemaVersion: 1,
+        schemaVersion: publicationTrashSchemaVersion,
         id,
         type: item.type,
         file: item.file,
         trashFile: path.relative(repoRoot, trashPath),
         metadataFile: path.relative(repoRoot, metadataPath),
         title: String(parsed.data.title || "未命名内容"),
-        publicationState: isDraft ? "draft" : "local",
+        contentId: String(parsed.data.contentId || ""),
+        contentSha256: version.contentSha256,
+        publicationSha256: version.publicationSha256,
+        publicationState: isDraft ? "draft" : String(workflow?.state || "local"),
+        requiresRemoteDeletion,
         deletedAt,
         restoredAt: null,
         status: "trashed",
@@ -2918,6 +3237,44 @@ async function restoreBatchDrafts(items) {
           size: Number(item?.size || 0),
         };
       }
+      const deletionReceipts = await publicationReceipts.latestByFileAndHash(
+        [sidecar],
+        { action: "delete" },
+      );
+      const deletionReceipt = deletionReceipts.get(sidecar.file);
+      const deletionState = publicationReceiptState(deletionReceipt);
+      const liveStatusCode = deletionReceipt && deletionState === "push_succeeded"
+        ? (await probeUrl(liveContentUrl(sidecar.type, sidecar.contentId), 3000)).statusCode
+        : null;
+      const restorePlan = planTrashRestore({
+        deletionReceipt,
+        liveStatusCode,
+      });
+      if (restorePlan.shouldRecordRestore) {
+        await appendPublicationReceiptBatch({
+          action: "restore",
+          state: "restored",
+          branch: "",
+          commitSha: "",
+          push: { attempted: false, ok: true, error: "" },
+          items: [sidecar],
+        });
+      } else if (restorePlan.shouldCancelBatch) {
+        const batchReceipts = await publicationReceipts.batchForReceipt(deletionReceipt);
+        await cleanupContentSyncBranch({
+          repoRoot,
+          branch: deletionReceipt.branch,
+        });
+        await appendPublicationReceiptBatch({
+          action: "cancel",
+          state: "canceled",
+          branch: "",
+          commitSha: "",
+          push: { attempted: false, ok: true, error: "" },
+          items: batchReceipts,
+          batchId: deletionReceipt.batchId,
+        });
+      }
       await mkdir(path.dirname(originalPath), { recursive: true });
       await rename(trashPath, originalPath);
       const restoredAt = new Date().toISOString();
@@ -2933,6 +3290,7 @@ async function restoreBatchDrafts(items) {
         trashFile: path.relative(repoRoot, trashPath),
         metadataFile: path.relative(repoRoot, metadataPath),
         restoredAt,
+        ...(restorePlan.requiresSync ? { requiresSync: true } : {}),
       };
       succeeded.push(entry);
       try {
@@ -2989,6 +3347,27 @@ async function purgeTrashItems(items, confirmation) {
       }
       if (!metadataPath.startsWith(`${target.trashContent}${path.sep}`) || metadataPath !== `${trashPath}.meta.json`) {
         throw new Error("回收站旁车文件无效。");
+      }
+      let sidecar = null;
+      try {
+        sidecar = JSON.parse(await readFile(metadataPath, "utf8"));
+      } catch {
+        sidecar = null;
+      }
+      if (sidecar?.requiresRemoteDeletion === true) {
+        const deletionReceipts = await publicationReceipts.latestByFileAndHash(
+          [sidecar],
+          { action: "delete" },
+        );
+        const deletionReceipt = deletionReceipts.get(sidecar.file);
+        const liveStatusCode = publicationReceiptState(deletionReceipt) === "push_succeeded"
+          ? (await probeUrl(liveContentUrl(sidecar.type, sidecar.contentId), 3000)).statusCode
+          : null;
+        assertTrashPurgeAllowed({
+          requiresRemoteDeletion: true,
+          deletionReceipt,
+          liveStatusCode,
+        });
       }
       await unlink(trashPath);
       let metadataWarning = "";
@@ -3099,6 +3478,71 @@ async function recordUserProvidedAsset({ payload, asset, entryPath, assetPath, a
   return target.userProvidedLedger;
 }
 
+async function buildPublisherStatusPayload() {
+  const [
+    git,
+    sitePreview,
+    localContentHistory,
+    publicationItems,
+    contentAudit,
+    recommendations,
+    deletionQueue,
+    trashSchema,
+  ] = await Promise.all([
+    getGitStatus(),
+    probeUrl(localSiteUrl),
+    localContentBackupStatus(),
+    listContent("all").then((items) => getContentPublicationStates(items)),
+    auditContentLibrary({ repoRoot }),
+    recommendationStatusForApi(),
+    publicationDeletionQueue({
+      trashRoot: target.trashContent,
+      receiptStore: publicationReceipts,
+    }),
+    publicationTrashSchemaStatus({
+      trashRoot: target.trashContent,
+    }),
+  ]);
+  const contentSafety = getContentGitSafety(publicationItems);
+  const aiConfig = getAiConfig();
+  const verifiedDeletionQueue = await verifyPendingPublicationDeletions(deletionQueue);
+  return {
+    repoRoot,
+    branch: git.branch,
+    hasUncommittedChanges: git.dirty,
+    git: { ...git, remote: safeGitRemote(git.remote) },
+    gitCompareUrl: githubCompareUrl(git.remote, git.branch),
+    contentSafety,
+    publicationCounts: contentStatusCounts(publicationItems),
+    syncQueue: syncQueueFrom(publicationItems, contentAudit.items, verifiedDeletionQueue),
+    localContentHistory,
+    services: {
+      publisher: { available: true, url: `http://127.0.0.1:${port}` },
+      sitePreview: { ...sitePreview, url: localSiteUrl.href },
+    },
+    ai: {
+      available: aiConfig.available,
+      model: aiConfig.model || null,
+      baseUrl: safeDisplayUrl(aiConfig.baseUrl),
+      configurationError: aiConfig.configurationError || "",
+    },
+    deploymentPreviewUrl: safeDisplayUrl(process.env.XGIF_DEPLOY_PREVIEW_URL),
+    imageStorage: r2Storage.enabled
+      ? { provider: "cloudflare-r2", bucket: r2Storage.bucket, publicBaseUrl: r2Storage.publicBaseUrl }
+      : { provider: "local" },
+    localData: localDataStatus(),
+    trashSchema,
+    recommendations,
+    target: {
+      articles: path.relative(repoRoot, target.articles),
+      images: path.relative(repoRoot, target.imageEntries),
+      memeAssets: path.relative(repoRoot, target.memeAssets),
+      flomoImportLedger: path.relative(repoRoot, target.flomoImportLedger),
+      r2AssetLedger: path.relative(repoRoot, target.r2AssetLedger),
+    },
+  };
+}
+
 async function handleApi(req, res) {
   const requestUrl = new URL(req.url, `http://localhost:${port}`);
   const pathname = requestUrl.pathname;
@@ -3120,56 +3564,8 @@ async function handleApi(req, res) {
   }
 
   if (pathname === "/api/status" && req.method === "GET") {
-    const [
-      git,
-      sitePreview,
-      contentSafety,
-      localContentHistory,
-      publicationItems,
-      contentAudit,
-      recommendations,
-    ] = await Promise.all([
-      getGitStatus(),
-      probeUrl(localSiteUrl),
-      getContentGitSafety(),
-      localContentBackupStatus(),
-      listContent("all").then((items) => getContentPublicationStates(items)),
-      auditContentLibrary({ repoRoot }),
-      recommendationStatusForApi(),
-    ]);
-    sendJson(res, 200, {
-      repoRoot,
-      branch: git.branch,
-      hasUncommittedChanges: git.dirty,
-      git: { ...git, remote: safeGitRemote(git.remote) },
-      gitCompareUrl: githubCompareUrl(git.remote, git.branch),
-      contentSafety,
-      publicationCounts: contentStatusCounts(publicationItems),
-      syncQueue: syncQueueFrom(publicationItems, contentAudit.items),
-      localContentHistory,
-      services: {
-        publisher: { available: true, url: `http://127.0.0.1:${port}` },
-        sitePreview: { ...sitePreview, url: localSiteUrl.href },
-      },
-      ai: {
-        available: getAiConfig().available,
-        model: getAiConfig().model || null,
-        baseUrl: safeDisplayUrl(getAiConfig().baseUrl),
-      },
-      deploymentPreviewUrl: safeDisplayUrl(process.env.XGIF_DEPLOY_PREVIEW_URL),
-      imageStorage: r2Storage.enabled
-        ? { provider: "cloudflare-r2", bucket: r2Storage.bucket, publicBaseUrl: r2Storage.publicBaseUrl }
-        : { provider: "local" },
-      localData: localDataStatus(),
-      recommendations,
-      target: {
-        articles: path.relative(repoRoot, target.articles),
-        images: path.relative(repoRoot, target.imageEntries),
-        memeAssets: path.relative(repoRoot, target.memeAssets),
-        flomoImportLedger: path.relative(repoRoot, target.flomoImportLedger),
-        r2AssetLedger: path.relative(repoRoot, target.r2AssetLedger),
-      },
-    });
+    const refreshRemote = requestUrl.searchParams.get("refresh") === "remote";
+    sendJson(res, 200, await publisherStatusSnapshot.get({ refresh: refreshRemote }));
     return;
   }
 
@@ -3179,6 +3575,7 @@ async function handleApi(req, res) {
     sendJson(res, 200, {
       ok: true,
       unchanged: result.unchanged,
+      preservedLastGood: Boolean(result.preservedLastGood),
       fallback: Boolean(result.summary.fallbackCode),
       fallbackCode: result.summary.fallbackCode || null,
       summary: result.summary,
@@ -3959,6 +4356,14 @@ server.listen(port, "127.0.0.1", () => {
   console.log(`Repository: ${repoRoot}`);
   console.log(`Local index: ${storageStatus.database} (${storageStatus.content} contents)`);
   console.log(`Private content history: ${contentBackupStatus.gitDir} (${contentBackupStatus.files} files)`);
+  if (!publisherTestMode) {
+    void publisherStatusSnapshot.refresh().catch((error) => {
+      console.warn(`发布状态预热失败：${safeProcessError(error, {
+        fallback: "状态将在首次打开时重试。",
+        redactPaths: [repoRoot],
+      })}`);
+    });
+  }
 });
 
 function shutdown() {

@@ -110,6 +110,19 @@ try {
   const session = await call({ pathname: "/api/session" });
   const csrf = session.json().csrfToken;
   assert.ok(csrf);
+  const initialStatus = await call({ pathname: "/api/status" });
+  assert.equal(initialStatus.status, 200);
+  assert.equal(initialStatus.json().statusMeta.stale, false);
+  assert.ok(initialStatus.json().statusMeta.checkedAt);
+  const cachedStatus = await call({ pathname: "/api/status" });
+  assert.equal(cachedStatus.status, 200);
+  assert.equal(
+    cachedStatus.json().statusMeta.checkedAt,
+    initialStatus.json().statusMeta.checkedAt,
+  );
+  const refreshedStatus = await call({ pathname: "/api/status?refresh=remote" });
+  assert.equal(refreshedStatus.status, 200);
+  assert.equal(refreshedStatus.json().statusMeta.stale, false);
   const validCsrf = await call({
     method: "POST",
     pathname: "/api/not-a-route",
