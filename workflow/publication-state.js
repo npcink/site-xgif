@@ -17,6 +17,12 @@ export function contentVerificationAnchors(value, width = 48) {
   ])];
 }
 
+export function markdownVisibleText(value) {
+  return String(value || "")
+    .replace(/!\[([^\]]*)\]\((?:\\.|[^)])*\)/gu, "$1")
+    .replace(/\[([^\]]+)\]\((?:\\.|[^)])*\)/gu, "$1");
+}
+
 export function publicationFromWorkflow(workflow = {}) {
   if (workflow.state === "draft") {
     return {
