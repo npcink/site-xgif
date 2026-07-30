@@ -54,6 +54,7 @@ yarn-error.log*
 /workflow/private-sources/
 /workflow/records/content-audit-latest.json
 /workflow/records/content-audit-latest.md
+/workflow/records/publication-events.jsonl
 
 # private local imports
 /data/*.zip

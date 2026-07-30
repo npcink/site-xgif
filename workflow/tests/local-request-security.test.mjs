@@ -44,6 +44,18 @@ test("local publisher requires JSON and a valid CSRF token for mutations", () =>
     localRequestSecurityError({
       ...base,
       method: "POST",
+      headers: {
+        host: "127.0.0.1:8787",
+        "content-type": "application/jsonp",
+        "x-xgif-csrf": "test-token",
+      },
+    })?.statusCode,
+    415,
+  );
+  assert.equal(
+    localRequestSecurityError({
+      ...base,
+      method: "POST",
       headers: { host: "127.0.0.1:8787", "content-type": "application/json" },
     })?.statusCode,
     403,

@@ -7,6 +7,10 @@ import {
 } from "./article-publication.js";
 import { isContentId } from "./content-id.js";
 import { CANONICAL_TAGS } from "./content-taxonomy.js";
+import {
+  localAssetFileFromUrl,
+  referencedLocalAssetFiles,
+} from "./publication-bundle.js";
 
 const internalNotePatterns = [
   /flomo\s*私人(?:笔记|收藏)?导入/iu,
@@ -101,7 +105,7 @@ function createItem(type, file, parsed, repoRoot) {
   };
 }
 
-function auditArticle(item) {
+async function auditArticle(item, repoRoot) {
   const { data, body, file, sourceKind, sourceUrl } = item;
   if (!String(data.title || "").trim()) item.blockers.push("缺少标题。");
   if (!String(data.summary || "").trim()) item.blockers.push("缺少摘要。");
@@ -112,6 +116,17 @@ function auditArticle(item) {
   if (!Array.isArray(data.tags) || data.tags.length === 0) item.blockers.push("缺少标签。");
   if (Array.isArray(data.tags) && data.tags.some((tag) => !CANONICAL_TAGS.includes(tag))) {
     item.blockers.push("包含未纳入规范词表的标签。");
+  }
+  const recommendationGroup = String(data.recommendationGroup || "").trim();
+  if (!recommendationGroup) {
+    if (item.draft) {
+      item.blockers.push("推荐分组尚未人工确认，发布前必须选择“通用内容”或“成人幽默”。");
+    } else {
+      item.recommendationGroupDebt = true;
+      item.warnings.push("历史已发布内容缺少推荐分组；保持现有线上状态，但下次编辑或同步前必须人工确认。");
+    }
+  } else if (!["general", "adult-humor"].includes(recommendationGroup)) {
+    item.blockers.push("推荐分组无效，只允许“通用内容”或“成人幽默”。");
   }
   if (["publication", "editorial"].includes(sourceKind) && !sourceUrl) {
     item.blockers.push("外部来源文章缺少来源链接。");
@@ -128,7 +143,12 @@ function auditArticle(item) {
   const internalNote = String(data.internalNote || "").trim();
   const internalReviewStatus = String(data.internalReviewStatus || "unresolved").trim();
   if (internalNote && internalReviewStatus !== "resolved") {
-    item.blockers.push("内部复核备注尚未确认，不能进入发布流程。");
+    if (item.draft) {
+      item.blockers.push("内部复核备注尚未确认，不能进入发布流程。");
+    } else {
+      item.legacyReviewDebt = true;
+      item.warnings.push("历史已发布内容仍有内部复核备注未确认；保持现有线上状态，但下次编辑或同步前必须完成复核。");
+    }
   }
   if (sourceUrl && isGenericSourceUrl(sourceUrl)) {
     item.warnings.push("来源链接只指向网站首页，需要确认具体原文地址。");
@@ -154,6 +174,17 @@ function auditArticle(item) {
   }
   const urls = bodyUrls(body).filter((url) => url !== sourceUrl);
   if (urls.length) item.warnings.push(`正文仍含 ${urls.length} 个未结构化链接，需要人工判断用途。`);
+  const localAssetFiles = [
+    localAssetFileFromUrl(data.coverImage),
+    ...referencedLocalAssetFiles(body),
+  ].filter(Boolean);
+  for (const assetFile of [...new Set(localAssetFiles)]) {
+    try {
+      await access(path.join(repoRoot, assetFile));
+    } catch {
+      item.blockers.push(`文章引用的本地图片不存在：${assetFile}。`);
+    }
+  }
 
   const legacyNote = String(data.note || "");
   if (legacyNote && internalNotePatterns.some((pattern) => pattern.test(legacyNote))) {
@@ -233,7 +264,7 @@ function finalize(items) {
     for (const item of group) item.blockers.push("正文与另一篇文章完全相同，不能重复发布。");
   }
   for (const item of items) {
-    item.status = item.blockers.length ? "draft" : item.warnings.length ? "review" : "ready";
+    item.status = item.blockers.length ? "blocked" : item.warnings.length ? "review" : "ready";
     delete item.data;
     delete item.body;
     delete item.contentHash;
@@ -270,12 +301,12 @@ export async function auditContentLibrary({ repoRoot }) {
           blockers: ["无法解析 Markdown frontmatter。"],
           warnings: [],
           notices: [],
-          status: "draft",
+          status: "blocked",
         });
         continue;
       }
       const item = createItem(source.type, file, parsed, repoRoot);
-      if (source.type === "article") auditArticle(item);
+      if (source.type === "article") await auditArticle(item, repoRoot);
       else await auditImage(item, repoRoot);
       items.push(item);
     }
@@ -286,7 +317,9 @@ export async function auditContentLibrary({ repoRoot }) {
     total: items.length,
     ready: items.filter((item) => item.status === "ready").length,
     review: items.filter((item) => item.status === "review").length,
-    draft: items.filter((item) => item.status === "draft").length,
+    blocked: items.filter((item) => item.status === "blocked").length,
+    legacyReviewDebt: items.filter((item) => item.legacyReviewDebt).length,
+    recommendationGroupDebt: items.filter((item) => item.recommendationGroupDebt).length,
   };
   return { generatedAt: new Date().toISOString(), counts, items };
 }
@@ -303,12 +336,14 @@ export function renderContentAuditMarkdown(report) {
     "",
     `- 可直接上线：${report.counts.ready}`,
     `- 需要人工确认：${report.counts.review}`,
-    `- 建议退回草稿：${report.counts.draft}`,
+    `- 阻断发布：${report.counts.blocked}`,
+    `- 历史复核债务：${report.counts.legacyReviewDebt}`,
+    `- 推荐分组债务：${report.counts.recommendationGroupDebt}`,
     `- 总计：${report.counts.total}`,
     "",
   ];
   for (const [status, title] of [
-    ["draft", "建议退回草稿"],
+    ["blocked", "阻断发布"],
     ["review", "需要人工确认"],
     ["ready", "可直接上线"],
   ]) {

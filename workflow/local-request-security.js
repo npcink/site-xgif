@@ -33,7 +33,7 @@ export function localRequestSecurityError({
   if (!mutationMethods.has(String(method || "").toUpperCase())) return null;
 
   const contentType = String(headers["content-type"] || "").toLowerCase();
-  if (!contentType.startsWith("application/json")) {
+  if (!/^application\/json(?:\s*;|$)/u.test(contentType)) {
     return { statusCode: 415, message: "修改请求必须使用 application/json。" };
   }
   if (!csrfToken || String(headers["x-xgif-csrf"] || "") !== csrfToken) {

@@ -14,6 +14,7 @@ import {
   selectContentRecommendations,
 } from "../site/src/lib/recommendations.mjs";
 import { parseContentDocument } from "./local-data-store.js";
+import { validateServiceBaseUrl } from "./service-url-policy.js";
 
 const DEFAULT_TIMEOUT_MS = 60_000;
 const DEFAULT_BATCH_SIZE = 16;
@@ -21,6 +22,10 @@ const VECTOR_INPUT_LIMIT = 1_600;
 
 export function recommendationManifestPath(repoRoot) {
   return path.join(repoRoot, "site", "src", "data", "recommendations.json");
+}
+
+export function recommendationAttemptPath(repoRoot) {
+  return path.join(repoRoot, "workflow", ".runtime", "recommendation-attempt.json");
 }
 
 export class EmbeddingServiceError extends Error {
@@ -38,20 +43,22 @@ function positiveInteger(value, fallback, maximum) {
 }
 
 export function getEmbeddingConfig(env = process.env) {
-  const baseUrl = String(env.XGIF_EMBEDDING_BASE_URL || "").trim().replace(/\/+$/, "");
+  let baseUrl = "";
+  try {
+    baseUrl = validateServiceBaseUrl(env.XGIF_EMBEDDING_BASE_URL, {
+      label: "XGIF_EMBEDDING_BASE_URL",
+    });
+  } catch (error) {
+    throw new EmbeddingServiceError(
+      "EMBEDDING_CONFIG_INVALID",
+      error.message,
+      { cause: error },
+    );
+  }
   const model = String(env.XGIF_EMBEDDING_MODEL || "").trim();
   let endpoint = "";
   if (baseUrl) {
-    try {
-      const parsed = new URL(baseUrl);
-      if (!["http:", "https:"].includes(parsed.protocol)) throw new Error("unsupported protocol");
-      endpoint = `${baseUrl}/embeddings`;
-    } catch {
-      throw new EmbeddingServiceError(
-        "EMBEDDING_CONFIG_INVALID",
-        "XGIF_EMBEDDING_BASE_URL must be an HTTP(S) URL.",
-      );
-    }
+    endpoint = `${baseUrl}/embeddings`;
   }
   return {
     available: Boolean(endpoint && model),
@@ -241,7 +248,10 @@ export async function loadPublicRecommendationContent(repoRoot) {
 
 export function recommendationSourceHash(documents) {
   return createHash("sha256")
-    .update(documents.map((document) => `${document.id}:${document.contentSha256}`).join("\n"))
+    .update(documents.map((document) => {
+      const group = recommendationDocument(document.entry).recommendationGroup;
+      return `${document.id}:${document.contentSha256}${group === "adult-humor" ? `:${group}` : ""}`;
+    }).join("\n"))
     .digest("hex");
 }
 
@@ -279,6 +289,29 @@ export async function writeRecommendationManifest(repoRoot, manifest) {
   return outputPath;
 }
 
+async function readRecommendationAttempt(repoRoot) {
+  try {
+    const attempt = JSON.parse(await readFile(recommendationAttemptPath(repoRoot), "utf8"));
+    return attempt && typeof attempt === "object" && !Array.isArray(attempt) ? attempt : null;
+  } catch (error) {
+    if (error?.code === "ENOENT" || error instanceof SyntaxError) return null;
+    throw error;
+  }
+}
+
+async function writeRecommendationAttempt(repoRoot, attempt) {
+  const outputPath = recommendationAttemptPath(repoRoot);
+  const temporaryPath = `${outputPath}.${process.pid}.${Date.now()}.tmp`;
+  await mkdir(path.dirname(outputPath), { recursive: true });
+  try {
+    await writeFile(temporaryPath, `${JSON.stringify(attempt, null, 2)}\n`, "utf8");
+    await rename(temporaryPath, outputPath);
+  } catch (error) {
+    await unlink(temporaryPath).catch(() => {});
+    throw error;
+  }
+}
+
 export async function getRecommendationStatus({
   repoRoot,
   env = process.env,
@@ -291,6 +324,7 @@ export async function getRecommendationStatus({
   } catch {
     manifestError = "RECOMMENDATION_MANIFEST_INVALID";
   }
+  const attempt = await readRecommendationAttempt(repoRoot);
 
   let embeddingConfig = null;
   let configurationCode = "";
@@ -313,6 +347,28 @@ export async function getRecommendationStatus({
     || covered !== total
   );
   const mode = manifest?.mode === "hybrid" ? "hybrid" : manifest ? "rules" : "missing";
+  const manifestGeneratedAt = Date.parse(manifest?.generatedAt || "");
+  const attemptAt = Date.parse(attempt?.attemptedAt || "");
+  const currentAttempt = attempt && (
+    !Number.isFinite(manifestGeneratedAt)
+    || (Number.isFinite(attemptAt) && attemptAt >= manifestGeneratedAt)
+  )
+    ? attempt
+    : null;
+  const fallbackCode = String(
+    currentAttempt?.fallbackCode
+    || manifest?.generation?.fallbackCode
+    || "",
+  );
+  const degraded = Boolean(
+    currentAttempt?.preservedLastGood
+    || (
+      manifest
+      && mode === "rules"
+      && embeddingConfig?.available
+      && (fallbackCode || !manifest.generation)
+    )
+  );
 
   return {
     available: Boolean(manifest),
@@ -325,6 +381,13 @@ export async function getRecommendationStatus({
     total,
     covered,
     stale,
+    degraded,
+    fallbackCode,
+    lastAttemptAt: currentAttempt?.attemptedAt
+      || manifest?.generation?.attemptedAt
+      || manifest?.generatedAt
+      || null,
+    preservedLastGood: Boolean(currentAttempt?.preservedLastGood),
     embeddingConfigured: Boolean(embeddingConfig?.available),
     embeddingModel: embeddingConfig?.model || null,
     configurationCode: (
@@ -369,7 +432,8 @@ export function rankHybridCandidates(source, candidates, vectors) {
     })
     .sort(
       (left, right) =>
-        right.score - left.score
+        Number(right.groupMatch) - Number(left.groupMatch)
+        || right.score - left.score
         || right.vector - left.vector
         || right.relevance - left.relevance
         || left.id.localeCompare(right.id),
@@ -384,6 +448,30 @@ function rulesFor(source, candidates, options) {
   return ids(selectContentRecommendations(source, candidates, options));
 }
 
+function applyAdultHumorCoverage(documents, recommendations) {
+  const adultArticleIds = documents
+    .filter((document) => {
+      const entry = recommendationDocument(document.entry);
+      return document.type === "article"
+        && !entry.isDraft
+        && entry.isPublic
+        && entry.recommendationGroup === "adult-humor";
+    })
+    .map((document) => document.id)
+    .sort();
+  if (adultArticleIds.length < 2) return;
+
+  adultArticleIds.forEach((sourceId, index) => {
+    const coverageId = adultArticleIds[(index + 1) % adultArticleIds.length];
+    const current = recommendations[sourceId]?.articles || [];
+    if (!current.length || current.includes(coverageId)) return;
+    recommendations[sourceId].articles = [
+      ...current.slice(0, Math.max(0, current.length - 1)),
+      coverageId,
+    ];
+  });
+}
+
 export function buildRecommendationManifest(
   documents,
   {
@@ -391,6 +479,7 @@ export function buildRecommendationManifest(
     mode = "rules",
     model = null,
     generatedAt = new Date().toISOString(),
+    generation = {},
   } = {},
 ) {
   const articles = documents.filter((document) => document.type === "article");
@@ -459,6 +548,7 @@ export function buildRecommendationManifest(
     }
   }
 
+  applyAdultHumorCoverage(documents, recommendations);
   const sourceHash = recommendationSourceHash(documents);
   const dimensions = mode === "hybrid" ? vectors.values().next().value?.length || null : null;
   return {
@@ -469,6 +559,11 @@ export function buildRecommendationManifest(
     embedding: {
       model: mode === "hybrid" ? model : null,
       dimensions,
+    },
+    generation: {
+      fallbackCode: String(generation.fallbackCode || ""),
+      requestedModel: String(generation.requestedModel || model || ""),
+      attemptedAt: String(generation.attemptedAt || generatedAt),
     },
     recommendations,
   };
@@ -543,7 +638,13 @@ export async function generateRecommendationManifest({
   } catch (error) {
     if (requireEmbeddings) throw error;
     return {
-      manifest: buildRecommendationManifest(documents, { generatedAt }),
+      manifest: buildRecommendationManifest(documents, {
+        generatedAt,
+        generation: {
+          fallbackCode: error.code || "EMBEDDING_CONFIG_INVALID",
+          attemptedAt: generatedAt,
+        },
+      }),
       summary: {
         mode: "rules",
         documents: documents.length,
@@ -562,7 +663,14 @@ export async function generateRecommendationManifest({
       );
     }
     return {
-      manifest: buildRecommendationManifest(documents, { generatedAt }),
+      manifest: buildRecommendationManifest(documents, {
+        generatedAt,
+        generation: {
+          fallbackCode: rulesOnly ? "" : "EMBEDDING_CONFIG_UNAVAILABLE",
+          requestedModel: config.model,
+          attemptedAt: generatedAt,
+        },
+      }),
       summary: {
         mode: "rules",
         documents: documents.length,
@@ -581,6 +689,10 @@ export async function generateRecommendationManifest({
         mode: "hybrid",
         model: config.model,
         generatedAt,
+        generation: {
+          requestedModel: config.model,
+          attemptedAt: generatedAt,
+        },
       }),
       summary: {
         mode: "hybrid",
@@ -595,7 +707,14 @@ export async function generateRecommendationManifest({
   } catch (error) {
     if (requireEmbeddings) throw error;
     return {
-      manifest: buildRecommendationManifest(documents, { generatedAt }),
+      manifest: buildRecommendationManifest(documents, {
+        generatedAt,
+        generation: {
+          fallbackCode: error.code || "EMBEDDING_REQUEST_FAILED",
+          requestedModel: config.model,
+          attemptedAt: generatedAt,
+        },
+      }),
       summary: {
         mode: "rules",
         documents: documents.length,
@@ -615,7 +734,7 @@ export async function refreshRecommendationManifest({
   force = false,
 } = {}) {
   const before = await getRecommendationStatus({ repoRoot, env });
-  if (!force && before.available && !before.stale) {
+  if (!force && before.available && !before.stale && !before.degraded) {
     return {
       unchanged: true,
       summary: {
@@ -637,7 +756,30 @@ export async function refreshRecommendationManifest({
     env,
     fetchImpl,
   });
+  const attempt = {
+    attemptedAt: result.manifest.generatedAt,
+    mode: result.summary.mode,
+    fallbackCode: result.summary.fallbackCode || "",
+    requestedModel: result.summary.model || String(env.XGIF_EMBEDDING_MODEL || "").trim(),
+    preservedLastGood: false,
+  };
+  if (
+    before.available
+    && before.mode === "hybrid"
+    && result.summary.mode === "rules"
+    && result.summary.fallbackCode
+  ) {
+    attempt.preservedLastGood = true;
+    await writeRecommendationAttempt(repoRoot, attempt);
+    return {
+      unchanged: true,
+      preservedLastGood: true,
+      summary: result.summary,
+      status: await getRecommendationStatus({ repoRoot, env }),
+    };
+  }
   await writeRecommendationManifest(repoRoot, result.manifest);
+  await writeRecommendationAttempt(repoRoot, attempt);
   return {
     unchanged: false,
     summary: result.summary,

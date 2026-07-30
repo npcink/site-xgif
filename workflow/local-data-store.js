@@ -27,6 +27,8 @@ function parseOperationDetails(value) {
   }
 }
 
+const maintenanceActions = new Set(["index_sync", "rebuild"]);
+
 export function parseContentDocument(content) {
   const match = String(content || "").match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
   const raw = match?.[1] || "";
@@ -402,7 +404,8 @@ export class LocalDataStore {
         pub_date AS pubDate,
         is_draft AS draft,
         is_public AS public,
-        body_excerpt AS bodyExcerpt
+        body_excerpt AS bodyExcerpt,
+        content_sha256 AS contentSha256
       FROM content_index
       ${where}
       ORDER BY ${orderBy}
@@ -418,6 +421,7 @@ export class LocalDataStore {
       draft: Boolean(row.draft),
       public: Boolean(row.public),
       bodyExcerpt: row.bodyExcerpt,
+      contentSha256: row.contentSha256,
     }));
   }
 
@@ -446,6 +450,38 @@ export class LocalDataStore {
 
   async rebuildTrashIndex() {
     const records = await this.scanTrashSidecars();
+    const normalizedRecords = records.map((record) => ({
+      id: String(record.id || ""),
+      type: String(record.type || ""),
+      file: String(record.file || ""),
+      trashFile: String(record.trashFile || ""),
+      metadataFile: String(record.metadataFile || ""),
+      title: String(record.title || "未命名内容"),
+      deletedAt: String(record.deletedAt || ""),
+      restoredAt: record.restoredAt || null,
+      status: String(record.status || ""),
+      sha256: String(record.sha256 || ""),
+      size: Number(record.size || 0),
+    })).sort((left, right) => left.id.localeCompare(right.id));
+    const existingRecords = this.db.prepare(`
+      SELECT
+        id,
+        content_type AS type,
+        original_file AS file,
+        trash_file AS trashFile,
+        metadata_file AS metadataFile,
+        title,
+        deleted_at AS deletedAt,
+        restored_at AS restoredAt,
+        status,
+        content_sha256 AS sha256,
+        file_size AS size
+      FROM trash_items
+      ORDER BY id ASC
+    `).all();
+    if (JSON.stringify(existingRecords) === JSON.stringify(normalizedRecords)) {
+      return records.length;
+    }
     const insert = this.db.prepare(`
       INSERT INTO trash_items (
         id, content_type, original_file, trash_file, metadata_file, title,
@@ -455,19 +491,19 @@ export class LocalDataStore {
     this.db.exec("BEGIN IMMEDIATE");
     try {
       this.db.exec("DELETE FROM trash_items");
-      for (const record of records) {
+      for (const record of normalizedRecords) {
         insert.run(
           record.id,
           record.type,
           record.file,
           record.trashFile,
           record.metadataFile,
-          String(record.title || "未命名内容"),
+          record.title,
           record.deletedAt,
           record.restoredAt || null,
           record.status,
           record.sha256,
-          Number(record.size || 0),
+          record.size,
           nowIso(),
         );
       }
@@ -665,7 +701,7 @@ export class LocalDataStore {
     `).run(action, JSON.stringify(details), nowIso());
   }
 
-  listOperations({ action = "", limit = 20 } = {}) {
+  listOperations({ action = "", limit = 20, scope = "user" } = {}) {
     const safeLimit = Math.max(1, Math.min(100, Number(limit) || 20));
     const rows = action
       ? this.db.prepare(`
@@ -675,18 +711,61 @@ export class LocalDataStore {
           ORDER BY id DESC
           LIMIT ?
         `).all(action, safeLimit)
-      : this.db.prepare(`
+      : scope === "all"
+        ? this.db.prepare(`
           SELECT id, action, details_json AS detailsJson, created_at AS createdAt
           FROM operation_history
+          ORDER BY id DESC
+          LIMIT ?
+        `).all(safeLimit)
+        : this.db.prepare(`
+          SELECT id, action, details_json AS detailsJson, created_at AS createdAt
+          FROM operation_history
+          WHERE action NOT IN ('index_sync', 'rebuild')
           ORDER BY id DESC
           LIMIT ?
         `).all(safeLimit);
     return rows.map((row) => ({
       id: row.id,
       action: row.action,
+      scope: maintenanceActions.has(row.action) ? "maintenance" : "user",
       createdAt: row.createdAt,
       details: parseOperationDetails(row.detailsJson),
     }));
+  }
+
+  getRecoveryFingerprint() {
+    this.assertHealthy();
+    const content = this.db.prepare(`
+      SELECT file, content_sha256 AS sha256
+      FROM content_index
+      ORDER BY file ASC
+    `).all();
+    const trash = this.db.prepare(`
+      SELECT id, content_sha256 AS sha256
+      FROM trash_items
+      WHERE status = 'trashed'
+      ORDER BY id ASC
+    `).all();
+    return createHash("sha256")
+      .update(JSON.stringify({ content, trash }))
+      .digest("hex");
+  }
+
+  getLastMutationAt() {
+    this.assertHealthy();
+    return this.db.prepare(`
+      SELECT MAX(value) AS updatedAt
+      FROM (
+        SELECT MAX(created_at) AS value FROM operation_history
+        UNION ALL
+        SELECT MAX(indexed_at) AS value FROM content_index
+        UNION ALL
+        SELECT MAX(updated_at) AS value FROM trash_items
+        UNION ALL
+        SELECT MAX(updated_at) AS value FROM recommendation_embeddings
+      )
+    `).get()?.updatedAt || "";
   }
 
   getStatus() {
@@ -712,6 +791,7 @@ export class LocalDataStore {
       trash,
       embeddings,
       lastRebuild,
+      lastMutationAt: this.getLastMutationAt(),
       recovery: this.recovery,
     };
   }
@@ -720,6 +800,9 @@ export class LocalDataStore {
     await mkdir(this.backupsDir, { recursive: true });
     const stamp = new Date().toISOString().replace(/[:.]/g, "-");
     const destination = path.join(this.backupsDir, `xgif-${stamp}.sqlite3`);
+    this.recordOperation("backup", {
+      destination: portablePath(path.relative(this.repoRoot, destination)),
+    });
     await backup(this.db, destination);
     const backups = (await readdir(this.backupsDir))
       .filter((file) => /^xgif-.*\.sqlite3$/.test(file))
@@ -728,9 +811,6 @@ export class LocalDataStore {
     for (const stale of backups.slice(retain)) {
       await unlink(path.join(this.backupsDir, stale));
     }
-    this.recordOperation("backup", {
-      destination: portablePath(path.relative(this.repoRoot, destination)),
-    });
     return destination;
   }
 

@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>XGIF 本地发布助手</title>
-    <link rel="stylesheet" href="/styles.css?v=20260725-desktop-local-5" />
+    <link rel="stylesheet" href="/styles.css?v=20260729-publication-facts-1" />
   </head>
   <body>
     <div class="app-frame" id="app-frame">
@@ -30,6 +30,10 @@
                 </div>
               </details>
               <button class="tab" data-tab="import" type="button">导入内容</button>
+              <button class="tab sync-navigation-entry" data-tab="sync" type="button">
+                <span>同步上线</span>
+                <small class="nav-count" id="sync-navigation-count" hidden>0</small>
+              </button>
               <button class="tab" type="button" data-tab="system">系统</button>
             </div>
           </section>
@@ -50,191 +54,286 @@
             </div>
           </div>
           <div class="topbar-tools">
-            <div class="publisher-health" id="publisher-health" data-state="checking" aria-live="polite">
+            <button class="publisher-health" id="publisher-health" type="button" data-state="checking" aria-live="polite">
               <span class="health-dot" aria-hidden="true"></span>
               <span>
                 <strong id="publisher-health-label">正在检查本地环境</strong>
                 <small id="publisher-health-detail">发布台、站点预览与待同步内容</small>
               </span>
-            </div>
-            <button class="system-status-shortcut" type="button" id="open-system-status">系统状态</button>
+            </button>
           </div>
         </header>
 
         <main class="shell">
 
       <section class="panel" id="article-panel">
-        <form id="article-form" class="editor">
-          <div class="editor-heading">
-            <div>
-              <p class="eyebrow">文章信息</p>
-              <h2>整理并发布</h2>
+        <form id="article-form" class="editor article-workspace-form">
+          <header class="article-workspace-toolbar" id="article-next-step">
+            <div class="article-save-context">
+              <p class="editor-state" id="article-editor-state"></p>
             </div>
-            <details class="ai-action-control ai-action-menu">
-              <summary>AI 辅助</summary>
-              <div>
-                <button class="ai-action" type="button" data-ai-fill="article" aria-describedby="article-ai-availability">整理文章资料</button>
-                <button
-                  class="ai-action"
-                  id="article-title-ai"
-                  type="button"
-                  aria-controls="article-title-suggestions"
-                  aria-describedby="article-title-ai-status"
-                  disabled
-                >只生成标题</button>
-              </div>
-              <small id="article-ai-availability">正在检查 AI 配置</small>
-            </details>
-          </div>
-          <div class="editor-state-row">
-            <p class="editor-state" id="article-editor-state"></p>
-            <button type="button" id="article-version-history">版本记录</button>
-          </div>
-          <section class="article-audit-guidance" id="article-audit-guidance" hidden aria-live="polite">
-            <div>
-              <p>从内容体检带来的待处理事项</p>
-              <strong>请先处理以下问题，再进行发布检查</strong>
-            </div>
-            <ul id="article-audit-issues"></ul>
-            <small id="article-audit-next-step"></small>
-          </section>
-          <section class="workflow-step">
-            <div class="step-heading">
-              <span>1</span>
-              <div><strong>提供原始内容</strong><small>粘贴来源和正文。主动点击 AI 后，内容会发送到已配置的模型服务。</small></div>
-            </div>
-            <div class="form-grid article-reference">
-              <label>
-                来源名称
-                <input name="source" required list="article-source-options" placeholder="选择或输入来源名称" />
-              </label>
-              <label>
-                来源链接
-                <input name="sourceUrl" type="url" placeholder="没有具体原文可留空" />
-                <small>找不到具体原文时请留空，并在详细资料中选择“来源待确认”；仍可正常发布。不要填写网站首页。</small>
-              </label>
-            </div>
-            <div class="form-grid article-body-grid">
-              <div class="form-field span-2">
-                <span class="field-label-row">
-                  <label for="article-body">正文</label>
-                  <button type="button" id="article-open-assets">选择已有素材</button>
-                </span>
-                <div class="markdown-toolbar" role="toolbar" aria-label="Markdown 格式">
-                  <button type="button" data-markdown-action="heading">二级标题</button>
-                  <button type="button" data-markdown-action="bold">加粗</button>
-                  <button type="button" data-markdown-action="italic">斜体</button>
-                  <button type="button" data-markdown-action="quote">引用</button>
-                  <button type="button" data-markdown-action="bullet">列表</button>
-                  <button type="button" data-markdown-action="link">链接</button>
-                </div>
-                <textarea id="article-body" name="body" rows="8" placeholder="粘贴正文、摘录或自己的补充说明"></textarea>
-                <div class="markdown-editor-footer">
-                  <span id="article-body-stats">0 字，0 段</span>
-                  <span>可直接粘贴或拖入图片</span>
-                </div>
-                <details class="markdown-find">
-                  <summary>查找与替换</summary>
-                  <div>
-                    <input id="article-find" type="search" placeholder="查找内容" />
-                    <input id="article-replace" placeholder="替换为" />
-                    <button type="button" id="article-find-next">查找下一个</button>
-                    <button type="button" id="article-replace-next">替换当前</button>
-                    <button type="button" id="article-replace-all">全部替换</button>
-                  </div>
-                  <p id="article-find-status" role="status"></p>
-                </details>
-                <nav class="markdown-outline" id="article-outline" aria-label="文章目录"></nav>
-              </div>
-            </div>
-          </section>
-
-          <div class="ai-review-card" id="article-ai-review" aria-live="polite">
-            <div>
-              <p>AI 整理结果</p>
-              <strong id="article-ai-title">等待整理文章资料</strong>
-              <small id="article-ai-summary">整理后在这里快速复核标题、摘要和标签。</small>
-            </div>
-            <button type="button" data-open-details="article">编辑详细资料</button>
-          </div>
-
-          <details class="editor-details" id="article-details">
-            <summary><span>文章详细资料</span><small>标题、摘要、标签与发布信息</small></summary>
-            <div class="form-grid article-details-grid">
-              <div class="form-field title-suggestion-field">
-                <span class="field-label-row">
-                  <label for="article-title">标题</label>
-                </span>
-                <input id="article-title" name="title" required placeholder="文章标题" />
-                <p class="title-ai-status" id="article-title-ai-status" role="status" aria-live="polite"></p>
-              </div>
-              <label>
-                发布日期
-                <input name="pubDate" type="date" />
-              </label>
-              <section class="title-suggestion-panel span-2" id="article-title-suggestions" aria-labelledby="article-title-suggestion-heading" hidden>
+            <div class="article-toolbar-actions">
+              <button class="article-preview-action" type="button" id="article-real-preview" hidden disabled>预览</button>
+              <details class="toolbar-more-menu">
+                <summary>更多</summary>
                 <div>
-                  <strong id="article-title-suggestion-heading">选择一个候选标题</strong>
-                  <small>只替换标题，不改摘要、标签和正文。</small>
+                  <button type="button" id="article-save-draft">保存草稿</button>
+                  <button type="button" id="article-version-history">版本记录</button>
                 </div>
-                <div class="title-candidate-list" id="article-title-candidate-list"></div>
-              </section>
-              <label class="span-2">
-                摘要
-                <textarea name="summary" required rows="3" placeholder="一句到两句说明这篇文章讲什么"></textarea>
-              </label>
-              <label>
-                标签
-                <input name="tags" required placeholder="AI, 产品, 热点" />
-              </label>
-              <label>
-                阅读时间
-                <input name="readTime" placeholder="3 分钟" />
-              </label>
-              <label>
-                来源情况
-                <select name="sourceKind">
-                  <option value="unknown">来源待确认</option>
-                  <option value="original">原创内容</option>
-                  <option value="publication">外部来源</option>
-                </select>
-              </label>
-              <input name="editorNote" type="hidden" />
-              <div class="form-field span-2 internal-review-fields">
-                <section class="internal-review-confirmation" id="article-review-confirmation" hidden aria-live="polite">
-                  <div>
-                    <p>导入内容确认</p>
-                    <strong>已核对来源情况与正文，可公开发布</strong>
-                    <small>确认会记录时间；修改标题、来源、链接或正文后，需要再次确认。</small>
-                  </div>
-                  <label class="review-confirmation-control">
-                    <input name="internalReviewConfirmed" type="checkbox" />
-                    我已确认
-                  </label>
-                </section>
-                <details class="internal-review-details">
-                  <summary>内部说明（仅本地）</summary>
-                  <label>
-                    <span class="visually-hidden">内部说明</span>
-                    <input name="internalNote" placeholder="导入内容会自动保留说明；不会进入公开页面" />
-                  </label>
-                </details>
-                <input name="internalReviewStatus" type="hidden" value="unresolved" />
-                <input name="internalReviewResolvedAt" type="hidden" />
-              </div>
-              <div class="form-field span-2">
-                <span class="field-label-row">
-                  <label for="article-cover-image">文章封面</label>
-                  <button type="button" id="article-cover-assets">从素材库选择</button>
-                </span>
-                <input id="article-cover-image" name="coverImage" placeholder="/images/... 或 https://img.xgif.cn/..." />
-              </div>
-              <label class="span-2">
-                封面替代文字
-                <input name="coverAlt" placeholder="可选；留空时使用文章标题" />
-              </label>
+              </details>
+              <button class="primary" type="button" id="article-next-action" data-action="publish">发布</button>
+              <button type="submit" id="article-form-submit" hidden>提交文章</button>
             </div>
-          </details>
+          </header>
+
+          <main class="article-editor-canvas">
+            <section class="article-audit-guidance" id="article-audit-guidance" hidden aria-live="polite">
+              <div>
+                <p>从内容体检带来的待处理事项</p>
+                <strong>请先处理以下问题，再进行发布检查</strong>
+              </div>
+              <ul id="article-audit-issues"></ul>
+              <small id="article-audit-next-step"></small>
+            </section>
+
+            <div class="article-title-field">
+              <div class="article-field-heading">
+                <label for="article-title">标题</label>
+              </div>
+              <input id="article-title" name="title" required placeholder="输入文章标题" />
+              <p class="title-ai-status" id="article-title-ai-status" role="status" aria-live="polite"></p>
+            </div>
+            <section class="title-suggestion-panel" id="article-title-suggestions" aria-labelledby="article-title-suggestion-heading" hidden>
+              <div>
+                <strong id="article-title-suggestion-heading">选择一个候选标题</strong>
+                <small>只替换标题，不改摘要、标签和正文。</small>
+              </div>
+              <div class="title-candidate-list" id="article-title-candidate-list"></div>
+            </section>
+
+            <button class="article-source-summary" id="article-source-summary" type="button" data-article-inspector-open="source">
+              <span>来源</span>
+              <strong id="article-source-summary-text">来源待确认 · 未填写原文链接</strong>
+              <small>在右侧查看或修改</small>
+            </button>
+
+            <div class="article-body-field">
+              <span class="field-label-row">
+                <label for="article-body">正文</label>
+                <span class="article-field-actions">
+                  <details class="context-action-menu article-insert-menu">
+                    <summary>插入</summary>
+                    <div>
+                      <button type="button" id="article-open-assets">从素材库选择</button>
+                      <small>也可以直接粘贴或拖入图片</small>
+                    </div>
+                  </details>
+                  <details class="context-action-menu article-ai-menu" id="article-ai-menu" hidden>
+                    <summary>AI 辅助</summary>
+                    <div>
+                      <button
+                        id="article-title-ai"
+                        type="button"
+                        aria-controls="article-title-suggestions"
+                        aria-describedby="article-title-ai-status"
+                        disabled
+                      >生成标题</button>
+                      <button
+                        type="button"
+                        data-ai-fill="article"
+                        aria-describedby="article-ai-availability"
+                      >整理与分段</button>
+                    </div>
+                  </details>
+                </span>
+              </span>
+              <small class="article-ai-availability" id="article-ai-availability">正在检查 AI 配置</small>
+              <div class="markdown-toolbar" role="toolbar" aria-label="Markdown 格式">
+                <button type="button" data-markdown-action="heading">二级标题</button>
+                <button type="button" data-markdown-action="bold">加粗</button>
+                <button type="button" data-markdown-action="italic">斜体</button>
+                <button type="button" data-markdown-action="quote">引用</button>
+                <button type="button" data-markdown-action="bullet">列表</button>
+                <button type="button" data-markdown-action="link">链接</button>
+              </div>
+              <textarea id="article-body" name="body" rows="16" placeholder="粘贴正文、摘录或自己的补充说明"></textarea>
+              <div class="markdown-editor-footer">
+                <span id="article-body-stats">0 字，0 段</span>
+                <span>可直接粘贴或拖入图片</span>
+              </div>
+              <details class="markdown-find">
+                <summary>查找</summary>
+                <div>
+                  <input id="article-find" type="search" placeholder="查找内容" />
+                  <input id="article-replace" placeholder="替换为" />
+                  <button type="button" id="article-find-next">查找下一个</button>
+                  <button type="button" id="article-replace-next">替换当前</button>
+                  <button type="button" id="article-replace-all">全部替换</button>
+                </div>
+                <p id="article-find-status" role="status"></p>
+              </details>
+              <nav class="markdown-outline" id="article-outline" aria-label="文章目录"></nav>
+            </div>
+
+            <div class="ai-review-card" id="article-ai-review" aria-live="polite" hidden>
+              <div>
+                <p>AI 整理结果</p>
+                <strong id="article-ai-title">文章资料已整理</strong>
+                <small id="article-ai-summary">请检查右侧摘要、标签和发布信息。</small>
+              </div>
+              <button type="button" data-open-details="article">检查发布资料</button>
+            </div>
+          </main>
+
+          <aside class="article-inspector" aria-label="文章设置与预览">
+            <div class="article-inspector-tabs" role="tablist" aria-label="文章侧栏">
+              <button id="article-tab-info" type="button" role="tab" aria-selected="true" aria-controls="article-panel-info" tabindex="0" data-article-inspector-tab="info">
+                <span>发布信息</span><small id="article-info-tab-status">待完善</small>
+              </button>
+              <button id="article-tab-cover" type="button" role="tab" aria-selected="false" aria-controls="article-panel-cover" tabindex="-1" data-article-inspector-tab="cover">
+                <span>封面</span><small id="article-cover-tab-status">可选</small>
+              </button>
+              <button id="article-tab-preview" type="button" role="tab" aria-selected="false" aria-controls="article-panel-preview" tabindex="-1" data-article-inspector-tab="preview">
+                <span>预览</span>
+              </button>
+            </div>
+
+            <section id="article-panel-info" class="article-inspector-panel" role="tabpanel" aria-labelledby="article-tab-info" data-article-inspector-panel="info">
+              <div class="article-inspector-section" id="article-details">
+                <div class="article-inspector-heading">
+                  <strong>文章资料</strong>
+                  <small>摘要、标签与发布日期</small>
+                </div>
+                <div class="article-inspector-fields">
+                  <label>
+                    摘要
+                    <textarea name="summary" required rows="4" placeholder="一句到两句说明这篇文章讲什么"></textarea>
+                  </label>
+                  <label>
+                    标签
+                    <input name="tags" required placeholder="AI, 产品, 热点" />
+                  </label>
+                  <div class="article-compact-fields">
+                    <label>
+                      发布日期
+                      <input name="pubDate" type="date" />
+                    </label>
+                    <div class="article-read-time" aria-describedby="article-read-time-note">
+                      <span>阅读时间</span>
+                      <output id="article-read-time-display">1 分钟</output>
+                      <input name="readTime" type="hidden" value="1 分钟" />
+                    </div>
+                  </div>
+                  <small id="article-read-time-note" class="field-note">阅读时间根据正文自动计算。</small>
+                </div>
+              </div>
+
+              <fieldset class="publish-options" id="article-publish-options" hidden>
+                <legend>发布草稿时使用哪个日期？</legend>
+                <label>
+                  <input type="radio" name="publishDateMode" value="keep" checked />
+                  <span class="check-copy"><strong>保留原始日期</strong><small id="article-original-date">沿用草稿中的收藏日期</small></span>
+                </label>
+                <label>
+                  <input type="radio" name="publishDateMode" value="today" />
+                  <span class="check-copy"><strong>使用今天</strong><small id="article-today-date">按正式发布当天排序</small></span>
+                </label>
+              </fieldset>
+
+              <details class="article-source-settings" id="article-source-details">
+                <summary>
+                  <span><strong>来源信息</strong><small>没有原文链接也能正常发布</small></span>
+                  <small id="article-source-status">待确认</small>
+                </summary>
+                <div class="article-inspector-fields">
+                  <label>
+                    来源名称
+                    <input name="source" required list="article-source-options" placeholder="选择或输入来源名称" />
+                  </label>
+                  <label>
+                    来源链接
+                    <input name="sourceUrl" type="url" placeholder="没有具体原文可留空" />
+                    <small class="field-note">找不到具体原文时请留空，不要填写网站首页。</small>
+                  </label>
+                  <label>
+                    来源情况
+                    <select name="sourceKind">
+                      <option value="unknown">来源待确认</option>
+                      <option value="original">原创内容</option>
+                      <option value="publication">外部来源</option>
+                    </select>
+                  </label>
+                  <input name="editorNote" type="hidden" />
+                  <div class="form-field internal-review-fields">
+                    <section class="internal-review-confirmation" id="article-review-confirmation" hidden aria-live="polite">
+                      <div>
+                        <p>导入内容确认</p>
+                        <strong>已核对来源情况与正文，可公开发布</strong>
+                        <small>修改标题、来源、链接或正文后，需要再次确认。</small>
+                      </div>
+                      <label class="review-confirmation-control">
+                        <input name="internalReviewConfirmed" type="checkbox" />
+                        我已确认
+                      </label>
+                    </section>
+                    <details class="internal-review-details">
+                      <summary>内部说明（仅本地）</summary>
+                      <label>
+                        <span class="visually-hidden">内部说明</span>
+                        <input name="internalNote" placeholder="导入说明不会进入公开页面" />
+                      </label>
+                    </details>
+                    <input name="internalReviewStatus" type="hidden" value="unresolved" />
+                    <input name="internalReviewResolvedAt" type="hidden" />
+                  </div>
+                </div>
+              </details>
+
+              <details class="advanced-settings article-publishing-settings" id="article-advanced-settings">
+                <summary><span>高级设置</span><small id="article-advanced-summary">通用内容</small></summary>
+                <div class="advanced-settings-content">
+                  <label>
+                    推荐分组
+                    <select name="recommendationGroup">
+                      <option value="general">通用内容</option>
+                      <option value="adult-humor">成人幽默（只在同类文章内推荐）</option>
+                    </select>
+                    <small class="field-note">请在人工复核后选择；不会自动由 AI 标记。</small>
+                  </label>
+                  <label class="setting-toggle">
+                    <input name="featured" type="checkbox" />
+                    <span class="check-copy"><strong>设为精选</strong><small>在网站首页或精选列表中优先展示</small></span>
+                  </label>
+                </div>
+              </details>
+            </section>
+
+            <section id="article-panel-cover" class="article-inspector-panel" role="tabpanel" aria-labelledby="article-tab-cover" data-article-inspector-panel="cover" hidden>
+              <div class="article-inspector-heading">
+                <strong>封面设置</strong>
+                <small>可选，未设置不影响发布</small>
+              </div>
+              <div class="article-inspector-fields">
+                <div class="form-field">
+                  <span class="field-label-row">
+                    <label for="article-cover-image">文章封面</label>
+                    <button type="button" id="article-cover-assets">从素材库选择</button>
+                  </span>
+                  <input id="article-cover-image" name="coverImage" placeholder="/images/... 或 https://img.xgif.cn/..." />
+                </div>
+                <label id="article-cover-alt-field" hidden>
+                  封面替代文字
+                  <input name="coverAlt" placeholder="留空时使用文章标题" />
+                </label>
+              </div>
+            </section>
+
+            <section id="article-panel-preview" class="article-inspector-panel article-preview-panel" role="tabpanel" aria-labelledby="article-tab-preview" data-article-inspector-panel="preview" hidden>
+              <p class="preview-note" id="article-preview-note">保存草稿后，可用真实站点模板在新页面预览。</p>
+              <article class="article-card" id="article-preview"></article>
+            </section>
+            <pre class="result" id="article-result" hidden></pre>
+          </aside>
 
           <datalist id="article-source-options">
             <option value="原创"></option>
@@ -250,229 +349,199 @@
             <option value="第三方"></option>
           </datalist>
 
-          <fieldset class="publish-mode">
+          <fieldset class="publish-mode" hidden>
             <legend>发布方式</legend>
-            <div class="publish-mode-grid">
-              <label>
-                <input type="radio" name="publishMode" value="publish" />
-                <span class="check-copy"><strong>发布到本地</strong><small>检查通过后进入本地公开站点，之后再同步云端</small></span>
-              </label>
-              <label>
-                <input type="radio" name="publishMode" value="draft" checked />
-                <span class="check-copy"><strong>保存草稿</strong><small>先保存到 Markdown，再用真实模板预览</small></span>
-              </label>
-            </div>
+            <label><input type="radio" name="publishMode" value="publish" />发布到本地</label>
+            <label><input type="radio" name="publishMode" value="draft" checked />保存草稿</label>
             <input name="draft" type="checkbox" hidden />
           </fieldset>
-
-          <fieldset class="publish-options" id="article-publish-options" hidden>
-            <legend>发布草稿时使用哪个日期？</legend>
-            <label>
-              <input type="radio" name="publishDateMode" value="keep" checked />
-              <span class="check-copy"><strong>保留原始日期</strong><small id="article-original-date">沿用草稿中的收藏日期</small></span>
-            </label>
-            <label>
-              <input type="radio" name="publishDateMode" value="today" />
-              <span class="check-copy"><strong>使用今天</strong><small id="article-today-date">按正式发布当天排序</small></span>
-            </label>
-          </fieldset>
-
-          <details class="advanced-settings" id="article-advanced-settings">
-            <summary><span>高级设置</span><small id="article-advanced-summary">精选</small></summary>
-            <div class="advanced-settings-content">
-              <label class="setting-toggle">
-                <input name="featured" type="checkbox" />
-                <span class="check-copy"><strong>设为精选</strong><small>在网站首页或精选列表中优先展示</small></span>
-              </label>
-            </div>
-          </details>
-
-          <div class="editor-actions next-step-bar" id="article-next-step">
-            <div class="next-step-copy">
-              <span>下一步</span>
-              <strong id="article-next-step-title">保存草稿</strong>
-              <small id="article-next-step-description">保存到 Markdown 后即可使用真实站点模板预览。</small>
-            </div>
-            <div class="actions">
-              <button class="primary" type="button" id="article-next-action" data-action="save">保存草稿</button>
-              <button type="submit" id="article-form-submit" hidden>提交文章</button>
-            </div>
-          </div>
         </form>
-
-        <aside class="preview">
-          <div class="preview-heading">
-            <p class="eyebrow">预览</p>
-            <div class="preview-controls">
-              <button type="button" id="article-real-preview" disabled>打开真实预览</button>
-            </div>
-          </div>
-          <p class="preview-note" id="article-preview-note">保存草稿后，可用真实站点模板在新页面预览。</p>
-          <article class="article-card" id="article-preview"></article>
-          <pre class="result" id="article-result" hidden></pre>
-        </aside>
       </section>
 
       <section class="panel" id="image-panel">
-        <form id="image-form" class="editor">
-          <div class="editor-heading">
-            <div>
-              <p class="eyebrow">图片信息</p>
-              <h2>整理并发布</h2>
+        <form id="image-form" class="editor image-workspace-form">
+          <header class="image-workspace-toolbar">
+            <div class="article-save-context">
+              <p class="editor-state" id="image-editor-state"></p>
             </div>
-            <button class="ai-action" type="button" data-ai-fill="image" disabled>AI 辅助</button>
-          </div>
-          <div class="editor-state-row">
-            <p class="editor-state" id="image-editor-state"></p>
-            <button type="button" id="image-version-history">版本记录</button>
-          </div>
-          <section class="workflow-step">
-            <div class="step-heading">
-              <span>1</span>
-              <div><strong>选择图片</strong><small>读取完成后使用 AI 生成标题、描述和标签</small></div>
+            <div class="article-toolbar-actions">
+              <button class="article-preview-action" type="button" id="image-real-preview" hidden disabled>预览</button>
+              <details class="toolbar-more-menu">
+                <summary>更多</summary>
+                <div>
+                  <button type="button" id="image-save-draft">保存草稿</button>
+                  <button type="button" id="image-version-history">版本记录</button>
+                </div>
+              </details>
+              <button class="primary" type="button" id="image-next-action">发布</button>
+              <button type="submit" id="image-form-submit" hidden>提交图片</button>
             </div>
-            <div class="form-grid">
-              <label class="span-2">
-                图片 / GIF
-                <input name="file" type="file" accept="image/*,.gif" />
-              </label>
+          </header>
+
+          <main class="image-editor-canvas">
+            <section class="image-stage">
+              <div class="image-stage-heading">
+                <div>
+                  <p class="eyebrow">图片 / GIF</p>
+                  <strong>选择图片并检查展示效果</strong>
+                </div>
+                <label class="image-file-trigger">
+                  <span>选择图片</span>
+                  <input name="file" type="file" accept="image/*,.gif" />
+                </label>
+              </div>
+
+              <div class="image-preview-stage" id="image-preview-stage" data-empty="true">
+                <article class="image-card" id="image-preview"></article>
+                <div class="image-empty-state" id="image-empty-state">
+                  <strong>把图片放到工作台</strong>
+                  <span>选择 PNG、JPG、WebP 或 GIF；比例会自动识别。</span>
+                </div>
+              </div>
+
+              <div class="image-ai-row">
+                <div>
+                  <strong>需要整理标题、描述和标签？</strong>
+                  <small id="image-ai-availability">选择图片后可以使用 AI 整理。</small>
+                </div>
+                <button class="article-context-ai" type="button" data-ai-fill="image" aria-describedby="image-ai-availability" disabled>AI 整理图片资料</button>
+              </div>
+            </section>
+
+            <div class="ai-review-card" id="image-ai-review" aria-live="polite" hidden>
+              <div>
+                <p>AI 整理结果</p>
+                <strong id="image-ai-title">图片资料已整理</strong>
+                <small id="image-ai-summary">请检查右侧标题、描述、标签和使用场景。</small>
+              </div>
+              <button type="button" data-open-details="image">检查图片资料</button>
             </div>
-          </section>
+          </main>
 
-          <div class="ai-review-card" id="image-ai-review" aria-live="polite">
-            <div>
-              <p>AI 整理结果</p>
-              <strong id="image-ai-title">等待选择图片并整理</strong>
-              <small id="image-ai-summary">整理后在这里快速复核描述、标签和使用场景。</small>
+          <aside class="image-inspector" aria-label="图片设置">
+            <div class="image-inspector-tabs" role="tablist" aria-label="图片侧栏">
+              <button id="image-tab-details" type="button" role="tab" aria-selected="true" aria-controls="image-panel-details" tabindex="0" data-image-inspector-tab="details">
+                <span>资料</span><small id="image-details-tab-status">待完善</small>
+              </button>
+              <button id="image-tab-source" type="button" role="tab" aria-selected="false" aria-controls="image-panel-source" tabindex="-1" data-image-inspector-tab="source">
+                <span>来源</span><small id="image-source-tab-status">待核实</small>
+              </button>
+              <button id="image-tab-settings" type="button" role="tab" aria-selected="false" aria-controls="image-panel-settings" tabindex="-1" data-image-inspector-tab="settings">
+                <span>设置</span><small id="image-settings-tab-status">自动</small>
+              </button>
             </div>
-            <button type="button" data-open-details="image">编辑详细资料</button>
-          </div>
 
-          <details class="editor-details" id="image-details">
-            <summary><span>图片详细资料</span><small>标题、描述、标签与使用场景</small></summary>
-            <div class="form-grid article-details-grid">
-              <label>
-                标题
-                <input name="title" required placeholder="这就很离谱" />
-              </label>
-              <label>
-                分类
-                <input name="category" placeholder="表情包" />
-              </label>
-              <label class="span-2">
-                描述
-                <textarea name="description" required rows="3" placeholder="适合什么场景，用来表达什么"></textarea>
-              </label>
-              <label>
-                标签
-                <input name="tags" required placeholder="吐槽, 无语, 群聊" />
-              </label>
-              <label>
-                情绪
-                <input name="mood" placeholder="无语, 震惊" />
-              </label>
-              <label class="span-2">
-                场景
-                <input name="scenes" placeholder="回复, 吐槽" />
-              </label>
-            </div>
-          </details>
+            <section id="image-panel-details" class="article-inspector-panel" role="tabpanel" aria-labelledby="image-tab-details" data-image-inspector-panel="details">
+              <div class="article-inspector-heading">
+                <strong>图片资料</strong>
+                <small>标题、描述和使用场景</small>
+              </div>
+              <div class="article-inspector-fields" id="image-details">
+                <label>
+                  标题
+                  <input name="title" required placeholder="这就很离谱" />
+                </label>
+                <label>
+                  分类
+                  <input name="category" placeholder="表情包" />
+                </label>
+                <label>
+                  描述
+                  <textarea name="description" required rows="4" placeholder="适合什么场景，用来表达什么"></textarea>
+                </label>
+                <label>
+                  标签
+                  <input name="tags" required placeholder="吐槽, 无语, 群聊" />
+                </label>
+                <div class="article-compact-fields">
+                  <label>
+                    情绪
+                    <input name="mood" placeholder="无语, 震惊" />
+                  </label>
+                  <label>
+                    场景
+                    <input name="scenes" placeholder="回复, 吐槽" />
+                  </label>
+                </div>
+              </div>
+            </section>
 
-          <section class="source-setting">
-            <label>
-              来源类型
-              <select name="sourceKind">
-                <option value="unknown">群聊转存 / 来源未知</option>
-                <option value="original">外部来源</option>
-                <option value="user_provided">用户提供素材</option>
-              </select>
-            </label>
-            <p class="form-note" id="unknown-source-note">作者与授权信息可以留空；公开页会标记为“来源待核实”，并提供投诉与下架入口。</p>
-          </section>
+            <section id="image-panel-source" class="article-inspector-panel" role="tabpanel" aria-labelledby="image-tab-source" data-image-inspector-panel="source" hidden>
+              <div class="article-inspector-heading">
+                <strong>来源信息</strong>
+                <small>来源未知也能正常发布</small>
+              </div>
+              <div class="article-inspector-fields">
+                <label>
+                  来源类型
+                  <select name="sourceKind">
+                    <option value="unknown">群聊转存 / 来源未知</option>
+                    <option value="original">外部来源</option>
+                    <option value="user_provided">用户提供素材</option>
+                  </select>
+                </label>
+                <p class="form-note" id="unknown-source-note">作者与授权信息可以留空；公开页会标记为“来源待核实”，并提供投诉与下架入口。</p>
+                <label data-user-provided-field hidden>
+                  公开发布确认日期
+                  <input name="confirmedAt" type="date" />
+                </label>
+                <label data-external-attribution>
+                  来源
+                  <input name="source" placeholder="来源备注" />
+                </label>
+                <label data-external-attribution>
+                  图片来源链接
+                  <input name="sourceUrl" type="url" placeholder="https://example.com/source" />
+                </label>
+                <label data-external-attribution>
+                  作者 / 署名
+                  <input name="author" placeholder="作者名称" />
+                </label>
+                <label data-external-attribution>
+                  授权名称
+                  <input name="license" placeholder="例如 Unsplash License" />
+                </label>
+                <label data-external-attribution>
+                  授权链接
+                  <input name="licenseUrl" type="url" placeholder="https://example.com/license" />
+                </label>
+                <p class="form-note" id="user-provided-note" hidden>将如实标记为“用户提供”，并记录“用户确认可发布”；不会虚构作者或授权链接。</p>
+              </div>
+            </section>
 
-          <div class="form-grid attribution-fields">
-            <label data-user-provided-field hidden>
-              公开发布确认日期
-              <input name="confirmedAt" type="date" />
-            </label>
-            <label data-external-attribution>
-              来源
-              <input name="source" placeholder="来源备注" />
-            </label>
-            <label data-external-attribution>
-              图片来源链接
-              <input name="sourceUrl" type="url" placeholder="https://example.com/source" />
-            </label>
-            <label data-external-attribution>
-              作者 / 署名
-              <input name="author" placeholder="作者名称" />
-            </label>
-            <label data-external-attribution>
-              授权名称
-              <input name="license" placeholder="例如 Unsplash License" />
-            </label>
-            <label data-external-attribution>
-              授权链接
-              <input name="licenseUrl" type="url" placeholder="https://example.com/license" />
-            </label>
-            <p class="form-note span-2" id="user-provided-note" hidden>将如实标记为“用户提供”，并记录“用户确认可发布”；不会虚构作者或授权链接。</p>
-          </div>
-
-          <fieldset class="publish-mode">
-            <legend>发布方式</legend>
-            <div class="publish-mode-grid">
-              <label>
-                <input type="radio" name="publishMode" value="publish" />
-                <span class="check-copy"><strong>发布到本地</strong><small>检查通过后进入网站公开图片库</small></span>
-              </label>
-              <label>
-                <input type="radio" name="publishMode" value="draft" checked />
-                <span class="check-copy"><strong>保存草稿</strong><small>保留图片和资料，暂不公开展示</small></span>
-              </label>
-            </div>
-            <input name="public" type="checkbox" checked hidden />
-            <input name="draft" type="checkbox" hidden />
-          </fieldset>
-
-          <details class="advanced-settings" id="image-advanced-settings">
-            <summary><span>高级设置</span><small id="image-advanced-summary">日期、比例与正文</small></summary>
-            <div class="advanced-settings-content">
-              <div class="form-grid">
+            <section id="image-panel-settings" class="article-inspector-panel" role="tabpanel" aria-labelledby="image-tab-settings" data-image-inspector-panel="settings" hidden>
+              <div class="article-inspector-heading">
+                <strong>发布设置</strong>
+                <small>低频选项集中在这里</small>
+              </div>
+              <div class="article-inspector-fields">
                 <label>
                   发布日期
                   <input name="pubDate" type="date" />
                 </label>
+                <div class="image-ratio-readout">
+                  <span>图片比例</span>
+                  <strong id="image-ratio-summary">选择图片后自动识别</strong>
+                </div>
+                <input name="ratio" type="hidden" value="square" />
                 <label>
-                  图片比例
-                  <select name="ratio">
-                    <option value="square">方图</option>
-                    <option value="wide">宽图</option>
-                    <option value="tall">长图</option>
-                  </select>
-                </label>
-                <label class="span-2">
                   正文说明
-                  <textarea name="body" rows="4" placeholder="可选：补充使用说明"></textarea>
+                  <textarea name="body" rows="5" placeholder="可选：补充使用说明"></textarea>
                 </label>
               </div>
-            </div>
-          </details>
+            </section>
 
-          <div class="editor-actions">
-            <p>发布时会自动执行重复检查与质量检查</p>
-            <div class="actions">
-              <button class="primary" type="submit">保存草稿</button>
-            </div>
-          </div>
+            <pre class="result" id="image-result" hidden></pre>
+          </aside>
+
+          <fieldset class="publish-mode" hidden>
+            <legend>发布方式</legend>
+            <label><input type="radio" name="publishMode" value="publish" />发布到本地</label>
+            <label><input type="radio" name="publishMode" value="draft" checked />保存草稿</label>
+            <input name="public" type="checkbox" checked hidden />
+            <input name="draft" type="checkbox" hidden />
+          </fieldset>
         </form>
-
-        <aside class="preview">
-          <div class="preview-heading">
-            <p class="eyebrow">发布前预览</p>
-          </div>
-          <article class="image-card" id="image-preview"></article>
-          <pre class="result" id="image-result"></pre>
-        </aside>
       </section>
 
       <section class="panel import-panel" id="import-panel">
@@ -652,22 +721,78 @@
                 <p class="eyebrow">发布门槛</p>
                 <h2 id="audit-results-title">检查结果</h2>
               </div>
-              <p>优先处理“建议退回草稿”和“需要人工确认”，通过项默认收起。</p>
+              <p>“阻断发布”不能进入同步；历史已上线但仍待复核的内容单独标记，不与草稿状态混用。</p>
             </div>
             <div class="content-audit-list" id="content-audit-list"></div>
           </section>
         </div>
       </section>
 
+      <section class="panel sync-panel" id="sync-panel">
+        <header class="sync-page-heading">
+          <div>
+            <p class="eyebrow">PUBLICATION</p>
+            <h2>GitHub 与 Cloudflare</h2>
+            <p>把本地已发布内容推送到 GitHub；PR 合并后由 Cloudflare Workers Builds 自动部署。</p>
+          </div>
+          <button class="primary" type="button" id="sync-all-local">同步到 GitHub</button>
+        </header>
+
+        <ol class="sync-stage-list" aria-label="上线阶段">
+          <li data-sync-stage="local">
+            <span>1</span>
+            <div><strong id="sync-local-count">0 条可同步</strong><small>上线体检通过</small></div>
+          </li>
+          <li data-sync-stage="github">
+            <span>2</span>
+            <div><strong id="sync-github-count">尚未推送</strong><small>GitHub 分支与 PR</small></div>
+          </li>
+          <li data-sync-stage="cloudflare">
+            <span>3</span>
+            <div><strong id="sync-cloudflare-count">等待部署</strong><small>Cloudflare Workers Builds</small></div>
+          </li>
+          <li data-sync-stage="live">
+            <span>4</span>
+            <div><strong id="sync-live-count">等待核验</strong><small>www.xgif.cn</small></div>
+          </li>
+        </ol>
+
+        <p class="sync-workspace-result" id="sync-workspace-result" role="status" aria-live="polite"></p>
+
+        <section class="sync-queue" aria-labelledby="sync-queue-title">
+          <div class="sync-section-heading">
+            <div>
+              <h3 id="sync-queue-title">待同步内容</h3>
+              <p id="sync-queue-summary">正在读取本地发布状态…</p>
+            </div>
+            <div class="sync-section-actions">
+              <button class="text-action" type="button" id="sync-open-attention" hidden>查看待处理</button>
+              <button type="button" id="sync-workspace-refresh">刷新状态</button>
+            </div>
+          </div>
+          <div class="sync-queue-list" id="sync-queue-list"></div>
+        </section>
+
+        <section class="sync-history" aria-labelledby="sync-history-title">
+          <div class="sync-section-heading">
+            <div>
+              <h3 id="sync-history-title">同步记录</h3>
+              <p>保留分支、提交、文件数量与 GitHub 入口。</p>
+            </div>
+            <a id="sync-pr-link" href="#" target="_blank" rel="noopener" hidden>打开当前 GitHub PR / 比较页 ↗</a>
+          </div>
+          <div class="sync-history-list" id="sync-history-list"></div>
+        </section>
+      </section>
+
       <section class="panel system-panel" id="system-panel">
         <header class="system-page-heading">
           <div>
-            <p>查看运行状态、同步历史和可恢复性。技术信息集中在这里，不遮挡内容工作区。</p>
+            <p>查看运行状态和可恢复性。公开内容同步已经集中到“同步上线”。</p>
           </div>
         </header>
         <nav class="system-section-tabs" aria-label="系统页面">
           <button class="active" type="button" data-system-view="status" aria-current="page">运行状态</button>
-          <button type="button" data-system-view="sync">同步记录</button>
           <button type="button" data-system-view="recovery">恢复与备份</button>
           <button type="button" data-system-view="tags">标签管理</button>
         </nav>
@@ -728,7 +853,10 @@
                 <strong id="recommendation-status-title">相关推荐</strong>
                 <p id="recommendation-status-summary">正在读取推荐清单</p>
               </div>
-              <button type="button" id="recommendation-refresh">更新相关推荐</button>
+              <div class="recommendation-status-actions">
+                <button type="button" id="recommendation-refresh">更新相关推荐</button>
+                <button type="button" id="recommendation-publish">发布推荐清单</button>
+              </div>
             </div>
             <dl class="recommendation-status-grid">
               <div>
@@ -754,16 +882,6 @@
             <button type="button" id="open-pending-content">查看待同步</button>
             <button type="button" id="open-site-preview" disabled>打开站点预览</button>
           </div>
-        </section>
-        <section class="system-status-panel system-section" data-system-section="sync" hidden>
-          <div class="system-section-heading">
-            <div>
-              <h2>同步记录</h2>
-              <p>记录每次批量同步的分支、提交、文件数量与远程比较入口。</p>
-            </div>
-            <button type="button" id="sync-history-refresh">刷新记录</button>
-          </div>
-          <div class="sync-history-list" id="sync-history-list"></div>
         </section>
         <section class="system-status-panel system-section" data-system-section="recovery" hidden>
           <div class="system-section-heading">
@@ -836,6 +954,33 @@
       <p class="recovery-dashboard-result" id="version-history-result" role="status"></p>
     </dialog>
 
+    <dialog class="trash-dialog batch-publish-dialog" id="batch-publish-dialog">
+      <form id="batch-publish-form">
+        <div class="trash-dialog-heading">
+          <div>
+            <p class="eyebrow">批量发布检查</p>
+            <h2>整理并发布所选草稿</h2>
+            <p id="batch-publish-summary">正在检查所选内容。</p>
+          </div>
+          <button type="button" id="batch-publish-close" aria-label="关闭批量发布检查">关闭</button>
+        </div>
+        <div class="batch-publish-notice" id="batch-publish-ai-notice" hidden>
+          <strong>自动处理长段落</strong>
+          <p>只把需要分段的正文发送到已配置的 AI 服务；结果必须逐字一致，只允许新增 Markdown 空行。</p>
+        </div>
+        <div class="batch-publish-review-list" id="batch-publish-review-list"></div>
+        <label class="batch-publish-confirmation" id="batch-publish-confirmation" hidden>
+          <input type="checkbox" id="batch-publish-review-confirmed" />
+          <span>我已批量核对以上内容的标题、来源和正文，同意将内部复核备注标记为已确认。</span>
+        </label>
+        <div class="trash-dialog-actions">
+          <span id="batch-publish-status" role="status" aria-live="polite"></span>
+          <button type="button" id="batch-publish-cancel">取消</button>
+          <button class="primary" type="submit" id="batch-publish-submit">整理并发布</button>
+        </div>
+      </form>
+    </dialog>
+
     <dialog class="trash-dialog batch-edit-dialog" id="batch-edit-dialog">
       <form id="batch-edit-form">
         <div class="trash-dialog-heading">
@@ -872,6 +1017,13 @@
           <label class="batch-edit-field">
             <span class="batch-edit-enable"><input type="checkbox" name="applyPubDate" />修改发布日期</span>
             <input type="date" name="pubDate" />
+          </label>
+          <label class="batch-edit-field">
+            <span class="batch-edit-enable"><input type="checkbox" name="applyRecommendationGroup" />确认推荐分组</span>
+            <select name="recommendationGroup">
+              <option value="general">通用内容</option>
+              <option value="adult-humor">成人幽默</option>
+            </select>
           </label>
         </div>
         <div class="trash-dialog-actions">
@@ -923,6 +1075,6 @@
       <div class="asset-library-list" id="asset-library-list"></div>
     </dialog>
 
-    <script src="/app.js?v=20260725-desktop-local-5" type="module"></script>
+    <script src="/app.js?v=20260729-publication-facts-1" type="module"></script>
   </body>
 </html>
