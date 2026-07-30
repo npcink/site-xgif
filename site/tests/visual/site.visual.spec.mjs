@@ -100,6 +100,7 @@ test("homepage matches the approved visual baseline", async ({ page }, testInfo)
     maskColor: "#d9d4ca",
     mask: [
       page.locator(".hero-feature"),
+      page.locator(".ticker-track"),
       page.locator('[data-home-section="articles"] .article-grid'),
       page.locator('[data-home-section="articles"] .content-title sup'),
       page.locator('[data-home-section="images"] .masonry-grid'),
