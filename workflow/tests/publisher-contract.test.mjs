@@ -417,8 +417,10 @@ test("draft publishing uses explicit states, protected-branch guards, and mandat
   assert.match(html, /id="flomo-review-confirmed"/);
   assert.match(app, /flomoApplyBatchGroup\.addEventListener/);
   assert.match(app, /confirmInternalReview: flomoReviewConfirmed\.checked/);
+  assert.match(server, /recommendationGroupsConfirmed/);
+  assert.match(app, /data-batch-publish-group/);
   assert.match(server, /批量发布必须使用刚刚检查过的明确内容清单/);
-  assert.match(server, /expectedVersions\.get\(item\.file\)/);
+  assert.match(server, /requestedItems\.get\(item\.file\)/);
   assert.match(server, /async function transitionBatchContent/);
   assert.match(server, /async function syncBatchContent/);
   assert.match(server, /async function inspectBatchSync/);

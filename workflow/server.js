@@ -2400,14 +2400,9 @@ async function inspectBatchDrafts(input) {
         issue.level === "error"
         && !/超过 180 字的长段落|内部复核备注尚未确认/u.test(issue.message)
       ));
-      if (
-        item.type === "article"
-        && !String(parsed.data.recommendationGroup || "").trim()
-      ) {
-        manualBlockers.push(
-          qualityIssue("error", "推荐分组尚未人工确认；请先批量编辑或打开文章选择“通用内容/成人幽默”。"),
-        );
-      }
+      const recommendationGroup = item.type === "article"
+        ? String(parsed.data.recommendationGroup || "").trim()
+        : "";
       results.push({
         type: item.type,
         file: item.file,
@@ -2417,7 +2412,9 @@ async function inspectBatchDrafts(input) {
         source: String(parsed.data.source || "").trim(),
         sourceUrl: String(parsed.data.sourceUrl || "").trim(),
         eligible: true,
-        ok: quality.ok && manualBlockers.length === 0,
+        ok: manualBlockers.length === 0,
+        recommendationGroup,
+        needsRecommendationGroup: item.type === "article" && !recommendationGroup,
         ...preparation,
         manualBlockers,
         contentSha256: contentSha256(markdown),
@@ -2444,6 +2441,7 @@ async function inspectBatchDrafts(input) {
     blocked: eligible.filter((item) => !item.ok).length,
     needsParagraphs: eligible.filter((item) => item.needsParagraphs).length,
     needsInternalReview: eligible.filter((item) => item.needsInternalReview).length,
+    needsRecommendationGroup: eligible.filter((item) => item.needsRecommendationGroup).length,
     warnings: results.reduce(
       (count, item) => count + item.issues.filter((issue) => issue.level === "warning").length,
       0,
@@ -2458,7 +2456,7 @@ async function publishBatchDrafts(input) {
     error.statusCode = 400;
     throw error;
   }
-  const expectedVersions = new Map(input.items.map((item) => {
+  const requestedItems = new Map(input.items.map((item) => {
     const filePath = resolveManagedFile(String(item?.type || ""), String(item?.file || ""));
     const file = path.relative(repoRoot, filePath);
     const expectedContentSha256 = String(item?.expectedContentSha256 || "");
@@ -2467,7 +2465,18 @@ async function publishBatchDrafts(input) {
       error.statusCode = 400;
       throw error;
     }
-    return [file, expectedContentSha256];
+    const recommendationGroup = String(item?.recommendationGroup || "").trim();
+    if (String(item?.type || "") === "article" && !recommendationGroup) {
+      const error = new Error(`请先为文章选择推荐分组：${file}`);
+      error.statusCode = 400;
+      throw error;
+    }
+    return [file, {
+      expectedContentSha256,
+      recommendationGroup: recommendationGroup
+        ? normalizeRecommendationGroup(recommendationGroup)
+        : "",
+    }];
   }));
   const normalizedItems = await resolveBatchItems(input);
   const succeeded = [];
@@ -2475,13 +2484,15 @@ async function publishBatchDrafts(input) {
   const skipped = [];
   let paragraphsOrganized = 0;
   let reviewsResolved = 0;
+  let recommendationGroupsConfirmed = 0;
 
   for (const item of normalizedItems) {
     let title = path.basename(item.file, path.extname(item.file));
     try {
       const markdown = await readFile(item.filePath, "utf8");
+      const requestedItem = requestedItems.get(item.file);
       assertExpectedContentVersion(
-        expectedVersions.get(item.file),
+        requestedItem?.expectedContentSha256,
         contentSha256(markdown),
       );
       const parsed = parseFrontmatter(markdown);
@@ -2492,10 +2503,6 @@ async function publishBatchDrafts(input) {
         skipped.push({ type: item.type, file: item.file, title, reason: "已经处于本地发布状态。" });
         continue;
       }
-      if (item.type === "article" && !String(parsed.data.recommendationGroup || "").trim()) {
-        throw new Error("推荐分组尚未人工确认；请先批量编辑或打开文章选择推荐分组。");
-      }
-
       const next = {
         ...parsed.data,
         body: parsed.body,
@@ -2508,6 +2515,7 @@ async function publishBatchDrafts(input) {
       let itemReviewResolved = false;
 
       if (item.type === "article") {
+        next.recommendationGroup = requestedItem.recommendationGroup;
         const longParagraphs = overlongMarkdownParagraphs(next.body);
         if (longParagraphs.length) {
           if (input.autoOrganizeParagraphs !== true) {
@@ -2542,6 +2550,7 @@ async function publishBatchDrafts(input) {
       });
       if (itemParagraphsOrganized) paragraphsOrganized += 1;
       if (itemReviewResolved) reviewsResolved += 1;
+      if (item.type === "article") recommendationGroupsConfirmed += 1;
       succeeded.push({
         type: item.type,
         file: item.file,
@@ -2569,6 +2578,7 @@ async function publishBatchDrafts(input) {
     failed: failed.length,
     paragraphsOrganized,
     reviewsResolved,
+    recommendationGroupsConfirmed,
     files: succeeded.map((item) => ({
       file: item.file,
       contentSha256: item.contentSha256,
@@ -2585,6 +2595,7 @@ async function publishBatchDrafts(input) {
     failed,
     paragraphsOrganized,
     reviewsResolved,
+    recommendationGroupsConfirmed,
     indexWarning,
   };
 }
