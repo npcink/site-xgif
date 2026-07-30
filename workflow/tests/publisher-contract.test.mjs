@@ -38,11 +38,16 @@ test("publisher exposes local public URLs and keeps empty result panels hidden",
   assert.match(packageJson, /"stop": "node dev\.js stop"/);
   assert.match(packageJson, /"restart": "node dev\.js restart"/);
   assert.match(packageJson, /"status": "node dev\.js status"/);
+  assert.match(packageJson, /"doctor": "node dev\.js doctor"/);
   assert.match(packageJson, /"start:publisher": "node --disable-warning=ExperimentalWarning server\.js"/);
   assert.match(launcher, /Astro 站点预览/);
   assert.match(launcher, /detached: true/);
   assert.match(launcher, /\.runtime/);
   assert.match(launcher, /async function waitFor/);
+  assert.match(launcher, /publisherStatusUrl/);
+  assert.match(launcher, /async function refreshPublisherStatus/);
+  assert.match(launcher, /async function doctor/);
+  assert.match(launcher, /publisherPidManaged/);
   assert.match(launcher, /--host", "127\.0\.0\.1", "--port", "4321"/);
   assert.match(html, /id="publisher-service"/);
   assert.match(html, /id="site-preview-service"/);

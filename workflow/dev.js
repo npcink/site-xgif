@@ -23,6 +23,7 @@ const publisherPidFile = path.join(runtimeRoot, "publisher.json");
 const publisherLog = path.join(runtimeRoot, "publisher.log");
 const previewLog = path.join(runtimeRoot, "preview.log");
 const publisherUrl = "http://127.0.0.1:8787/api/health";
+const publisherStatusUrl = "http://127.0.0.1:8787/api/status?refresh=remote";
 const previewUrl = "http://127.0.0.1:4321/";
 const expectedPublisherVersion = publisherSourceVersion(workflowRoot);
 
@@ -52,19 +53,59 @@ function probePublisher(timeoutMs = 900) {
           resolve({
             healthy: res.statusCode === 200 && body.service === "xgif-local-publisher" && body.ok === true,
             runtimeVersion: String(body.runtimeVersion || ""),
+            pid: Number(body.pid || 0),
+            startedAt: String(body.startedAt || ""),
           });
         } catch {
-          resolve({ healthy: false, runtimeVersion: "" });
+          resolve({ healthy: false, runtimeVersion: "", pid: 0, startedAt: "" });
         }
       });
     });
     req.setTimeout(timeoutMs, () => {
       req.destroy();
-      resolve({ healthy: false, runtimeVersion: "" });
+      resolve({ healthy: false, runtimeVersion: "", pid: 0, startedAt: "" });
     });
-    req.on("error", () => resolve({ healthy: false, runtimeVersion: "" }));
+    req.on("error", () => resolve({
+      healthy: false,
+      runtimeVersion: "",
+      pid: 0,
+      startedAt: "",
+    }));
     req.end();
   });
+}
+
+function requestJson(url, timeoutMs = 30_000) {
+  return new Promise((resolve) => {
+    const req = request(url, { method: "GET" }, (res) => {
+      const chunks = [];
+      res.on("data", (chunk) => chunks.push(chunk));
+      res.on("end", () => {
+        try {
+          resolve({
+            ok: Boolean(res.statusCode && res.statusCode >= 200 && res.statusCode < 300),
+            statusCode: res.statusCode || 0,
+            body: JSON.parse(Buffer.concat(chunks).toString("utf8")),
+          });
+        } catch {
+          resolve({ ok: false, statusCode: res.statusCode || 0, body: null });
+        }
+      });
+    });
+    req.setTimeout(timeoutMs, () => {
+      req.destroy();
+      resolve({ ok: false, statusCode: 0, body: null });
+    });
+    req.on("error", () => resolve({ ok: false, statusCode: 0, body: null }));
+    req.end();
+  });
+}
+
+async function refreshPublisherStatus() {
+  const first = await requestJson(publisherStatusUrl);
+  if (!first.ok || first.body?.services?.sitePreview?.available === true) return first;
+  await delay(100);
+  return requestJson(publisherStatusUrl);
 }
 
 function delay(milliseconds) {
@@ -186,6 +227,14 @@ async function startServices() {
     previewRunning = await waitFor(previewUrl, true);
   }
 
+  if (publisherRunning && previewRunning) {
+    const refreshed = await refreshPublisherStatus();
+    if (!refreshed.ok || refreshed.body?.services?.sitePreview?.available !== true) {
+      console.error("发布状态刷新失败：站点预览虽已启动，但发布助手尚未确认可用。");
+      publisherRunning = false;
+    }
+  }
+
   console.log(`管理端：${publisherRunning ? "可用" : "不可用"} http://127.0.0.1:8787`);
   console.log(`站点预览：${previewRunning ? "可用" : "不可用"} http://127.0.0.1:4321`);
 
@@ -248,6 +297,44 @@ async function showStatus() {
   if (!publisherCurrent || !previewRunning) process.exitCode = 1;
 }
 
+async function doctor() {
+  const [publisherState, previewRunning, status] = await Promise.all([
+    probePublisher(),
+    probe(previewUrl),
+    refreshPublisherStatus(),
+  ]);
+  const managedPid = readPublisherPid();
+  const checks = {
+    publisherReachable: publisherState.healthy,
+    publisherCurrent: (
+      publisherState.healthy
+      && publisherState.runtimeVersion === expectedPublisherVersion
+    ),
+    publisherPidManaged: (
+      Boolean(managedPid)
+      && managedPid === publisherState.pid
+      && processExists(managedPid)
+    ),
+    previewReachable: previewRunning,
+    statusRefresh: (
+      status.ok
+      && status.body?.services?.sitePreview?.available === true
+    ),
+    gitPushReady: status.body?.git?.canPush === true,
+  };
+  console.log(JSON.stringify({
+    ok: Object.values(checks).every(Boolean),
+    checks,
+    runtime: {
+      pid: publisherState.pid || null,
+      startedAt: publisherState.startedAt || null,
+      runtimeVersion: publisherState.runtimeVersion || null,
+      expectedRuntimeVersion: expectedPublisherVersion,
+    },
+  }, null, 2));
+  if (!Object.values(checks).every(Boolean)) process.exitCode = 1;
+}
+
 const command = process.argv[2] || "start";
 
 if (command === "start") {
@@ -261,8 +348,10 @@ if (command === "start") {
   if (!process.exitCode) await startServices();
 } else if (command === "status") {
   await showStatus();
+} else if (command === "doctor") {
+  await doctor();
 } else {
   console.error(`未知命令：${command}`);
-  console.error("可用命令：start、stop、restart、status");
+  console.error("可用命令：start、stop、restart、status、doctor");
   process.exitCode = 1;
 }
