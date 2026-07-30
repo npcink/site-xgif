@@ -62,7 +62,16 @@ function bodyHash(body) {
 }
 
 function bodyUrls(body) {
-  return [...String(body || "").matchAll(/https?:\/\/[^\s<>()\]]+/giu)]
+  const text = String(body || "");
+  return [...text.matchAll(/https?:\/\/[^\s<>()\]]+/giu)]
+    .filter((match) => {
+      const before = text.slice(0, match.index);
+      const after = text.slice(match.index + match[0].length);
+      const markdownDestination = /!?\[[^\]\n]*\]\(<?$/u.test(before)
+        && /^(?:>?\)|>?\s+(?:"[^"]*"|'[^']*')\))/u.test(after);
+      const autolink = before.endsWith("<") && after.startsWith(">");
+      return !markdownDestination && !autolink;
+    })
     .map((match) => match[0].replace(/[.,，。；;!?！？]+$/u, ""));
 }
 
