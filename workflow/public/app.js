@@ -2804,7 +2804,7 @@ function renderBatchPublishInspection(inspection) {
   const manualCount = eligible.filter((item) => item.manualBlockers?.length).length;
   $("#batch-publish-summary").textContent = [
     `${inspection.eligible} 条草稿待发布`,
-    inspection.needsParagraphs ? `${inspection.needsParagraphs} 条将由 AI 安全分段` : "",
+    inspection.needsParagraphs ? `${inspection.needsParagraphs} 条将自动安全分段` : "",
     inspection.needsInternalReview ? `${inspection.needsInternalReview} 条需要一次批量复核确认` : "",
     manualCount ? `${manualCount} 条仍可能需要单独处理` : "",
     inspection.skipped ? `${inspection.skipped} 条已处于本地发布状态并会跳过` : "",
@@ -2818,7 +2818,7 @@ function renderBatchPublishInspection(inspection) {
   $("#batch-publish-review-list").innerHTML = eligible.map((item) => {
     const flags = [
       item.needsParagraphs
-        ? `<span>AI 分段 ${item.longParagraphCount} 段 · 最长 ${item.longestParagraph} 字</span>`
+        ? `<span>安全分段 ${item.longParagraphCount} 段 · 最长 ${item.longestParagraph} 字</span>`
         : "",
       item.needsInternalReview ? "<span>待批量复核</span>" : "",
       ...(item.manualBlockers || []).map((issue) => `<span>需处理：${escapeHtml(issue.message)}</span>`),
@@ -2904,7 +2904,7 @@ async function applyBatchPublish(event) {
       libraryResult,
       [
         `已发布 ${result.succeeded.length} 条到本地。`,
-        result.paragraphsOrganized ? `AI 已安全分段 ${result.paragraphsOrganized} 条，正文字符未改动。` : "",
+        result.paragraphsOrganized ? `已安全分段 ${result.paragraphsOrganized} 条，正文字符未改动。` : "",
         result.reviewsResolved ? `已记录 ${result.reviewsResolved} 条批量复核确认。` : "",
         result.skipped.length ? `${result.skipped.length} 条已处于目标状态，已跳过。` : "",
         result.failed.length ? `${result.failed.length} 条未能自动完成并保持选中：\n${batchFailureSummary(result.failed)}` : "",

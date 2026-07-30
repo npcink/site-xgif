@@ -140,7 +140,7 @@ test("batch publish repairs paragraphs and records one explicit review confirmat
   await page.locator("#library-bulk-publish").click();
 
   await expect(page.locator("#batch-publish-dialog")).toBeVisible();
-  await expect(page.locator("#batch-publish-summary")).toContainText("1 条将由 AI 安全分段");
+  await expect(page.locator("#batch-publish-summary")).toContainText("1 条将自动安全分段");
   await expect(page.locator("#batch-publish-summary")).toContainText("1 条需要一次批量复核确认");
   await page.locator(".batch-publish-body summary").click();
   await expect(page.locator(".batch-publish-body")).toContainText("需要批量安全分段的正文");
@@ -151,7 +151,7 @@ test("batch publish repairs paragraphs and records one explicit review confirmat
   await page.locator("#batch-publish-review-confirmed").check();
   await page.locator("#batch-publish-submit").click();
   await expect(page.locator("#batch-publish-dialog")).toBeHidden();
-  await expect(page.locator("#library-result")).toContainText("AI 已安全分段 1 条");
+  await expect(page.locator("#library-result")).toContainText("已安全分段 1 条");
   expect(publishPayload.autoOrganizeParagraphs).toBe(true);
   expect(publishPayload.confirmInternalReview).toBe(true);
   expect(publishPayload.items).toEqual([{

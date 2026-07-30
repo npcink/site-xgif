@@ -10,7 +10,10 @@ import {
   prepareArticlePublication,
   readEditableArticleBody,
 } from "./article-publication.js";
-import { safeParagraphSuggestion } from "./article-paragraph-formatting.js";
+import {
+  organizeMarkdownParagraphs,
+  safeParagraphSuggestion,
+} from "./article-paragraph-formatting.js";
 import {
   applyBatchParagraphSuggestion,
   applyBatchReviewConfirmation,
@@ -2426,10 +2429,18 @@ async function publishBatchDrafts(input) {
         const longParagraphs = overlongMarkdownParagraphs(next.body);
         if (longParagraphs.length) {
           if (input.autoOrganizeParagraphs !== true) {
-            throw new Error("正文仍有长段落；请允许发布流程调用 AI 安全分段。");
+            throw new Error("正文仍有长段落；请允许发布流程执行安全分段。");
           }
-          const suggestion = await createArticleSuggestion(next);
-          next.body = applyBatchParagraphSuggestion(next.body, suggestion);
+          const localSuggestion = organizeMarkdownParagraphs(next.body);
+          if (
+            localSuggestion.paragraphFormatting === "applied"
+            && localSuggestion.longAfter === 0
+          ) {
+            next.body = localSuggestion.body;
+          } else {
+            const suggestion = await createArticleSuggestion(next);
+            next.body = applyBatchParagraphSuggestion(next.body, suggestion);
+          }
           itemParagraphsOrganized = true;
         }
 

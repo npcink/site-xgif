@@ -966,7 +966,7 @@
         </div>
         <div class="batch-publish-notice" id="batch-publish-ai-notice" hidden>
           <strong>自动处理长段落</strong>
-          <p>只把需要分段的正文发送到已配置的 AI 服务；结果必须逐字一致，只允许新增 Markdown 空行。</p>
+          <p>优先在本机按标点或已有空白边界插入 Markdown 空行；只有无法本地断句时才调用已配置的 AI，结果仍必须逐字一致。</p>
         </div>
         <div class="batch-publish-review-list" id="batch-publish-review-list"></div>
         <label class="batch-publish-confirmation" id="batch-publish-confirmation" hidden>
