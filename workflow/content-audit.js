@@ -85,6 +85,24 @@ function isValidHttpUrl(value) {
   }
 }
 
+function numberedSeriesIdentity(title) {
+  const match = String(title || "").trim().match(
+    /^(.{2,}?)(0\d{1,2})(?=\s*(?:[:：—-]|\s|$))/u,
+  );
+  if (!match) return null;
+  return {
+    name: match[1].trim(),
+    part: Number(match[2]),
+  };
+}
+
+function isExplicitNumberedSeries(group) {
+  const identities = group.map((item) => numberedSeriesIdentity(item.title));
+  if (identities.some((identity) => !identity)) return false;
+  return identities.every((identity) => identity.name === identities[0].name)
+    && new Set(identities.map((identity) => identity.part)).size === identities.length;
+}
+
 function createItem(type, file, parsed, repoRoot) {
   const { data, body } = parsed;
   return {
@@ -250,6 +268,12 @@ function finalize(items) {
   }
   for (const group of sourceGroups.values()) {
     if (group.length <= 1) continue;
+    if (isExplicitNumberedSeries(group)) {
+      for (const item of group) {
+        item.notices.push("相同来源链接已由明确且不重复的编号标题标记为系列内容。");
+      }
+      continue;
+    }
     for (const item of group) {
       const relatedTitles = group
         .filter((entry) => entry !== item)

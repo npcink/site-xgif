@@ -136,6 +136,37 @@ test("content audit names real duplicate sources but does not treat a site homep
   assert.doesNotMatch(homepage.warnings.join(" "), /同一原文拆分/);
 });
 
+test("content audit accepts an explicitly numbered source series", async () => {
+  const dirs = await fixture();
+  await Promise.all([
+    writeFile(
+      path.join(dirs.articlesDir, "20260723-0023.md"),
+      article({
+        contentId: "20260723-0023",
+        title: "长篇回忆01：起点",
+        sourceUrl: "https://example.com/thread/456",
+      }),
+      "utf8",
+    ),
+    writeFile(
+      path.join(dirs.articlesDir, "20260723-0024.md"),
+      article({
+        contentId: "20260723-0024",
+        title: "长篇回忆02：转折",
+        sourceUrl: "https://example.com/thread/456",
+      }),
+      "utf8",
+    ),
+  ]);
+
+  const report = await auditContentLibrary({ repoRoot: dirs.repoRoot });
+  for (const item of report.items) {
+    assert.equal(item.status, "ready");
+    assert.doesNotMatch(item.warnings.join(" "), /相同来源链接/u);
+    assert.match(item.notices.join(" "), /编号标题标记为系列内容/u);
+  }
+});
+
 test("content audit blocks unresolved drafts and marks published legacy review debt", async () => {
   const dirs = await fixture();
   await Promise.all([
