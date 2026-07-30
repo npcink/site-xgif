@@ -1,6 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { sanitizeArticleTitleSuggestions } from "../article-title-suggestions.js";
+import {
+  isPlaceholderArticleTitle,
+  sanitizeArticleTitleSuggestions,
+} from "../article-title-suggestions.js";
+
+test("recognizes imported placeholder titles without matching normal titles", () => {
+  assert.equal(isPlaceholderArticleTitle("待整理 · 2026-03-06 · 3"), true);
+  assert.equal(isPlaceholderArticleTitle("未命名文章"), true);
+  assert.equal(isPlaceholderArticleTitle("地铁上的周末观察"), false);
+});
 
 test("keeps exactly three distinct usable title suggestions", () => {
   assert.deepEqual(

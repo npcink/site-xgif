@@ -1,5 +1,7 @@
+import { CONTENT_PATTERNS } from "./content-patterns.js";
+
 const internalImportTags = new Set(["故事汇", "sq", "煎蛋"]);
-const terminalTagLine = /^(?:[-*+]\s+)?((?:#[^\s#]+\s*)+)$/u;
+const terminalTagLine = CONTENT_PATTERNS.terminalTagLine;
 
 export function isInternalImportTag(tag) {
   return internalImportTags.has(String(tag || "").trim().toLowerCase());

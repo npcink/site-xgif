@@ -1,11 +1,12 @@
 import { randomInt } from "node:crypto";
+import { CONTENT_PATTERNS } from "./content-patterns.js";
 
-export const CONTENT_ID_PATTERN = /^\d{8}-[a-z0-9]{4}$/u;
+export const CONTENT_ID_PATTERN = CONTENT_PATTERNS.contentId;
 const CONTENT_ID_SPACE = 36 ** 4;
 
 export function contentIdDatePrefix(pubDate) {
   const value = String(pubDate || "").trim();
-  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/u);
+  const match = value.match(CONTENT_PATTERNS.calendarDate);
   if (!match) throw new Error("内容 ID 需要有效的 YYYY-MM-DD 发布日期。");
 
   const date = new Date(`${value}T00:00:00.000Z`);

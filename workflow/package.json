@@ -18,6 +18,8 @@
     "source:audit": "node source-audit-cli.js",
     "source:audit:apply": "node source-audit-cli.js --apply",
     "content:audit": "node content-audit-cli.js --write",
+    "patterns:audit": "node content-patterns-cli.js",
+    "patterns:examples": "node content-patterns-cli.js --examples",
     "content:ids:migrate": "node content-id-migration.js",
     "content:governance:migrate": "node content-governance-migration.js",
     "content:debt:migrate": "node content-debt-migration-cli.js",

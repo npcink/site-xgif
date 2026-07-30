@@ -5,6 +5,7 @@ import {
   isExternalArticle,
   isLegacyArticleDisclosure,
 } from "./article-publication.js";
+import { isPlaceholderArticleTitle } from "./article-title-suggestions.js";
 import { isContentId } from "./content-id.js";
 import { CANONICAL_TAGS } from "./content-taxonomy.js";
 import {
@@ -180,8 +181,9 @@ async function auditArticle(item, repoRoot) {
   if (sourceUrl && isGenericSourceUrl(sourceUrl)) {
     item.warnings.push("来源链接只指向网站首页，需要确认具体原文地址。");
   }
-  if (/待整理|未命名|^满纸荒唐言\d+$/u.test(item.title)) {
-    item.warnings.push("标题仍像临时候选标题，需要人工确认。");
+  if (isPlaceholderArticleTitle(item.title) || /^满纸荒唐言\d+$/u.test(item.title)) {
+    if (item.draft) item.blockers.push("标题仍是占位标题，正式发布前必须确认标题。");
+    else item.warnings.push("历史已发布内容仍像临时候选标题，下次编辑或同步前需要人工确认。");
   }
   if (/待整理/iu.test(path.basename(file))) {
     item.warnings.push("文件名仍含“待整理”，建议在首次云端发布前重命名。");
@@ -361,6 +363,10 @@ export async function auditContentLibrary({ repoRoot }) {
 
 function escapeCell(value) {
   return String(value || "").replaceAll("|", "\\|").replace(/\r?\n/gu, " ");
+}
+
+export function contentAuditSummary(report) {
+  return `可直接上线 ${report.counts.ready} 条；需要人工确认 ${report.counts.review} 条；阻断发布 ${report.counts.blocked} 条。`;
 }
 
 export function renderContentAuditMarkdown(report) {

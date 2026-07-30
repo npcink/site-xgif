@@ -21,11 +21,12 @@ const href = contentHref(item);
 >
   <img
     src={item.data.image}
-    alt={item.data.title}
+    alt={item.data.altText || item.data.title}
     width={item.data.width}
     height={item.data.height}
     loading="lazy"
     decoding="async"
+    referrerpolicy="no-referrer"
   />
   <div class="image-shade"></div>
   <div class="image-copy">
