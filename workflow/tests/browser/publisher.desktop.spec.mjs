@@ -400,6 +400,7 @@ test("sync publishing is a dedicated workspace and browser back restores the pre
       response,
       json: {
         ...status,
+        git: { ...status.git, canPush: true, pushError: "" },
         publicationCounts: { ...status.publicationCounts, local: 2 },
         syncQueue: {
           counts: { total: 2, ready: 1, attention: 1 },
@@ -452,6 +453,7 @@ test("a failed withdrawal remains actionable when it is the only sync queue item
       response,
       json: {
         ...status,
+        git: { ...status.git, canPush: true, pushError: "" },
         publicationCounts: { ...status.publicationCounts, local: 0 },
         syncQueue: {
           counts: {
