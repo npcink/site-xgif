@@ -30,7 +30,7 @@ export function applyBatchParagraphSuggestion(originalBody, suggestion = {}) {
     || verified.paragraphFormatting !== "applied"
     || overlongParagraphLengths(verified.body).length
   ) {
-    throw new Error("AI 未能在保持正文字符不变的前提下完成分段，已保留原草稿。");
+    throw new Error("自动分段未能在保持正文字符不变的前提下完成，已保留原草稿。");
   }
   return verified.body;
 }

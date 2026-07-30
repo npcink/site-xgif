@@ -402,6 +402,7 @@ test("draft publishing uses explicit states, protected-branch guards, and mandat
   assert.match(server, /function contentStatusCounts/);
   assert.match(server, /async function inspectBatchDrafts/);
   assert.match(server, /async function publishBatchDrafts/);
+  assert.match(server, /organizeMarkdownParagraphs/);
   assert.match(server, /applyBatchParagraphSuggestion/);
   assert.match(server, /applyBatchReviewConfirmation/);
   assert.match(server, /autoOrganizeParagraphs/);

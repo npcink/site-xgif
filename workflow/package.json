@@ -22,6 +22,8 @@
     "content:governance:migrate": "node content-governance-migration.js",
     "content:debt:migrate": "node content-debt-migration-cli.js",
     "content:debt:migrate:apply": "node content-debt-migration-cli.js --apply",
+    "content:paragraphs:migrate": "node content-paragraph-migration-cli.js",
+    "content:paragraphs:migrate:apply": "node content-paragraph-migration-cli.js --apply",
     "trash:migrate": "node trash-migration-cli.js",
     "trash:migrate:apply": "node trash-migration-cli.js --apply",
     "r2:reconcile": "node r2-reconcile-cli.js",

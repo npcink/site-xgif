@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { safeParagraphSuggestion } from "../article-paragraph-formatting.js";
+import {
+  organizeMarkdownParagraphs,
+  safeParagraphSuggestion,
+} from "../article-paragraph-formatting.js";
 
 test("keeps an already reasonable paragraph layout unchanged", () => {
   const body = "第一段已经完整。\n\n第二段也很清楚。";
@@ -79,4 +82,51 @@ test("reports that paragraph formatting was skipped when the full article exceed
     body: original,
     paragraphFormatting: "too_long",
   });
+});
+
+test("organizes long prose locally while preserving every original character", () => {
+  const original = "第一层意思讲清楚了。".repeat(20);
+  const result = organizeMarkdownParagraphs(original, { maxCharacters: 40 });
+
+  assert.equal(result.paragraphFormatting, "applied");
+  assert.equal(result.longBefore, 1);
+  assert.equal(result.longAfter, 0);
+  assert.equal(result.unsplittableParagraphs, 0);
+  assert.equal(result.body.replace(/\n/gu, ""), original);
+  assert.ok(
+    result.body
+      .split(/\n\s*\n/gu)
+      .every((paragraph) => [...paragraph.replace(/\s/gu, "")].length <= 40),
+  );
+});
+
+test("fails closed when a long paragraph has no safe punctuation boundary", () => {
+  const original = "连续字符".repeat(80);
+  assert.deepEqual(organizeMarkdownParagraphs(original, { maxCharacters: 40 }), {
+    body: original,
+    paragraphFormatting: "unchanged",
+    changedParagraphs: 0,
+    unsplittableParagraphs: 1,
+    longBefore: 1,
+    longAfter: 1,
+  });
+});
+
+test("does not split Markdown code, blockquotes, or tables", () => {
+  const samples = [
+    `\`\`\`text\n${"代码。".repeat(80)}\n\`\`\``,
+    `> ${"引用。".repeat(80)}`,
+    `| ${"表格。".repeat(80)} |`,
+  ];
+  for (const original of samples) {
+    assert.equal(organizeMarkdownParagraphs(original).body, original);
+  }
+});
+
+test("uses existing whitespace as a final safe boundary", () => {
+  const original = Array.from({ length: 60 }, (_, index) => `词语${index}`).join(" ");
+  const result = organizeMarkdownParagraphs(original, { maxCharacters: 40 });
+  assert.equal(result.paragraphFormatting, "applied");
+  assert.equal(result.longAfter, 0);
+  assert.equal(result.body.replace(/\n/gu, ""), original);
 });
