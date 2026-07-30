@@ -167,6 +167,40 @@ test("content audit accepts an explicitly numbered source series", async () => {
   }
 });
 
+test("content audit accepts structured Markdown links and still reports bare URLs", async () => {
+  const dirs = await fixture();
+  await Promise.all([
+    writeFile(
+      path.join(dirs.articlesDir, "20260723-0025.md"),
+      article({
+        contentId: "20260723-0025",
+        title: "结构化相关链接",
+        sourceUrl: "https://jandan.net/t/structured",
+        body: "这篇正文已经整理完整，并且用明确的链接文本说明资料用途。读者可以继续查看 [相关前文](https://example.com/related) ，也可以使用自动链接 <https://example.com/reference> 。这些地址不是无上下文的裸链接，因此不需要再次人工判断用途。\n\n链接前后的正文仍然包含完整说明，读者无需猜测每个地址对应什么资料，编辑也能在后续维护时直接识别它们的用途。结构化链接既保留了可核验地址，也把用途直接写在阅读上下文中。",
+      }),
+      "utf8",
+    ),
+    writeFile(
+      path.join(dirs.articlesDir, "20260723-0026.md"),
+      article({
+        contentId: "20260723-0026",
+        title: "仍有裸链接",
+        sourceUrl: "https://jandan.net/t/bare",
+        body: "这篇正文保留了一个没有说明用途的地址，因此仍应进入人工确认队列。正文其余内容已经达到最小长度，用来确保审计结果只由这个裸链接触发。https://example.com/unlabeled",
+      }),
+      "utf8",
+    ),
+  ]);
+
+  const report = await auditContentLibrary({ repoRoot: dirs.repoRoot });
+  const structured = report.items.find((item) => item.title === "结构化相关链接");
+  const bare = report.items.find((item) => item.title === "仍有裸链接");
+  assert.equal(structured.status, "ready", JSON.stringify(structured));
+  assert.doesNotMatch(structured.warnings.join(" "), /未结构化链接/u);
+  assert.equal(bare.status, "review");
+  assert.match(bare.warnings.join(" "), /未结构化链接/u);
+});
+
 test("content audit blocks unresolved drafts and marks published legacy review debt", async () => {
   const dirs = await fixture();
   await Promise.all([
