@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   contentVerificationAnchors,
   contentPublicationCounts,
+  markdownVisibleText,
   publicationFromDeployment,
   publicationFromWorkflow,
 } from "../publication-state.js";
@@ -20,6 +21,15 @@ test("content verification anchors cover the start, middle, and end of long cont
 
 test("content verification anchors keep short content as one exact anchor", () => {
   assert.deepEqual(contentVerificationAnchors("short content", 48), ["short content"]);
+});
+
+test("live verification compares visible Markdown link text instead of hidden destinations", () => {
+  assert.equal(
+    markdownVisibleText(
+      "原帖：[煎蛋讨论](https://jandan.net/t/6053060)\n\n![示意图](/images/example.png)",
+    ),
+    "原帖：煎蛋讨论\n\n示意图",
+  );
 });
 
 test("content lists derive publication progress without waiting for live verification", () => {
