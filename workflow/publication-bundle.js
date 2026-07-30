@@ -12,6 +12,10 @@ export const publicAssetPrefixes = [
   "site/public/images/memes/",
 ];
 
+export const publicDerivedFiles = [
+  "site/src/data/recommendations.json",
+];
+
 function portablePath(value) {
   return String(value || "").replaceAll("\\", "/");
 }
@@ -35,6 +39,10 @@ export function isPublicAssetFile(file) {
   return publicAssetPrefixes.some((prefix) => normalized.startsWith(prefix));
 }
 
+export function isPublicDerivedFile(file) {
+  return publicDerivedFiles.includes(portablePath(file));
+}
+
 export function normalizePublicContentFile(file) {
   const normalized = normalizedRepositoryFile(file);
   if (!isPublicContentFile(normalized)) {
@@ -47,6 +55,14 @@ export function normalizePublicAssetFile(file) {
   const normalized = normalizedRepositoryFile(file);
   if (!isPublicAssetFile(normalized)) {
     throw new Error(`同步文件不在公开资产白名单中：${normalized}`);
+  }
+  return normalized;
+}
+
+export function normalizePublicDerivedFile(file) {
+  const normalized = normalizedRepositoryFile(file);
+  if (!isPublicDerivedFile(normalized)) {
+    throw new Error(`同步文件不在公开派生文件白名单中：${normalized}`);
   }
   return normalized;
 }

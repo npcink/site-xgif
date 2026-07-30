@@ -140,6 +140,37 @@ test("isolated content sync carries referenced public assets without development
   }
 });
 
+test("isolated content sync accepts only the exact recommendation derived artifact", async () => {
+  const dirs = await createRepository();
+  const manifest = "site/src/data/recommendations.json";
+  const branch = "content-sync/test-recommendations";
+  try {
+    await mkdir(path.join(dirs.repoRoot, path.dirname(manifest)), { recursive: true });
+    await writeFile(path.join(dirs.repoRoot, manifest), '{"recommendations":{}}\n');
+    const result = await isolatedContentSync({
+      repoRoot: dirs.repoRoot,
+      files: [manifest],
+      message: "Sync recommendations",
+      branch,
+    });
+    assert.equal(result.push.ok, true);
+    assert.equal(
+      await run(dirs.repoRoot, ["show", `origin/${branch}:${manifest}`]),
+      '{"recommendations":{}}',
+    );
+    await assert.rejects(
+      isolatedContentSync({
+        repoRoot: dirs.repoRoot,
+        files: ["site/src/data/private.json"],
+        message: "Must not sync arbitrary data",
+      }),
+      /不在公开资产白名单/u,
+    );
+  } finally {
+    await rm(dirs.root, { recursive: true, force: true });
+  }
+});
+
 test("isolated content sync represents remote withdrawal with git rm", async () => {
   const dirs = await createRepository();
   const article = "site/src/content/articles/existing.md";

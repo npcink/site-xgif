@@ -69,6 +69,12 @@ npm run recommendations:build
 npm run recommendations:build -- --require-embeddings
 ```
 
+管理端的“发布推荐清单”只会同步
+`site/src/data/recommendations.json`。它要求混合推荐覆盖全部公开内容、清单与当前内容
+哈希一致，并且公开内容已经全部进入 `origin/main`；满足条件后会从
+`origin/main` 创建独立的 `content-sync/*` 分支。任意其他 `site/src/data/` 文件均不在
+发布白名单中。
+
 当前建议模型是 `qwen3-embedding:0.6b`。M4 的 Ollama 继续只监听 `127.0.0.1:11434`；从 M5 使用时先建立临时隧道：
 
 ```bash

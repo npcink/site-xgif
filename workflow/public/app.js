@@ -3591,6 +3591,7 @@ $("#open-site-preview").addEventListener("click", () => {
 });
 $("#refresh-services").addEventListener("click", () => loadStatus({ refreshRemote: true }));
 $("#recommendation-refresh").addEventListener("click", refreshRecommendations);
+$("#recommendation-publish").addEventListener("click", publishRecommendations);
 $("#retry-push").addEventListener("click", async () => {
   if (!activeContent) return;
   const button = $("#retry-push");
@@ -3729,6 +3730,12 @@ function renderRecommendationStatus(recommendations) {
   $("#recommendation-coverage").textContent = `${covered}/${total} 条内容`;
   $("#recommendation-model").textContent = status.model || "不使用向量模型";
   $("#recommendation-generated-at").textContent = localDateTime(status.generatedAt);
+  const publication = status.publication || {};
+  const publishButton = $("#recommendation-publish");
+  publishButton.disabled = !publication.ready;
+  publishButton.title = publication.ready
+    ? "创建只包含推荐清单的发布分支"
+    : (publication.blockers || []).join(" ");
 
   const vectorDetail = status.embeddingConfigured
     ? `更新时优先使用本地向量模型 ${status.embeddingModel || ""}`.trim()
@@ -3764,12 +3771,37 @@ async function refreshRecommendations() {
       const cacheHits = Number(response.summary?.cacheHits || 0);
       result.textContent = `混合推荐已更新。新增 ${generated} 条向量，复用 ${cacheHits} 条缓存。`;
     }
+    await loadStatus({ refreshRemote: true });
   } catch (error) {
     result.dataset.state = "error";
     result.textContent = `更新失败：${error.message}`;
   } finally {
     button.disabled = false;
     button.textContent = "更新相关推荐";
+  }
+}
+
+async function publishRecommendations() {
+  const button = $("#recommendation-publish");
+  const result = $("#recommendation-result");
+  button.disabled = true;
+  button.setAttribute("aria-busy", "true");
+  result.dataset.state = "loading";
+  result.textContent = "正在创建推荐清单发布分支。";
+  try {
+    const response = await api("/api/recommendation-publications", {});
+    result.dataset.state = response.ok ? "ready" : "attention";
+    result.textContent = response.ok
+      ? `推荐清单已推送到 ${response.branch}，等待合并。`
+      : `推荐清单分支未能推送：${response.push?.error || "未知错误"}`;
+    await loadStatus({ refreshRemote: true });
+  } catch (error) {
+    result.dataset.state = "error";
+    result.textContent = `发布失败：${error.message}`;
+  } finally {
+    button.removeAttribute("aria-busy");
+    const publication = publisherStatus?.recommendations?.publication;
+    button.disabled = !publication?.ready;
   }
 }
 

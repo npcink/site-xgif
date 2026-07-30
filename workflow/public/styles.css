@@ -693,6 +693,11 @@ h1 {
   padding: 0 11px;
 }
 
+.recommendation-status-actions {
+  display: flex;
+  gap: 8px;
+}
+
 .recommendation-status-grid {
   border: 1px solid var(--line);
   display: grid;

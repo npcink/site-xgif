@@ -22,6 +22,7 @@ test("publisher exposes local public URLs and keeps empty result panels hidden",
   assert.match(server, /function createArticleTitleSuggestions/);
   assert.match(server, /\/api\/ai\/article-title-suggestions/);
   assert.match(server, /\/api\/recommendations/);
+  assert.match(server, /\/api\/recommendation-publications/);
   assert.match(server, /refreshRecommendationManifest/);
   assert.match(server, /sanitizeArticleTitleSuggestions/);
   assert.match(server, /allocateContentId/);
@@ -48,6 +49,7 @@ test("publisher exposes local public URLs and keeps empty result panels hidden",
   assert.match(html, /id="publisher-health"/);
   assert.match(html, /id="publisher-health-label"/);
   assert.match(html, /id="open-site-preview"/);
+  assert.match(html, /id="recommendation-publish"/);
   assert.match(html, /id="app-frame"/);
   assert.match(html, /id="workspace-sidebar"/);
   assert.match(html, /class="workspace-navigation"/);
@@ -299,6 +301,7 @@ test("publisher exposes local public URLs and keeps empty result panels hidden",
   assert.match(app, /function loadRecycleBin/);
   assert.match(app, /function purgeSelectedTrash/);
   assert.match(app, /\/api\/storage\/backup/);
+  assert.match(app, /\/api\/recommendation-publications/);
   assert.match(app, /\/api\/content\/audit/);
   assert.match(app, /\/api\/tags\/governance/);
   assert.match(app, /\/api\/assets/);

@@ -73,6 +73,10 @@ import {
   refreshRecommendationManifest,
 } from "./recommendation-engine.js";
 import {
+  getRecommendationPublicationStatus,
+  publishRecommendationManifest,
+} from "./recommendation-publication.js";
+import {
   buildPublicationBundle,
   publicationVersion,
   verifiablePublicAssetUrls,
@@ -3504,6 +3508,11 @@ async function buildPublisherStatusPayload() {
     }),
   ]);
   const contentSafety = getContentGitSafety(publicationItems);
+  recommendations.publication = await getRecommendationPublicationStatus({
+    repoRoot,
+    recommendations,
+    publicContentPending: contentSafety.publicPending,
+  });
   const aiConfig = getAiConfig();
   const verifiedDeletionQueue = await verifyPendingPublicationDeletions(deletionQueue);
   return {
@@ -3580,6 +3589,28 @@ async function handleApi(req, res) {
       fallbackCode: result.summary.fallbackCode || null,
       summary: result.summary,
       recommendations: result.status,
+    });
+    return;
+  }
+
+  if (pathname === "/api/recommendation-publications" && req.method === "POST") {
+    await readJson(req);
+    const publicationItems = await getContentPublicationStates(await listContent("all"));
+    const contentSafety = getContentGitSafety(publicationItems);
+    const recommendations = await recommendationStatusForApi();
+    const result = await publishRecommendationManifest({
+      repoRoot,
+      recommendations,
+      publicContentPending: contentSafety.publicPending,
+    });
+    clearPublicationStateCaches();
+    sendJson(res, 200, {
+      ok: Boolean(result.push.ok),
+      branch: result.branch,
+      commitSha: result.commitSha,
+      push: result.push,
+      compareUrl: githubCompareUrl((await getGitStatus()).remote, result.branch),
+      manifestSha256: result.manifestSha256,
     });
     return;
   }

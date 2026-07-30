@@ -5,10 +5,13 @@ import os from "node:os";
 import path from "node:path";
 import {
   isPublicContentFile,
+  isPublicDerivedFile,
   normalizePublicAssetFile,
   normalizePublicContentFile,
+  normalizePublicDerivedFile,
   publicAssetPrefixes,
   publicContentPrefixes,
+  publicDerivedFiles,
 } from "./publication-bundle.js";
 import { safeProcessError } from "./safe-process-error.js";
 
@@ -32,11 +35,11 @@ function git(cwd, args, { timeoutMs = 0 } = {}) {
 function normalizedContentFiles(files, { allowEmpty = false } = {}) {
   const unique = [...new Set((files || []).map((file) => String(file || "").replaceAll("\\", "/")))];
   if (!unique.length && !allowEmpty) throw new Error("没有可以同步的公开内容文件。");
-  return unique.map((file) => (
-    isPublicContentFile(file)
-      ? normalizePublicContentFile(file)
-      : normalizePublicAssetFile(file)
-  ));
+  return unique.map((file) => {
+    if (isPublicContentFile(file)) return normalizePublicContentFile(file);
+    if (isPublicDerivedFile(file)) return normalizePublicDerivedFile(file);
+    return normalizePublicAssetFile(file);
+  });
 }
 
 function normalizedDeletionFiles(files) {
@@ -214,4 +217,5 @@ export const isolatedContentSyncPolicy = {
   baseRef: "origin/main",
   publicContentPrefixes,
   publicAssetPrefixes,
+  publicDerivedFiles,
 };
