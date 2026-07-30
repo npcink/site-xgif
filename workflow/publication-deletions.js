@@ -1,7 +1,17 @@
-import { readdir, readFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import {
+  readdir,
+  readFile,
+  rename,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
 import path from "node:path";
 import { normalizePublicContentFile } from "./publication-bundle.js";
-import { publicationReceiptState } from "./publication-receipts.js";
+import {
+  contentSha256,
+  publicationReceiptState,
+} from "./publication-receipts.js";
 
 export const publicationTrashSchemaVersion = 2;
 
@@ -20,6 +30,92 @@ async function listSidecars(directory) {
     else if (entry.name.endsWith(".meta.json")) files.push(entryPath);
   }
   return files;
+}
+
+function frontmatterField(markdown, field) {
+  const match = String(markdown || "").match(
+    new RegExp(`^${field}:\\s*["']?([^\\n"']+)`, "mu"),
+  );
+  return String(match?.[1] || "").trim();
+}
+
+async function writeJsonAtomic(filePath, value) {
+  const temporaryPath = `${filePath}.${process.pid}.${Date.now()}.${randomUUID()}.tmp`;
+  try {
+    await writeFile(temporaryPath, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+    await rename(temporaryPath, filePath);
+  } catch (error) {
+    await unlink(temporaryPath).catch(() => {});
+    throw error;
+  }
+}
+
+export async function migratePublicationTrashSidecars({
+  trashRoot,
+  apply = false,
+}) {
+  const migrations = [];
+  const invalid = [];
+  const sidecarPaths = await listSidecars(trashRoot);
+  for (const sidecarPath of sidecarPaths) {
+    let sidecar;
+    try {
+      sidecar = JSON.parse(await readFile(sidecarPath, "utf8"));
+    } catch (error) {
+      invalid.push({ sidecarPath, error: `旁车 JSON 无效：${error.message}` });
+      continue;
+    }
+    if (sidecar.status !== "trashed" || Number(sidecar.schemaVersion || 0) >= publicationTrashSchemaVersion) {
+      continue;
+    }
+    const trashPath = sidecarPath.slice(0, -".meta.json".length);
+    try {
+      const markdown = await readFile(trashPath, "utf8");
+      const sha256 = contentSha256(markdown);
+      if (sidecar.sha256 && sidecar.sha256 !== sha256) {
+        throw new Error("回收站内容哈希与旁车记录不一致");
+      }
+      const contentId = frontmatterField(markdown, "contentId");
+      if (!contentId) throw new Error("回收站内容缺少 contentId");
+      const next = {
+        ...sidecar,
+        schemaVersion: publicationTrashSchemaVersion,
+        contentId,
+        contentSha256: sha256,
+        publicationSha256: String(
+          sidecar.publicationSha256
+          || sidecar.contentSha256
+          || sidecar.sha256
+          || sha256,
+        ),
+        publicationState: String(sidecar.publicationState || "local"),
+        requiresRemoteDeletion: false,
+      };
+      migrations.push({
+        sidecarPath,
+        id: String(sidecar.id || ""),
+        file: String(sidecar.file || ""),
+        fromVersion: Number(sidecar.schemaVersion || 0),
+        toVersion: publicationTrashSchemaVersion,
+        next,
+      });
+    } catch (error) {
+      invalid.push({ sidecarPath, error: error.message });
+    }
+  }
+
+  if (apply && invalid.length === 0) {
+    for (const migration of migrations) {
+      await writeJsonAtomic(migration.sidecarPath, migration.next);
+    }
+  }
+  return {
+    ok: invalid.length === 0,
+    applied: apply && invalid.length === 0,
+    scanned: sidecarPaths.length,
+    migrated: migrations.map(({ next, ...migration }) => migration),
+    invalid,
+  };
 }
 
 export async function listPublicationDeletionTombstones({

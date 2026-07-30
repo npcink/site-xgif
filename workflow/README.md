@@ -25,6 +25,7 @@ npm start
 ```bash
 npm run status   # 查看两个服务是否可用
 npm run restart  # 重启两个服务
+npm run doctor   # 核对源码版本、受管 PID、预览、状态刷新和 Git 推送能力
 npm run stop     # 停止两个服务
 ```
 
@@ -139,9 +140,13 @@ npm run data:rebuild  # 主动从 Markdown 和回收站旁车重建索引
 npm run data:backup   # 备份 SQLite，并为全部内容创建本机私有 Git 快照
 npm run data:verify-recovery # 用当前真实内容和临时数据库演练损坏重建
 npm run test:recovery # 在临时目录模拟数据库损坏和恢复，不触碰真实内容
+npm run trash:migrate       # 预览旧版回收站旁车迁移
+npm run trash:migrate:apply # 校验全部记录后升级为当前旁车版本
 ```
 
 备份保存在 `workflow/backups/`，不会进入公开仓库。其中 `content-history.git` 是独立的本机私有 Git 仓库，只白名单保存 Markdown、私有来源正文、内容台账、回收站和本地图片；`.env`、SQLite、日志和程序文件不会进入。发布台启动和每次内容变更后都会自动创建快照，手动“创建本地安全备份”会同时更新内容快照并备份 SQLite。
+
+恢复演练会记录一次数据库维护时间；需要同时取得“恢复演练新鲜”和“SQLite 备份新鲜”时，顺序固定为先执行恢复演练、再创建最终备份。旧回收站迁移只补齐稳定内容 ID、哈希和本地删除事实，不会推断远端删除；执行迁移前后都应各保留一次安全备份。
 
 本机私有 Git 可以防止误删和误改，但仍和原文件处在同一台电脑。当前内容历史仓库已单独配置私有 GitHub 远端 `npcink/site-xgif-private-content`；每次安全快照都会尝试推送 `history` 分支，失败只会在备份结果中提示，不会阻断本地内容保存。不要把这个远端改成公开仓库，也不要把私密草稿推送到站点公开仓库。
 

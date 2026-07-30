@@ -140,6 +140,13 @@ test("restore and cancellation events invalidate earlier publication facts", asy
       items: [item],
     });
     await store.appendBatch({
+      action: "delete",
+      branch: "content-sync/delete-before-restore",
+      commitSha: "d".repeat(40),
+      push: { ok: true },
+      items: [item],
+    });
+    await store.appendBatch({
       action: "restore",
       state: "restored",
       branch: "",
@@ -148,6 +155,10 @@ test("restore and cancellation events invalidate earlier publication facts", asy
       items: [item],
     });
     assert.equal((await store.latestByFileAndHash([item])).has(item.file), false);
+    assert.equal(
+      (await store.latestByFileAndHash([item], { action: "delete" })).has(item.file),
+      false,
+    );
 
     await store.appendBatch({
       action: "delete",

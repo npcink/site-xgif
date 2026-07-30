@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import {
   publicationDeletionQueue,
+  migratePublicationTrashSidecars,
   publicationTrashSchemaStatus,
   publicationTrashSchemaVersion,
 } from "../publication-deletions.js";
@@ -90,6 +91,78 @@ test("trash schema diagnostics report legacy sidecars without rewriting them", a
       invalid: 1,
       migrationRequired: true,
     });
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("trash migration upgrades legacy local sidecars without inventing a remote deletion", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "xgif-trash-migration-"));
+  const markdownPath = path.join(root, "legacy.md");
+  const sidecarPath = `${markdownPath}.meta.json`;
+  const markdown = [
+    "---",
+    'title: "Legacy"',
+    'contentId: "20260730-abcd"',
+    "---",
+    "",
+    "body",
+  ].join("\n");
+  try {
+    await writeFile(markdownPath, markdown, "utf8");
+    await writeFile(sidecarPath, JSON.stringify({
+      schemaVersion: 1,
+      id: "legacy",
+      type: "article",
+      file: "site/src/content/articles/legacy.md",
+      title: "Legacy",
+      publicationState: "local",
+      status: "trashed",
+    }));
+
+    const preview = await migratePublicationTrashSidecars({ trashRoot: root });
+    assert.equal(preview.ok, true);
+    assert.equal(preview.applied, false);
+    assert.equal(preview.migrated.length, 1);
+    assert.equal(JSON.parse(await readFile(sidecarPath, "utf8")).schemaVersion, 1);
+
+    const applied = await migratePublicationTrashSidecars({ trashRoot: root, apply: true });
+    assert.equal(applied.applied, true);
+    const migrated = JSON.parse(await readFile(sidecarPath, "utf8"));
+    assert.equal(migrated.schemaVersion, publicationTrashSchemaVersion);
+    assert.equal(migrated.contentId, "20260730-abcd");
+    assert.equal(migrated.requiresRemoteDeletion, false);
+    assert.equal(migrated.contentSha256, migrated.publicationSha256);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("trash migration validates every legacy sidecar before writing any of them", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "xgif-trash-migration-invalid-"));
+  const markdownPath = path.join(root, "valid.md");
+  const sidecarPath = `${markdownPath}.meta.json`;
+  try {
+    await writeFile(
+      markdownPath,
+      '---\ncontentId: "20260730-safe"\n---\n\nbody\n',
+      "utf8",
+    );
+    await writeFile(sidecarPath, JSON.stringify({
+      schemaVersion: 1,
+      id: "valid",
+      status: "trashed",
+    }));
+    await writeFile(path.join(root, "invalid.md.meta.json"), "{broken", "utf8");
+
+    const result = await migratePublicationTrashSidecars({
+      trashRoot: root,
+      apply: true,
+    });
+    assert.equal(result.ok, false);
+    assert.equal(result.applied, false);
+    assert.equal(result.invalid.length, 1);
+    assert.equal(JSON.parse(await readFile(sidecarPath, "utf8")).schemaVersion, 1);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
