@@ -20,4 +20,6 @@
 
 `content-audit-latest.md` 和 `content-audit-latest.json` 是 `npm run content:audit` 生成的当前内容快照，分为“可直接上线、需要人工确认、建议退回草稿”。报告可以重新生成，不是内容权威源。
 
-批量同步的分支、提交、文件清单和比较链接保存在本机 SQLite 的 `operation_history` 中，并在管理端“同步记录”查看。SQLite 丢失不会影响文章和图片，但同步历史不会从 Markdown 自动恢复；最终发布证据仍以 GitHub PR、合并提交、Cloudflare 部署和线上页面为准。
+`publication-events.jsonl` 是本机追加式发布回执，使用 `contentId + Markdown SHA-256` 绑定内容版本，记录同步批次、隔离分支、提交和推送阶段。该文件不保存正文或密钥，由本机私有内容 Git 备份，并被公开仓库忽略；不要把它手工加入公开代码或内容分支。
+
+批量同步的操作摘要还会保存在本机 SQLite 的 `operation_history` 中，并在管理端“同步记录”查看。SQLite 丢失不会影响文章和图片；发布回执可恢复本机同步版本关系，但最终发布证据仍以 GitHub PR、合并提交、Cloudflare 部署和线上页面为准。

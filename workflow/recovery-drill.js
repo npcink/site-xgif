@@ -45,6 +45,7 @@ export async function runRecoveryDrill({
   repoRoot,
   workflowRoot,
   statusPath = path.join(workflowRoot, ".runtime", "recovery-drill.json"),
+  runtimeVersion = "",
 }) {
   const probeRoot = await mkdtemp(path.join(os.tmpdir(), "xgif-recovery-check-"));
   const databasePath = path.join(probeRoot, "xgif.sqlite3");
@@ -76,6 +77,8 @@ export async function runRecoveryDrill({
       completedAt: new Date().toISOString(),
       content: after.content,
       trash: after.trash,
+      sourceFingerprint: probe.getRecoveryFingerprint(),
+      runtimeVersion: String(runtimeVersion || ""),
       corruptDatabaseWasQuarantined: true,
       note: "演练只使用临时数据库，未修改真实 SQLite 或内容文件。",
     };

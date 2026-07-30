@@ -13,6 +13,7 @@ import {
   requestEmbeddings,
   writeRecommendationManifest,
 } from "../recommendation-engine.js";
+import { selectContentRecommendations } from "../../site/src/lib/recommendations.mjs";
 
 const embeddingConfig = {
   available: true,
@@ -38,6 +39,7 @@ function entry(id, {
   summary = "",
   tags = [],
   pubDate = "2026-07-24",
+  recommendationGroup = "general",
 } = {}) {
   return {
     id,
@@ -49,6 +51,7 @@ function entry(id, {
       pubDate: new Date(pubDate),
       draft: false,
       public: true,
+      recommendationGroup,
     },
   };
 }
@@ -116,6 +119,136 @@ test("manifest excludes drafts and offers a deterministic surprise slot", () => 
   assert.ok(!manifest.recommendations.source.articles.includes("draft"));
 });
 
+test("adult-humor recommendations stay in their group while general articles exclude it", () => {
+  const generalSource = entry("general-source", { title: "周末随笔", tags: ["生活"] });
+  const generalCandidate = entry("general-candidate", { title: "平常的一天", tags: ["生活"] });
+  const adultCandidate = entry("adult-candidate", {
+    title: "两性调侃", tags: ["生活"], recommendationGroup: "adult-humor",
+  });
+  const adultSource = entry("adult-source", {
+    title: "夫妻间的玩笑", tags: ["情感"], recommendationGroup: "adult-humor",
+  });
+  const adultRelatedOne = entry("adult-related-one", {
+    title: "恋人之间的轻松笑话", tags: ["情感"], recommendationGroup: "adult-humor",
+  });
+  const adultRelatedTwo = entry("adult-related-two", {
+    title: "婚姻里的调侃", tags: ["情感"], recommendationGroup: "adult-humor",
+  });
+  const adultRelatedThree = entry("adult-related-three", {
+    title: "情侣玩笑", tags: ["情感"], recommendationGroup: "adult-humor",
+  });
+  const documents = [
+    generalSource,
+    generalCandidate,
+    adultCandidate,
+    adultSource,
+    adultRelatedOne,
+    adultRelatedTwo,
+    adultRelatedThree,
+  ].map((entry, index) => ({
+    id: entry.id,
+    type: "article",
+    contentSha256: String(index),
+    entry,
+  }));
+  const vectors = new Map([
+    ["general-source", [1, 0]],
+    ["general-candidate", [0.9, 0.1]],
+    ["adult-candidate", [1, 0]],
+    ["adult-source", [1, 0]],
+    ["adult-related-one", [0.8, 0.2]],
+    ["adult-related-two", [0.7, 0.3]],
+    ["adult-related-three", [0.6, 0.4]],
+  ]);
+  const manifest = buildRecommendationManifest(documents, {
+    vectors,
+    mode: "hybrid",
+    model: "embedding-test",
+    generatedAt: "2026-07-24T00:00:00.000Z",
+  });
+
+  assert.ok(manifest.recommendations["general-source"].articles.includes("general-candidate"));
+  assert.ok(!manifest.recommendations["general-source"].articles.includes("adult-candidate"));
+  assert.equal(manifest.recommendations["adult-source"].articles.length, 3);
+  assert.ok(manifest.recommendations["adult-source"].articles.every((id) => id.startsWith("adult-")));
+});
+
+test("adult-humor recommendations keep a deterministic path through every group item", () => {
+  const adultIds = ["adult-a", "adult-b", "adult-c", "adult-d", "adult-e"];
+  const documents = adultIds.map((id, index) => ({
+    id,
+    type: "article",
+    contentSha256: String(index),
+    entry: entry(id, {
+      title: index === adultIds.length - 1 ? "南京旅行后的备孕玩笑" : "夫妻日常",
+      tags: index === adultIds.length - 1 ? ["回忆"] : ["婚姻"],
+      recommendationGroup: "adult-humor",
+    }),
+  }));
+  const draftAdultEntry = entry("adult-draft", { recommendationGroup: "adult-humor" });
+  documents.push({
+    id: "adult-draft",
+    type: "article",
+    contentSha256: "draft",
+    entry: {
+      ...draftAdultEntry,
+      data: {
+        ...draftAdultEntry.data,
+        draft: true,
+      },
+    },
+  });
+  const vectors = new Map(adultIds.map((id, index) => [
+    id,
+    index === adultIds.length - 1 ? [0, 1] : [1, index / 100],
+  ]));
+  vectors.set("adult-draft", [1, 0]);
+  const manifest = buildRecommendationManifest(documents, {
+    vectors,
+    mode: "hybrid",
+    model: "embedding-test",
+    generatedAt: "2026-07-24T00:00:00.000Z",
+  });
+
+  adultIds.forEach((sourceId, index) => {
+    const coverageId = adultIds[(index + 1) % adultIds.length];
+    assert.ok(manifest.recommendations[sourceId].articles.includes(coverageId));
+    assert.ok(!manifest.recommendations[sourceId].articles.includes("adult-draft"));
+  });
+});
+
+test("a stale preferred list cannot put general content ahead of an adult-humor group", () => {
+  const source = entry("adult-source", { recommendationGroup: "adult-humor", tags: ["情感"] });
+  const general = entry("general-preferred", { tags: ["情感"] });
+  const candidates = [
+    general,
+    entry("adult-one", { recommendationGroup: "adult-humor", tags: ["情感"] }),
+    entry("adult-two", { recommendationGroup: "adult-humor", tags: ["情感"] }),
+    entry("adult-three", { recommendationGroup: "adult-humor", tags: ["情感"] }),
+  ];
+
+  assert.deepEqual(
+    selectContentRecommendations(source, candidates, { limit: 3, preferredIds: ["general-preferred"] })
+      .map((item) => item.data.contentId),
+    ["adult-one", "adult-three", "adult-two"],
+  );
+});
+
+test("adult-humor group candidates are retained even when their rule similarity is sparse", () => {
+  const source = entry("source", {
+    title: "甲", recommendationGroup: "adult-humor", tags: [],
+  });
+  const adultCandidate = entry("adult-candidate", {
+    title: "乙", recommendationGroup: "adult-humor", tags: [],
+  });
+  const generalCandidate = entry("general-candidate", { title: "甲", tags: [] });
+
+  assert.equal(
+    selectContentRecommendations(source, [generalCandidate, adultCandidate], { limit: 1 })[0].data.contentId,
+    "adult-candidate",
+  );
+});
+
 test("missing embedding configuration safely generates a rules manifest", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "xgif-recommendations-"));
   const articlesDir = path.join(root, "site", "src", "content", "articles");
@@ -180,6 +313,44 @@ draft: true
   });
   assert.equal(unavailableService.summary.mode, "rules");
   assert.equal(unavailableService.summary.fallbackCode, "EMBEDDING_REQUEST_FAILED");
+  assert.equal(
+    unavailableService.manifest.generation.fallbackCode,
+    "EMBEDDING_REQUEST_FAILED",
+  );
+
+  await writeRecommendationManifest(root, unavailableService.manifest);
+  const configuredEnv = {
+    XGIF_EMBEDDING_BASE_URL: "http://127.0.0.1:9/v1",
+    XGIF_EMBEDDING_MODEL: "embedding-test",
+    XGIF_EMBEDDING_TIMEOUT_MS: "100",
+  };
+  const degraded = await getRecommendationStatus({ repoRoot: root, env: configuredEnv });
+  assert.equal(degraded.stale, false);
+  assert.equal(degraded.degraded, true);
+  assert.equal(degraded.fallbackCode, "EMBEDDING_REQUEST_FAILED");
+
+  const recovered = await refreshRecommendationManifest({
+    repoRoot: root,
+    store: {
+      listRecommendationEmbeddings() {
+        return [];
+      },
+      upsertRecommendationEmbedding() {},
+      pruneRecommendationEmbeddings() {
+        return 0;
+      },
+    },
+    env: configuredEnv,
+    fetchImpl: async () => ({
+      ok: true,
+      async json() {
+        return { data: [{ index: 0, embedding: [1, 0] }] };
+      },
+    }),
+  });
+  assert.equal(recovered.unchanged, false);
+  assert.equal(recovered.status.mode, "hybrid");
+  assert.equal(recovered.status.degraded, false);
 });
 
 test("recommendation status detects changed public content and refreshes atomically", async () => {
@@ -236,4 +407,71 @@ draft: false
   assert.equal(refreshed.unchanged, false);
   assert.equal(refreshed.summary.fallbackCode, "EMBEDDING_CONFIG_UNAVAILABLE");
   assert.equal(refreshed.status.stale, false);
+});
+
+test("failed embedding refresh preserves the last successful hybrid manifest", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "xgif-recommendation-last-good-"));
+  const articlesDir = path.join(root, "site", "src", "content", "articles");
+  await mkdir(articlesDir, { recursive: true });
+  await writeFile(path.join(articlesDir, "one.md"), `---
+title: "保留成功结果"
+contentId: "20260729-last-good"
+summary: "刷新失败时不降级覆盖"
+tags: ["测试"]
+pubDate: "2026-07-29"
+recommendationGroup: "general"
+draft: false
+---
+正文
+`, "utf8");
+
+  const env = {
+    XGIF_EMBEDDING_BASE_URL: "http://127.0.0.1:9/v1",
+    XGIF_EMBEDDING_MODEL: "embedding-test",
+    XGIF_EMBEDDING_TIMEOUT_MS: "100",
+  };
+  const store = {
+    listRecommendationEmbeddings() {
+      return [];
+    },
+    upsertRecommendationEmbedding() {},
+    pruneRecommendationEmbeddings() {
+      return 0;
+    },
+  };
+  const successful = await generateRecommendationManifest({
+    repoRoot: root,
+    store,
+    env,
+    fetchImpl: async () => response({
+      data: [{ index: 0, embedding: [1, 0] }],
+    }),
+    generatedAt: "2026-07-29T00:00:00.000Z",
+  });
+  await writeRecommendationManifest(root, successful.manifest);
+  const before = await readFile(
+    path.join(root, "site", "src", "data", "recommendations.json"),
+    "utf8",
+  );
+
+  const failed = await refreshRecommendationManifest({
+    repoRoot: root,
+    store,
+    env,
+    force: true,
+    fetchImpl: async () => {
+      throw new Error("service offline");
+    },
+  });
+
+  assert.equal(failed.unchanged, true);
+  assert.equal(failed.preservedLastGood, true);
+  assert.equal(failed.status.mode, "hybrid");
+  assert.equal(failed.status.degraded, true);
+  assert.equal(failed.status.preservedLastGood, true);
+  assert.equal(failed.status.fallbackCode, "EMBEDDING_REQUEST_FAILED");
+  assert.equal(
+    await readFile(path.join(root, "site", "src", "data", "recommendations.json"), "utf8"),
+    before,
+  );
 });

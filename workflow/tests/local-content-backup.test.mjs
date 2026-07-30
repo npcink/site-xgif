@@ -97,4 +97,15 @@ test("private content status distinguishes the local snapshot from the synchroni
   const status = await backup.status();
   assert.equal(status.offsite.ok, true);
   assert.equal(status.offsite.commit, status.commit);
+
+  await writeFile(path.join(articleDirectory, "draft.md"), "new local snapshot", "utf8");
+  const localOnly = await backup.snapshot("local first", { pushOffsite: false });
+  assert.equal(localOnly.changed, true);
+  assert.equal(localOnly.ready, true);
+  assert.equal(localOnly.offsite.ok, false);
+  assert.notEqual(localOnly.commit, localOnly.offsite.commit);
+
+  const pushed = await backup.pushOffsite();
+  assert.equal(pushed.ok, true);
+  assert.equal((await backup.status()).offsite.ok, true);
 });

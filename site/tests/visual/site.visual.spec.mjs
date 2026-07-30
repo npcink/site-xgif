@@ -92,9 +92,19 @@ test("homepage matches the approved visual baseline", async ({ page }, testInfo)
   await page.goto("/", { waitUntil: "networkidle" });
   await waitForImages(page);
 
+  // Content publication must not require new UI baselines. Keep the page shell
+  // and geometry under visual review while masking data-owned cards and counts.
   await expect(page).toHaveScreenshot(`home-${testInfo.project.name}.png`, {
     animations: "disabled",
     fullPage: false,
+    maskColor: "#d9d4ca",
+    mask: [
+      page.locator(".hero-feature"),
+      page.locator('[data-home-section="articles"] .article-grid'),
+      page.locator('[data-home-section="articles"] .content-title sup'),
+      page.locator('[data-home-section="images"] .masonry-grid'),
+      page.locator('[data-home-section="images"] .content-title sup'),
+    ],
   });
 });
 
@@ -114,6 +124,11 @@ test("image library matches the approved visual baseline", async ({ page }, test
   await expect(page).toHaveScreenshot(`image-library-${testInfo.project.name}.png`, {
     animations: "disabled",
     fullPage: false,
+    maskColor: "#d9d4ca",
+    mask: [
+      page.locator(".masonry-grid"),
+      page.locator("[data-visible-count]"),
+    ],
   });
 });
 
@@ -127,6 +142,11 @@ test("image library filtered state matches the approved visual baseline", async 
   await expect(page).toHaveScreenshot(`image-library-filtered-${testInfo.project.name}.png`, {
     animations: "disabled",
     fullPage: false,
+    maskColor: "#d9d4ca",
+    mask: [
+      page.locator(".masonry-grid"),
+      page.locator("[data-visible-count]"),
+    ],
   });
 });
 
@@ -137,6 +157,11 @@ test("search results match the approved visual baseline", async ({ page }, testI
   await expect(page).toHaveScreenshot(`search-results-${testInfo.project.name}.png`, {
     animations: "disabled",
     fullPage: false,
+    maskColor: "#d9d4ca",
+    mask: [
+      page.locator("[data-filter-list]"),
+      page.locator("[data-visible-count]"),
+    ],
   });
 });
 
@@ -168,6 +193,8 @@ test("tag index matches the approved visual baseline", async ({ page }, testInfo
   await expect(page).toHaveScreenshot(`tag-index-${testInfo.project.name}.png`, {
     animations: "disabled",
     fullPage: false,
+    maskColor: "#d9d4ca",
+    mask: [page.locator(".tag-index")],
   });
 });
 
@@ -179,6 +206,11 @@ test("tag results match the approved visual baseline", async ({ page }, testInfo
   await expect(page).toHaveScreenshot(`tag-results-${testInfo.project.name}.png`, {
     animations: "disabled",
     fullPage: false,
+    maskColor: "#d9d4ca",
+    mask: [
+      page.locator(".tag-detail-hero > p:last-child"),
+      page.locator(".tag-results"),
+    ],
   });
 });
 
@@ -192,5 +224,10 @@ test("tag related images match the approved visual baseline", async ({ page }, t
   await expect(page).toHaveScreenshot(`tag-related-images-${testInfo.project.name}.png`, {
     animations: "disabled",
     fullPage: false,
+    maskColor: "#d9d4ca",
+    mask: [
+      page.locator(".tag-detail-hero > p:last-child"),
+      page.locator(".tag-results"),
+    ],
   });
 });
