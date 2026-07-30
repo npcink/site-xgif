@@ -77,10 +77,7 @@ export class PublicationReceiptStore {
       const receiptVersion = String(receipt.publicationSha256 || receipt.contentSha256 || "");
       if (!wanted.get(file)?.has(receiptVersion)) continue;
       const receiptAction = String(receipt.action || "sync");
-      if (
-        receiptAction === "cancel"
-        || (action === "sync" && receiptAction === "restore")
-      ) {
+      if (receiptAction === "cancel" || receiptAction === "restore") {
         latest.delete(file);
         continue;
       }
