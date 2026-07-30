@@ -303,6 +303,7 @@ git diff --check
 
 ## 14. 相关文档
 
+- [`LOCAL_PUBLISHER_FINAL_HANDOFF_2026-07-30.md`](LOCAL_PUBLISHER_FINAL_HANDOFF_2026-07-30.md)：阶段演进、维护顺序和时间点交接事实。
 - [`RELEASE_CLOSURE_STANDARD.md`](../../site/docs/RELEASE_CLOSURE_STANDARD.md)：跨越内容、GitHub、恢复、推荐、Cloudflare 与生产的端到端收尾规范。
 - [`DEVELOPMENT_RETROSPECTIVE_2026-08-03.md`](../../site/docs/DEVELOPMENT_RETROSPECTIVE_2026-08-03.md)：最近一次真实发布闭环的证据、问题与改进。
 - [`LOCAL_PUBLISHER_CLOSURE_2026-07-27.md`](LOCAL_PUBLISHER_CLOSURE_2026-07-27.md)：产品与版式收敛。

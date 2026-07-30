@@ -70,7 +70,7 @@ import { resolveAuthoritativeTrashSelection } from "./trash-selection.js";
 import {
   contentVerificationAnchors,
   contentPublicationCounts,
-  markdownVisibleText,
+  markdownVerificationText,
   publicationFromDeployment,
   publicationFromWorkflow,
 } from "./publication-state.js";
@@ -1141,7 +1141,7 @@ async function verifyLiveContent(type, filePath, parsed, markdown = "") {
     const title = normalizeComparableText(parsed.data.title);
     const summary = normalizeComparableText(parsed.data.summary || parsed.data.description);
     const bodyAnchors = contentVerificationAnchors(
-      normalizeComparableText(markdownVisibleText(parsed.body)),
+      normalizeComparableText(markdownVerificationText(parsed.body)),
     );
     const textMatches = [title, summary, ...bodyAnchors].filter(Boolean).every((value) => pageText.includes(value));
     const assetUrls = verifiablePublicAssetUrls(markdown, {

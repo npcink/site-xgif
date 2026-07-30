@@ -3,6 +3,61 @@ function normalizeTimestamp(value) {
   return Number.isNaN(Date.parse(timestamp)) ? "" : timestamp;
 }
 
+function isEscaped(value, index) {
+  let backslashes = 0;
+  for (let cursor = index - 1; cursor >= 0 && value[cursor] === "\\"; cursor -= 1) {
+    backslashes += 1;
+  }
+  return backslashes % 2 === 1;
+}
+
+function findClosingDelimiter(value, start, open, close) {
+  let depth = 1;
+  for (let cursor = start + 1; cursor < value.length; cursor += 1) {
+    if (isEscaped(value, cursor)) continue;
+    if (value[cursor] === open) depth += 1;
+    if (value[cursor] === close) depth -= 1;
+    if (depth === 0) return cursor;
+  }
+  return -1;
+}
+
+export function markdownVerificationText(value) {
+  const markdown = String(value || "");
+  const referenceDefinition = /^\s*\[([^\]\n]+)\]:\s*<?\S+>?(?:\s+.*)?$/gimu;
+  const references = new Set(
+    [...markdown.matchAll(referenceDefinition)]
+      .map((match) => match[1].trim().replace(/\s+/gu, " ").toLowerCase()),
+  );
+  let visible = "";
+
+  for (let cursor = 0; cursor < markdown.length;) {
+    const image = markdown[cursor] === "!" && markdown[cursor + 1] === "[";
+    const labelStart = image ? cursor + 1 : cursor;
+    if (markdown[labelStart] === "[" && !isEscaped(markdown, labelStart)) {
+      const labelEnd = findClosingDelimiter(markdown, labelStart, "[", "]");
+      const destinationStart = labelEnd + 1;
+      if (labelEnd > labelStart && markdown[destinationStart] === "(") {
+        const destinationEnd = findClosingDelimiter(markdown, destinationStart, "(", ")");
+        if (destinationEnd > destinationStart) {
+          visible += markdown.slice(labelStart + 1, labelEnd);
+          cursor = destinationEnd + 1;
+          continue;
+        }
+      }
+    }
+    visible += markdown[cursor];
+    cursor += 1;
+  }
+
+  return visible
+    .replace(referenceDefinition, "")
+    .replace(/\[([^\]\n]+)\]\[([^\]\n]*)\]/gu, (match, label, reference) => {
+      const key = String(reference || label).trim().replace(/\s+/gu, " ").toLowerCase();
+      return references.has(key) ? label : match;
+    });
+}
+
 export function contentVerificationAnchors(value, width = 48) {
   const text = String(value || "");
   const anchorWidth = Math.max(1, Number.parseInt(width, 10) || 48);
@@ -15,12 +70,6 @@ export function contentVerificationAnchors(value, width = 48) {
     text.slice(Math.floor(lastStart / 2), Math.floor(lastStart / 2) + anchorWidth),
     text.slice(lastStart),
   ])];
-}
-
-export function markdownVisibleText(value) {
-  return String(value || "")
-    .replace(/!\[([^\]]*)\]\((?:\\.|[^)])*\)/gu, "$1")
-    .replace(/\[([^\]]+)\]\((?:\\.|[^)])*\)/gu, "$1");
 }
 
 export function publicationFromWorkflow(workflow = {}) {

@@ -2,6 +2,12 @@
 
 这是一个只在本机运行的发布工具，用来给 Astro 内容站生成文章和图片内容文件。
 
+维护入口：
+
+- [最终交接与开发方法](docs/LOCAL_PUBLISHER_FINAL_HANDOFF_2026-07-30.md)
+- [长期工程规范](docs/LOCAL_PUBLISHER_ENGINEERING_STANDARD.md)
+- [可靠性复盘](docs/LOCAL_PUBLISHER_RELIABILITY_RETROSPECTIVE_2026-07-29.md)
+
 ## 启动
 
 ```bash

@@ -15,6 +15,7 @@
 - 最近一次生产闭环复盘：[`site/docs/DEVELOPMENT_RETROSPECTIVE_2026-08-03.md`](site/docs/DEVELOPMENT_RETROSPECTIVE_2026-08-03.md)
 - 发布、恢复与阶段收尾规范：[`site/docs/RELEASE_CLOSURE_STANDARD.md`](site/docs/RELEASE_CLOSURE_STANDARD.md)
 - 阶段开发复盘与经验：[`site/docs/DEVELOPMENT_RETROSPECTIVE_2026-07-24.md`](site/docs/DEVELOPMENT_RETROSPECTIVE_2026-07-24.md)
+- 本地发布助手最终交接：[`workflow/docs/LOCAL_PUBLISHER_FINAL_HANDOFF_2026-07-30.md`](workflow/docs/LOCAL_PUBLISHER_FINAL_HANDOFF_2026-07-30.md)
 - 本地发布助手产品复盘：[`workflow/docs/LOCAL_PUBLISHER_RETROSPECTIVE_2026-07-24.md`](workflow/docs/LOCAL_PUBLISHER_RETROSPECTIVE_2026-07-24.md)
 - 本地发布助手阶段收尾：[`workflow/docs/LOCAL_PUBLISHER_CLOSURE_2026-07-27.md`](workflow/docs/LOCAL_PUBLISHER_CLOSURE_2026-07-27.md)
 - 历史与长期原则：[`workflow/PROJECT_HISTORY.md`](workflow/PROJECT_HISTORY.md)

@@ -3,7 +3,7 @@ import test from "node:test";
 import {
   contentVerificationAnchors,
   contentPublicationCounts,
-  markdownVisibleText,
+  markdownVerificationText,
   publicationFromDeployment,
   publicationFromWorkflow,
 } from "../publication-state.js";
@@ -23,13 +23,33 @@ test("content verification anchors keep short content as one exact anchor", () =
   assert.deepEqual(contentVerificationAnchors("short content", 48), ["short content"]);
 });
 
-test("live verification compares visible Markdown link text instead of hidden destinations", () => {
-  assert.equal(
-    markdownVisibleText(
-      "原帖：[煎蛋讨论](https://jandan.net/t/6053060)\n\n![示意图](/images/example.png)",
-    ),
-    "原帖：煎蛋讨论\n\n示意图",
-  );
+test("live verification compares rendered Markdown link labels instead of hidden destinations", () => {
+  const markdown = [
+    "正文开头。",
+    "",
+    "[相关前文](https://example.com/topic/1)",
+    "",
+    "![插图说明](https://example.com/assets/image_(large).png)",
+    "",
+    "[参考链接][source]",
+    "",
+    "[不是链接][missing]",
+    "",
+    "正文结尾。",
+    "",
+    "[本段原帖](https://example.com/topic/2)",
+    "",
+    "[source]: https://example.com/reference",
+  ].join("\n");
+
+  const visibleText = markdownVerificationText(markdown);
+
+  assert.match(visibleText, /相关前文/u);
+  assert.match(visibleText, /插图说明/u);
+  assert.match(visibleText, /参考链接/u);
+  assert.match(visibleText, /\[不是链接\]\[missing\]/u);
+  assert.match(visibleText, /本段原帖/u);
+  assert.doesNotMatch(visibleText, /https:\/\/example\.com/u);
 });
 
 test("content lists derive publication progress without waiting for live verification", () => {

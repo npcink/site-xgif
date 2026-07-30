@@ -388,7 +388,7 @@ test("draft publishing uses explicit states, protected-branch guards, and mandat
   assert.match(server, /async function verifyLiveContent/);
   assert.match(server, /parseFrontmatter\(markdown\)/);
   assert.match(server, /contentVerificationAnchors/);
-  assert.match(server, /markdownVisibleText\(parsed\.body\)/);
+  assert.match(server, /markdownVerificationText\(parsed\.body\)/);
   assert.match(server, /function normalizeComparableText/);
   assert.match(server, /\[\\p\{P\}\\p\{S\}\]/);
   assert.match(server, /线上已生效/);
