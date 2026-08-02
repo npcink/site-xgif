@@ -26,6 +26,7 @@ function article({
   draft = false,
   internalNote = "",
   internalReviewStatus = "",
+  shortFormReviewed = false,
   body,
 } = {}) {
   const resolvedBody = body
@@ -41,12 +42,48 @@ tags: ["生活"]
 pubDate: "2026-07-23"
 readTime: "2 分钟"
 recommendationGroup: "general"
+${shortFormReviewed ? "shortFormReviewed: true\n" : ""}
 ${internalNote ? `internalNote: ${JSON.stringify(internalNote)}\n` : ""}${internalReviewStatus ? `internalReviewStatus: ${JSON.stringify(internalReviewStatus)}\n` : ""}draft: ${draft}
 ---
 
 ${resolvedBody}
 `;
 }
+
+test("content audit requires explicit review for intentionally short articles", async () => {
+  const dirs = await fixture();
+  await Promise.all([
+    writeFile(
+      path.join(dirs.articlesDir, "20260723-0040.md"),
+      article({
+        contentId: "20260723-0040",
+        title: "未确认短内容",
+        sourceUrl: "https://jandan.net/t/4000",
+        body: "这是一段尚未确认完整的短内容。",
+      }),
+      "utf8",
+    ),
+    writeFile(
+      path.join(dirs.articlesDir, "20260723-0041.md"),
+      article({
+        contentId: "20260723-0041",
+        title: "已确认短内容",
+        sourceUrl: "https://jandan.net/t/4001",
+        shortFormReviewed: true,
+        body: "这是一段已经由人工核对、确认没有缺失的短内容。",
+      }),
+      "utf8",
+    ),
+  ]);
+
+  const report = await auditContentLibrary({ repoRoot: dirs.repoRoot });
+  const pending = report.items.find((item) => item.title === "未确认短内容");
+  const reviewed = report.items.find((item) => item.title === "已确认短内容");
+  assert.equal(pending.status, "review");
+  assert.match(pending.warnings.join(" "), /正文较短/);
+  assert.equal(reviewed.status, "ready");
+  assert.match(reviewed.notices.join(" "), /短内容已人工确认完整/);
+});
 
 test("content audit classifies ready, review, and blocked articles", async () => {
   const dirs = await fixture();

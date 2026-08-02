@@ -55,9 +55,13 @@ test("imported articles use an explicit publish confirmation that resets after c
   await page.locator('[name="internalNote"]').fill("从 flomo 私人收藏导入，请在公开前复核来源和内容。");
   await expect(confirmation).toBeVisible();
   await confirmed.check();
+  await page.locator("#article-advanced-settings > summary").click();
+  const shortFormReviewed = page.locator('[name="shortFormReviewed"]');
+  await shortFormReviewed.check();
   await expect(status).toHaveValue("resolved");
   await page.locator("#article-body").fill("复核后补充了一句正文。");
   await expect(confirmed).not.toBeChecked();
+  await expect(shortFormReviewed).not.toBeChecked();
   await expect(status).toHaveValue("unresolved");
 });
 

@@ -468,6 +468,8 @@ test("publisher writes the metadata required by Astro collections", async () => 
   assert.match(server, /群聊转存（来源待核实）/);
   assert.match(html, /name="sourceKind"/);
   assert.match(html, /name="recommendationGroup"/);
+  assert.match(html, /name="shortFormReviewed"/);
+  assert.match(server, /shortFormReviewed: true/);
   assert.match(app, /data-import-field="recommendationGroup"/);
   assert.match(app, /请选择推荐分组/);
   assert.match(server, /公开导入前必须人工确认推荐分组/);

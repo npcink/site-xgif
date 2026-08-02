@@ -315,7 +315,10 @@ function updateArticleInspectorStatus(data = formData(articleForm)) {
     `${sourceName} · ${sourceUrl ? "已有原文链接" : "未填写原文链接"}`;
   $("#article-cover-tab-status").textContent = String(data.coverImage || "").trim() ? "已设置" : "可选";
   const groupLabel = data.recommendationGroup === "adult-humor" ? "成人幽默" : "通用内容";
-  $("#article-advanced-summary").textContent = data.featured ? `${groupLabel} · 精选` : groupLabel;
+  const advancedLabels = [groupLabel];
+  if (data.shortFormReviewed) advancedLabels.push("短内容已确认");
+  if (data.featured) advancedLabels.push("精选");
+  $("#article-advanced-summary").textContent = advancedLabels.join(" · ");
 }
 
 function updateArticlePreview() {
@@ -2486,6 +2489,9 @@ articleBody.addEventListener("drop", (event) => {
 for (const input of $$("input, textarea, select", articleForm)) {
   if (input.closest(".markdown-find")) continue;
   input.addEventListener("input", () => {
+    if (input.name === "body") {
+      $('[name="shortFormReviewed"]', articleForm).checked = false;
+    }
     if (["title", "body", "source", "sourceUrl", "sourceKind", "internalNote"].includes(input.name)) {
       $('[name="internalReviewStatus"]', articleForm).value = "unresolved";
       $('[name="internalReviewResolvedAt"]', articleForm).value = "";
@@ -2505,6 +2511,9 @@ for (const input of $$("input, textarea, select", articleForm)) {
     saveLocalDraft(articleForm);
   });
   input.addEventListener("change", () => {
+    if (input.name === "body") {
+      $('[name="shortFormReviewed"]', articleForm).checked = false;
+    }
     if (["title", "body", "source", "sourceUrl", "sourceKind", "internalNote"].includes(input.name)) {
       $('[name="internalReviewStatus"]', articleForm).value = "unresolved";
       $('[name="internalReviewResolvedAt"]', articleForm).value = "";
