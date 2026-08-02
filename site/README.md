@@ -83,7 +83,7 @@ npm run test:production
 
 ## 维护交接
 
-项目目标、架构边界、运行命令与部署前提见 [docs/PROJECT_HANDOFF.md](docs/PROJECT_HANDOFF.md)；技术选型到五批收口的历史脉络见 [docs/DEVELOPMENT_HISTORY_AND_LESSONS_2026-08-03.md](docs/DEVELOPMENT_HISTORY_AND_LESSONS_2026-08-03.md)；长期开发门槛、Git/worktree、验证证据和完成定义见 [docs/DEVELOPMENT_AND_DELIVERY_STANDARD.md](docs/DEVELOPMENT_AND_DELIVERY_STANDARD.md)。
+项目目标、架构边界、运行命令与部署前提见 [docs/PROJECT_HANDOFF.md](docs/PROJECT_HANDOFF.md)；技术选型到五批收口的历史脉络见 [docs/DEVELOPMENT_HISTORY_AND_LESSONS_2026-08-03.md](docs/DEVELOPMENT_HISTORY_AND_LESSONS_2026-08-03.md)；长期开发门槛、Git/worktree、验证证据和完成定义见 [docs/DEVELOPMENT_AND_DELIVERY_STANDARD.md](docs/DEVELOPMENT_AND_DELIVERY_STANDARD.md)；完整生产闭环与后续收尾步骤分别见 [docs/DEVELOPMENT_RETROSPECTIVE_2026-08-03.md](docs/DEVELOPMENT_RETROSPECTIVE_2026-08-03.md) 和 [docs/RELEASE_CLOSURE_STANDARD.md](docs/RELEASE_CLOSURE_STANDARD.md)。
 
 ## 部署
 

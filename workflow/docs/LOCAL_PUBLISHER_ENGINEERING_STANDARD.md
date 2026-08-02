@@ -303,6 +303,8 @@ git diff --check
 
 ## 14. 相关文档
 
+- [`RELEASE_CLOSURE_STANDARD.md`](../../site/docs/RELEASE_CLOSURE_STANDARD.md)：跨越内容、GitHub、恢复、推荐、Cloudflare 与生产的端到端收尾规范。
+- [`DEVELOPMENT_RETROSPECTIVE_2026-08-03.md`](../../site/docs/DEVELOPMENT_RETROSPECTIVE_2026-08-03.md)：最近一次真实发布闭环的证据、问题与改进。
 - [`LOCAL_PUBLISHER_CLOSURE_2026-07-27.md`](LOCAL_PUBLISHER_CLOSURE_2026-07-27.md)：产品与版式收敛。
 - [`LOCAL_PUBLISHER_RELIABILITY_RETROSPECTIVE_2026-07-29.md`](LOCAL_PUBLISHER_RELIABILITY_RETROSPECTIVE_2026-07-29.md)：故障导向复盘。
 - [`ADR-014`](../../site/docs/decisions/ADR-014-flomo-import-quality-gate.md)：导入与历史草稿的统一质量门禁。
