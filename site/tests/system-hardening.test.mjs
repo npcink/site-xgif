@@ -11,7 +11,11 @@ test("production build exposes traceable deployment metadata", async () => {
 
 test("scheduled production smoke requires the apex redirect", async () => {
   const workflow = await readFile(new URL("../../.github/workflows/production-smoke.yml", import.meta.url), "utf8");
+  const smoke = await readFile(new URL("../scripts/production-smoke.mjs", import.meta.url), "utf8");
   assert.match(workflow, /schedule:/u);
   assert.match(workflow, /REQUIRE_APEX_REDIRECT:\s*"true"/u);
   assert.match(workflow, /node site\/scripts\/production-smoke\.mjs/u);
+  assert.match(smoke, /request\("\/articles\/"\)/u);
+  assert.match(smoke, /data-detail-kind="article"/u);
+  assert.doesNotMatch(smoke, /xgif\\\.cn\\\/articles\\\//u);
 });
