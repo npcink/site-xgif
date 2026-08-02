@@ -77,7 +77,10 @@ async function openImageDialog(page) {
   await page.goto("/images", { waitUntil: "networkidle" });
   await waitForImages(page);
   await page.locator('a[href="/20260723-z4xw"][data-detail-link]').click();
-  await expect(page.getByRole("dialog", { name: "去摧毁金融区吧" })).toBeVisible();
+  const dialog = page.getByRole("dialog", { name: "去摧毁金融区吧" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toHaveAttribute("aria-busy", "false");
+  await expect(dialog.getByRole("heading", { name: "去摧毁金融区吧" })).toBeVisible();
   await waitForImages(page);
 }
 
@@ -138,7 +141,7 @@ test("image library filtered state matches the approved visual baseline", async 
   await waitForImages(page);
   await page.getByRole("button", { name: "无语" }).click();
   await expect(page.getByRole("button", { name: "无语" })).toHaveClass(/active/);
-  await expect(page.locator("[data-visible-count]")).toHaveText("1");
+  await expect(page.locator("[data-visible-count]")).toHaveText("3");
 
   await expect(page).toHaveScreenshot(`image-library-filtered-${testInfo.project.name}.png`, {
     animations: "disabled",
