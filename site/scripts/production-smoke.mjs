@@ -23,10 +23,16 @@ const rights = await request("/rights/");
 assert.equal(rights.response.status, 200, "版权与更正页面不可用");
 assert.match(rights.text, /1355471563@qq\.com/u, "版权与更正页面缺少反馈邮箱");
 
+const articleArchive = await request("/articles/");
+assert.equal(articleArchive.response.status, 200, "文章归档不可用");
+const articleLink = articleArchive.text.match(/<a\b[^>]*\bdata-detail-kind="article"[^>]*>/u)?.[0] || "";
+const articlePath = articleLink.match(/\bhref="(\/\d{8}-[a-z0-9]{4})"/u)?.[1];
+assert.ok(articlePath, "文章归档中没有公开文章");
+const articleUrl = new URL(articlePath, baseUrl).href;
+
 const sitemap = await request("/sitemap.xml");
 assert.equal(sitemap.response.status, 200, "sitemap 不可用");
-const articleUrl = sitemap.text.match(/<loc>(https:\/\/www\.xgif\.cn\/articles\/[^<]+)<\/loc>/u)?.[1];
-assert.ok(articleUrl, "sitemap 中没有公开文章");
+assert.ok(sitemap.text.includes(`<loc>${articleUrl}</loc>`), "sitemap 中缺少文章归档公开的根级详情页");
 
 const article = await request(articleUrl);
 assert.equal(article.response.status, 200, "公开文章不可用");
