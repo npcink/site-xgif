@@ -178,6 +178,7 @@ export function contentPublicationCounts(items = []) {
     unverified: 0,
     cloud: 0,
     attention: 0,
+    publishing: 0,
   };
 
   for (const item of items) {
@@ -187,6 +188,7 @@ export function contentPublicationCounts(items = []) {
     if (["pending", "unknown", "online"].includes(state)) counts.cloud += 1;
     if (["local", "pending"].includes(state) || item.publication?.verification === "unknown") {
       counts.attention += 1;
+      counts.publishing += 1;
     }
   }
   return counts;

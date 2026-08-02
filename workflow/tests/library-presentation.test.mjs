@@ -41,7 +41,7 @@ test("content presentation exposes one reader-facing stage and next action", () 
 
 test("task presentation prioritizes unfinished publication work over drafts", () => {
   const pending = libraryTaskPresentation({ all: 8, draft: 3, local: 2, online: 3 });
-  assert.equal(pending.title, "2 项内容待处理");
+  assert.equal(pending.title, "2 项内容发布中");
   assert.equal(pending.action, "attention");
 
   const drafts = libraryTaskPresentation({ all: 5, draft: 2, local: 0, online: 3 });
@@ -56,7 +56,7 @@ test("task presentation prioritizes unfinished publication work over drafts", ()
     unverified: 2,
     online: 1,
   });
-  assert.equal(unknown.title, "2 项内容待处理");
+  assert.equal(unknown.title, "2 项内容发布中");
   assert.equal(unknown.action, "attention");
 
   const ready = libraryTaskPresentation({ all: 3, draft: 0, local: 0, online: 3 });
