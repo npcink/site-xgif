@@ -36,6 +36,7 @@ const articles = defineCollection({
     coverImage: imagePath.optional(),
     coverAlt: z.string().optional(),
     recommendationGroup: z.enum(["general", "adult-humor"]).default("general"),
+    shortFormReviewed: z.boolean().default(false),
     featured: z.boolean().default(false),
     draft: z.boolean().default(false),
   }).superRefine((data, context) => {

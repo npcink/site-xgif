@@ -189,7 +189,9 @@ async function auditArticle(item, repoRoot) {
   const summaryLength = String(data.summary || "").replace(/\s+/gu, "").length;
   if (summaryLength > 0 && summaryLength < 24) item.warnings.push("摘要过短，可能不足以说明内容重点。");
   if (summaryLength > 180) item.warnings.push("摘要过长，建议压缩到 180 字以内。");
-  if (normalizedBody(body).length < 80) {
+  if (normalizedBody(body).length < 80 && data.shortFormReviewed === true) {
+    item.notices.push("短内容已人工确认完整。");
+  } else if (normalizedBody(body).length < 80) {
     item.warnings.push("正文较短，需要确认是否为完整内容。");
   }
   const longParagraphs = String(body || "")

@@ -1796,7 +1796,8 @@ function buildArticleMarkdown(payload) {
   const coverAlt = String(payload.coverAlt || "").trim();
   const coverImageLine = coverImage ? `coverImage: ${yamlString(coverImage)}\n` : "";
   const coverAltLine = coverImage && coverAlt ? `coverAlt: ${yamlString(coverAlt)}\n` : "";
-  return `---\ntitle: ${yamlString(payload.title)}\ncontentId: ${yamlString(payload.contentId)}\nsummary: ${yamlString(payload.summary)}\nsource: ${yamlString(payload.source)}\n${sourceUrlLine}sourceKind: ${yamlString(payload.sourceKind || "original")}\ntags: ${yamlArray(tags)}\npubDate: ${date}\nreadTime: ${yamlString(payload.readTime || "1 分钟")}\n${recommendationGroupLine}${editorNoteLine}${internalNoteLine}${internalReviewStatusLine}${internalReviewResolvedAtLine}${coverImageLine}${coverAltLine}featured: ${Boolean(payload.featured)}\ndraft: ${Boolean(payload.draft)}\n---\n\n${markdownBody(payload.body)}`;
+  const shortFormReviewedLine = payload.shortFormReviewed === true ? "shortFormReviewed: true\n" : "";
+  return `---\ntitle: ${yamlString(payload.title)}\ncontentId: ${yamlString(payload.contentId)}\nsummary: ${yamlString(payload.summary)}\nsource: ${yamlString(payload.source)}\n${sourceUrlLine}sourceKind: ${yamlString(payload.sourceKind || "original")}\ntags: ${yamlArray(tags)}\npubDate: ${date}\nreadTime: ${yamlString(payload.readTime || "1 分钟")}\n${recommendationGroupLine}${editorNoteLine}${internalNoteLine}${internalReviewStatusLine}${internalReviewResolvedAtLine}${coverImageLine}${coverAltLine}${shortFormReviewedLine}featured: ${Boolean(payload.featured)}\ndraft: ${Boolean(payload.draft)}\n---\n\n${markdownBody(payload.body)}`;
 }
 
 function validateArticleAttribution(payload) {

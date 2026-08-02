@@ -85,7 +85,15 @@ test("published external articles expose a full body instead of the legacy discl
       || !["publication", "editorial"].includes(field(article.text, "sourceKind"))
     ) continue;
     assert.notEqual(body.trim(), legacyDisclosure, `${article.file} 仍是旧摘要占位`);
-    assert.ok(body.trim().length >= 80, `${article.file} 缺少可公开的完整正文`);
+    const bodyLength = body.trim().length;
+    if (bodyLength < 80) {
+      assert.equal(
+        field(article.text, "shortFormReviewed"),
+        "true",
+        `${article.file} 的短正文尚未明确确认完整`,
+      );
+      assert.ok(bodyLength >= 20, `${article.file} 的短正文内容不足`);
+    }
   }
 });
 
