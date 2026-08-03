@@ -63,6 +63,7 @@ import {
 } from "./publication-receipts.js";
 import { SerialTaskQueue } from "./serial-task-queue.js";
 import { GitHubPublicationFacts } from "./github-publication-facts.js";
+import { contentPathsMatchingRef } from "./git-content-membership.js";
 import { safeProcessError } from "./safe-process-error.js";
 import { resolveAuthoritativeTrashSelection } from "./trash-selection.js";
 import {
@@ -723,6 +724,7 @@ async function getContentWorkflowStates(items) {
   let dirtyPaths = new Set();
   let trackedPaths = new Set();
   let aheadPaths = new Set();
+  let mainCurrentPaths = new Set();
   let hasUpstream = false;
   const receipts = await publicationReceipts.latestByFileAndHash(items);
   const remoteFacts = await githubPublicationFacts.forBranches(
@@ -741,6 +743,16 @@ async function getContentWorkflowStates(items) {
   }
 
   try {
+    mainCurrentPaths = await contentPathsMatchingRef({
+      paths: items.map((item) => item.file),
+      ref: "origin/main",
+      runGit,
+    });
+  } catch {
+    // Missing or stale remote refs must not turn unpublished content into published content.
+  }
+
+  try {
     await runGit(["rev-parse", "--verify", "@{upstream}"]);
     hasUpstream = true;
     const ahead = await runGit(["diff", "--name-only", "-z", "@{upstream}..HEAD", "--", ...contentDirectories]);
@@ -752,6 +764,12 @@ async function getContentWorkflowStates(items) {
   return items.map((item) => {
     if (item.draft || (item.type === "image" && !item.public)) {
       return { ...item, workflow: workflowState("draft", "草稿", "只保存在本地内容库。") };
+    }
+    if (mainCurrentPaths.has(item.file)) {
+      return {
+        ...item,
+        workflow: workflowState("pending_deploy", "已进入主分支", "origin/main 已包含当前内容，继续核对线上页面。"),
+      };
     }
     const receipt = receipts.get(item.file);
     const receiptState = publicationReceiptState(receipt);
