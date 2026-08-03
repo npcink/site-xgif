@@ -6,6 +6,7 @@
 
 - [工作区收口审计](WORKSPACE_CLOSURE_AUDIT_2026-08-03.md)
 - [下一阶段计划](NEXT_STAGE_PLAN_2026-08-03.md)
+- [本轮实施收口与下一阶段触发条件](NEXT_STAGE_IMPLEMENTATION_CLOSEOUT_2026-08-03.md)
 - [ADR-017：保留 Astro](decisions/ADR-017-retain-astro-over-hexo-or-ghost.md)
 - [ADR-018：保留本地发布台并限制复杂度](decisions/ADR-018-retain-local-publisher-and-learn-from-open-source-cms.md)
 
