@@ -46,7 +46,10 @@ import {
   readRecoveryDrillStatus,
   runRecoveryDrill,
 } from "./recovery-drill.js";
-import { sanitizeArticleTitleSuggestions } from "./article-title-suggestions.js";
+import {
+  isPlaceholderArticleTitle,
+  sanitizeArticleTitleSuggestions,
+} from "./article-title-suggestions.js";
 import {
   cleanupContentSyncBranch,
   contentSyncBranchName,
@@ -1928,6 +1931,9 @@ async function checkArticleQuality(payload) {
   const issues = [];
   const tags = normalizeList(payload.tags);
   if (!String(payload.title || "").trim()) issues.push(qualityIssue("error", "缺少标题。"));
+  else if (isPlaceholderArticleTitle(payload.title)) {
+    issues.push(qualityIssue("error", "标题仍是占位标题，正式发布前必须确认标题。"));
+  }
   if (!String(payload.summary || "").trim()) issues.push(qualityIssue("error", "缺少摘要。"));
   if (!String(payload.source || "").trim()) issues.push(qualityIssue("error", "缺少来源名称。"));
   const coverImage = String(payload.coverImage || "").trim();
