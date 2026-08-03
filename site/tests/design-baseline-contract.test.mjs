@@ -5,14 +5,19 @@ import test from "node:test";
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
 test("image detail surfaces keep the two-column layout without cropping source images", async () => {
-  const [dialog, page, styles] = await Promise.all([
+  const [dialog, page, articlePage, imageCard, styles] = await Promise.all([
     read("src/components/DetailDialog.astro"),
     read("src/components/ImageDetailPage.astro"),
+    read("src/components/ArticleDetailPage.astro"),
+    read("src/components/ImageCard.astro"),
     read("src/styles/global.css"),
   ]);
 
   assert.match(dialog, /<b aria-hidden="true">×<\/b>/);
   assert.doesNotMatch(dialog, /<span>关闭<\/span>/);
+  assert.match(imageCard, /referrerpolicy="no-referrer"/);
+  assert.match(page, /referrerpolicy="no-referrer"/);
+  assert.match(articlePage, /referrerpolicy="no-referrer"/);
   assert.match(page, /class="image-source"/);
   assert.match(page, /--image-aspect-ratio: \$\{imageAspectRatio\}/);
   assert.match(styles, /grid-template-columns: minmax\(0, 1\.15fr\) minmax\(0, \.85fr\)/);
