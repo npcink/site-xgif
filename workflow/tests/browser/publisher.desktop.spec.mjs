@@ -65,6 +65,99 @@ test("imported articles use an explicit publish confirmation that resets after c
   await expect(status).toHaveValue("unresolved");
 });
 
+test("flomo import applies one batch group and confirms review exceptions once", async ({ page }) => {
+  const readyHash = "import-ready";
+  const reviewHash = "import-review";
+  let applyPayload = null;
+  await page.route("**/api/import/flomo/inspect", (route) => route.fulfill({
+    contentType: "application/json",
+    body: JSON.stringify({
+      stats: { total: 2, ready: 1, review: 1, similar: 0, exact: 0, selectedByDefault: 1 },
+      items: [
+        {
+          contentHash: readyHash,
+          status: "ready",
+          title: "可直接发布的文章",
+          needsTitle: false,
+          recordedAt: "2026-08-03",
+          charCount: 220,
+          readTime: "1 分钟",
+          summary: "已有完整资料。",
+          body: `${"完整正文。".repeat(20)}\n\n${"补充正文。".repeat(20)}`,
+          source: "煎蛋",
+          sourceUrl: "https://jandan.net/t/1",
+          tags: ["生活"],
+          importTags: [],
+        },
+        {
+          contentHash: reviewHash,
+          status: "review",
+          title: "待确认来源的文章",
+          needsTitle: false,
+          needsReview: true,
+          sourceReviewReason: "来源需要确认",
+          recordedAt: "2026-08-03",
+          charCount: 80,
+          readTime: "1 分钟",
+          summary: "需要集中确认。",
+          body: "需要复核的正文。".repeat(12),
+          source: "来源待确认",
+          sourceUrl: "",
+          tags: ["生活"],
+          importTags: [],
+        },
+      ],
+    }),
+  }));
+  await page.route("**/api/import/flomo/apply", async (route) => {
+    applyPayload = route.request().postDataJSON();
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        imported: 2,
+        drafted: false,
+        skipped: [],
+        blocked: [],
+        files: [
+          "site/src/content/articles/20260803-ready.md",
+          "site/src/content/articles/20260803-review.md",
+        ],
+      }),
+    });
+  });
+
+  await page.goto("/#import");
+  await page.locator("#flomo-file").setInputFiles({
+    name: "flomo.zip",
+    mimeType: "application/zip",
+    buffer: Buffer.from("local test archive"),
+  });
+  await page.locator("#flomo-inspect").click();
+
+  const publish = page.locator("#flomo-publish-selected");
+  await expect(publish).toBeDisabled();
+  await page.locator(`[data-import-hash="${reviewHash}"] [data-import-select]`).check();
+  await expect(page.locator("#flomo-batch-review-confirmation")).toBeVisible();
+  await page.locator("#flomo-batch-group").selectOption("general");
+  await page.locator("#flomo-apply-batch-group").click();
+  const recommendationGroups = page.locator('[data-import-field="recommendationGroup"]');
+  await expect(recommendationGroups).toHaveCount(2);
+  expect(await recommendationGroups.evaluateAll((fields) => fields.map((field) => field.value))).toEqual([
+    "general",
+    "general",
+  ]);
+  await expect(publish).toBeDisabled();
+  await page.locator("#flomo-review-confirmed").check();
+  await expect(publish).toBeEnabled();
+  await publish.click();
+
+  await expect.poll(() => applyPayload).not.toBeNull();
+  expect(applyPayload.mode).toBe("publish");
+  expect(applyPayload.confirmInternalReview).toBe(true);
+  expect(applyPayload.overrides[readyHash].recommendationGroup).toBe("general");
+  expect(applyPayload.overrides[reviewHash].recommendationGroup).toBe("general");
+});
+
 test("batch publish repairs paragraphs and records one explicit review confirmation", async ({ page }) => {
   const file = "site/src/content/articles/20260101-batch.md";
   let publishPayload = null;

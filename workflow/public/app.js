@@ -90,6 +90,14 @@ const flomoOnlyUnselected = $("#flomo-only-unselected");
 const flomoCompleteActions = $("#flomo-complete-actions");
 const flomoPublishSelected = $("#flomo-publish-selected");
 const flomoImportSelected = $("#flomo-import-selected");
+const flomoBatchGroup = $("#flomo-batch-group");
+const flomoApplyBatchGroup = $("#flomo-apply-batch-group");
+const flomoReviewConfirmed = $("#flomo-review-confirmed");
+const flomoReviewConfirmation = $("#flomo-batch-review-confirmation");
+const recommendationGroupLabels = {
+  general: "通用内容",
+  "adult-humor": "成人幽默",
+};
 let selectedImage = null;
 let activeContent = null;
 let flomoFileData = "";
@@ -1147,6 +1155,8 @@ function renderFlomoStats(stats) {
 function renderFlomoInspection(inspection) {
   flomoInspection = inspection;
   flomoAiBodies.clear();
+  flomoBatchGroup.value = "";
+  flomoReviewConfirmed.checked = false;
   renderFlomoStats(inspection.stats);
   const renderItem = (item) => {
     const duplicate = item.duplicate
@@ -1251,10 +1261,26 @@ function updateFlomoSelectionToggle() {
   if (exactDuplicates) exactDuplicates.open = false;
 
   flomoSelectionSummary.textContent = `已选 ${summary.selected} / 可选 ${summary.selectable} / 总计 ${summary.total}`;
+  const selectedStates = states.filter((state) => state.checked && !state.disabled);
+  const requiresReview = selectedStates.some((state) => ["review", "similar"].includes(state.status));
+  flomoReviewConfirmation.hidden = !requiresReview;
+  if (!requiresReview) flomoReviewConfirmed.checked = false;
+  const missingGroups = selectedStates.filter((state) => (
+    !$('[data-import-field="recommendationGroup"]', state.card)?.value
+  )).length;
+  const reviewReady = !requiresReview || flomoReviewConfirmed.checked;
   flomoPublishSelected.textContent = flomoImportBusy ? `正在检查并发布（${summary.selected}）` : `检查并发布 ${summary.selected} 条`;
   flomoImportSelected.textContent = flomoImportBusy ? `正在保存（${summary.selected}）` : "保存所选为草稿";
-  flomoPublishSelected.disabled = flomoImportBusy || summary.selected === 0;
+  flomoPublishSelected.disabled = flomoImportBusy
+    || summary.selected === 0
+    || missingGroups > 0
+    || !reviewReady;
   flomoImportSelected.disabled = flomoImportBusy || summary.selected === 0;
+  $("#flomo-batch-group-note").textContent = missingGroups
+    ? `${missingGroups} 条所选文章尚未确认推荐分组。`
+    : summary.selected
+      ? "所选文章均已确认分组；仍可逐条覆盖。"
+      : "明确选择一次即可；仍可在单条内容中覆盖。";
 }
 
 function selectedImportItems() {
@@ -1364,17 +1390,20 @@ async function applyFlomoImport(mode = "draft") {
       (item) => !String(overrides[item.contentHash]?.recommendationGroup || "").trim(),
     );
     if (missingGroups.length) {
-      throw new Error(`还有 ${missingGroups.length} 条内容没有确认推荐分组；请在“复核并编辑”中逐条选择后再发布。`);
+      throw new Error(`还有 ${missingGroups.length} 条内容没有确认推荐分组；请统一应用分组或逐条选择后再发布。`);
+    }
+    const requiresReview = items.some((item) => ["review", "similar"].includes(item.status));
+    if (requiresReview && !flomoReviewConfirmed.checked) {
+      throw new Error("所选内容包含异常项，请先完成本批标题、来源、正文和疑似重复复核。");
     }
   }
-  const action = publishing ? "先由 AI 安全分段后发布到本地" : "保存为本地 Markdown 草稿";
-  if (!window.confirm(`将${action} ${items.length} 条选中内容，不会提交或推送。是否继续？`)) return;
   if (publishing) await ensureImportParagraphsBeforePublish(items);
   const result = await api("/api/import/flomo/apply", {
     fileData: flomoFileData,
     selectedHashes: items.map((item) => item.contentHash),
     overrides: collectImportOverrides(),
     mode,
+    confirmInternalReview: flomoReviewConfirmed.checked,
   });
   const completedLabel = publishing ? "已发布到本地" : "已保存为草稿";
   const blocked = result.blocked?.length
@@ -3708,12 +3737,14 @@ $("#retry-push").addEventListener("click", async () => {
   }
 });
 
-  flomoFileInput.addEventListener("change", () => {
+flomoFileInput.addEventListener("change", () => {
   flomoFileData = "";
   flomoInspection = null;
   flomoAiBodies.clear();
   flomoImportFilter = "all";
   flomoOnlyUnselected.checked = false;
+  flomoBatchGroup.value = "";
+  flomoReviewConfirmed.checked = false;
   flomoReview.hidden = true;
   flomoCompleteActions.hidden = true;
   clearResult(flomoResult);
@@ -3730,7 +3761,33 @@ $("#flomo-inspect").addEventListener("click", async (event) => {
 });
 
 flomoList.addEventListener("change", (event) => {
-  if (event.target.matches("[data-import-select]")) updateFlomoSelectionToggle();
+  if (event.target.matches("[data-import-select]")) {
+    flomoReviewConfirmed.checked = false;
+    updateFlomoSelectionToggle();
+    return;
+  }
+  if (event.target.matches("[data-import-field]")) {
+    const card = event.target.closest("[data-import-hash]");
+    if (["review", "similar"].includes(card?.dataset.status)) {
+      flomoReviewConfirmed.checked = false;
+    }
+    updateFlomoSelectionToggle();
+  }
+});
+
+flomoReviewConfirmed.addEventListener("change", updateFlomoSelectionToggle);
+flomoApplyBatchGroup.addEventListener("click", () => {
+  const group = flomoBatchGroup.value;
+  if (!group) return;
+  let applied = 0;
+  for (const card of $$('[data-import-hash][data-selected="true"]', flomoList)) {
+    const input = $('[data-import-field="recommendationGroup"]', card);
+    if (!input) continue;
+    input.value = group;
+    applied += 1;
+  }
+  updateFlomoSelectionToggle();
+  $("#flomo-batch-group-note").textContent = `已将 ${applied} 条所选文章设为“${recommendationGroupLabels[group]}”；仍可逐条覆盖。`;
 });
 
 flomoOnlyUnselected.addEventListener("change", () => {

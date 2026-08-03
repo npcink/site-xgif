@@ -1296,15 +1296,22 @@ async function inspectFlomoImport(fileData) {
   };
 }
 
-function normalizeImportedArticle(item, override = {}, { draft = true } = {}) {
+function normalizeImportedArticle(item, override = {}, { draft = true, reviewConfirmed = false } = {}) {
   const title = clampText(override.title || item.title, 120);
   const summary = clampText(override.summary || item.summary, 320);
   const tags = normalizeContentTags(
     override.tags?.length ? override.tags : item.tags,
     { type: "article" },
   );
-  const internalNote = item.needsReview
-    ? clampText(override.internalNote || item.internalNote || item.note, 240)
+  const requiresReview = item.needsReview || item.status === "similar";
+  const internalNote = requiresReview
+    ? clampText(
+      override.internalNote
+        || item.internalNote
+        || item.note
+        || item.duplicate?.reason,
+      240,
+    )
     : "";
   const sourceUrlValue = Object.hasOwn(override, "sourceUrl") ? override.sourceUrl : item.sourceUrl;
   const sourceUrl = clampText(sourceUrlValue, 500);
@@ -1351,7 +1358,8 @@ function normalizeImportedArticle(item, override = {}, { draft = true } = {}) {
       : {}),
     editorNote: clampText(override.editorNote, 240),
     internalNote,
-    internalReviewStatus: internalNote ? "unresolved" : "none",
+    internalReviewStatus: internalNote ? (reviewConfirmed ? "resolved" : "unresolved") : "none",
+    internalReviewResolvedAt: internalNote && reviewConfirmed ? new Date().toISOString() : "",
     body,
     featured: false,
     draft,
@@ -1388,11 +1396,12 @@ async function importFlomoDrafts(payload) {
       skipped.push({ contentHash: item.contentHash, reason: item.duplicate?.reason || "精确重复" });
       continue;
     }
-    if (mode === "publish" && item.status !== "ready") {
+    const requiresReview = item.needsReview || item.status === "similar";
+    if (mode === "publish" && requiresReview && payload.confirmInternalReview !== true) {
       blocked.push({
         contentHash: item.contentHash,
         title: item.title || "未命名内容",
-        reason: item.duplicate?.reason || item.sourceReviewReason || "请补充标题、来源或正文后再发布",
+        reason: item.duplicate?.reason || item.sourceReviewReason || "请完成本批标题、来源和正文复核后再发布",
       });
       continue;
     }
@@ -1407,7 +1416,20 @@ async function importFlomoDrafts(payload) {
       });
       continue;
     }
-    const article = normalizeImportedArticle(item, overrides[item.contentHash], { draft: mode !== "publish" });
+    let article;
+    try {
+      article = normalizeImportedArticle(item, overrides[item.contentHash], {
+        draft: mode !== "publish",
+        reviewConfirmed: payload.confirmInternalReview === true,
+      });
+    } catch (error) {
+      blocked.push({
+        contentHash: item.contentHash,
+        title: String(overrides[item.contentHash]?.title || item.title || "未命名内容"),
+        reason: error.message,
+      });
+      continue;
+    }
     if (mode === "publish") {
       const quality = await checkArticleQuality(article);
       const errors = quality.issues.filter((entry) => entry.level === "error");
