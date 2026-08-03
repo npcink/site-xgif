@@ -82,11 +82,11 @@ test("publisher exposes local public URLs and keeps empty result panels hidden",
   assert.match(html, /styles\.css\?v=20260729-publication-facts-1/);
   assert.match(html, /app\.js\?v=20260729-publication-facts-1/);
   assert.match(html, /data-library-status="draft"/);
-  assert.match(html, /data-library-status="local"/);
-  assert.match(html, /data-library-status="cloud"/);
+  assert.match(html, /data-library-status="publishing"/);
+  assert.match(html, /data-library-status="online"/);
+  assert.match(html, /id="library-publishing-status"/);
   assert.doesNotMatch(html, /data-library-status="pending"/);
   assert.doesNotMatch(html, /data-library-status="unknown"/);
-  assert.doesNotMatch(html, /data-library-status="online"/);
   assert.doesNotMatch(html, /data-library-status="pending_commit"/);
   assert.match(html, /data-library-view="compact"/);
   assert.match(html, /id="library-pagination"/);
@@ -104,6 +104,9 @@ test("publisher exposes local public URLs and keeps empty result panels hidden",
   assert.match(html, /id="library-undo-trash"/);
   assert.match(html, /id="library-open-trash"/);
   assert.match(html, /id="content-sync-summary"/);
+  assert.match(html, /id="sync-pending-batches"/);
+  assert.match(server, /pendingPublicationBatches/);
+  assert.match(server, /publication\?\.state === "online"\s+&& item\.publication\?\.verification !== "unknown"/);
   assert.match(html, /id="open-pending-content"/);
   assert.match(html, /id="library-inspector" hidden/);
   assert.match(html, /id="library-close-detail"/);
@@ -450,7 +453,7 @@ test("draft publishing uses explicit states, protected-branch guards, and mandat
   assert.match(server, /pageSize/);
   assert.match(server, /pagination:/);
   assert.match(css, /\.workflow-state/);
-  assert.match(readme, /全部、草稿、本地发布、云端流程/);
+  assert.match(readme, /全部、草稿、发布中、已上线/);
   assert.match(readme, /“发布到本地”/);
   assert.match(readme, /“同步所选”/);
   assert.match(readme, /移至回收站/);

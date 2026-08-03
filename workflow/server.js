@@ -941,8 +941,12 @@ async function getContentPublicationStates(items) {
 function matchesContentStatus(item, status) {
   if (status === "all") return true;
   if (status === "unknown") return item.publication?.verification === "unknown";
+  if (status === "online") {
+    return item.publication?.state === "online"
+      && item.publication?.verification !== "unknown";
+  }
   if (status === "cloud") return ["pending", "unknown", "online"].includes(item.publication?.state);
-  if (status === "attention") {
+  if (status === "attention" || status === "publishing") {
     return ["local", "pending"].includes(item.publication?.state)
       || item.publication?.verification === "unknown";
   }
@@ -956,7 +960,15 @@ function clearPublicationStateCaches() {
 }
 
 function contentStatusCounts(items) {
-  return contentPublicationCounts(items);
+  const counts = contentPublicationCounts(items);
+  return {
+    ...counts,
+    publishing: counts.attention,
+    online: items.filter((item) => (
+      item.publication?.state === "online"
+      && item.publication?.verification !== "unknown"
+    )).length,
+  };
 }
 
 function sortManagedContent(items, sort) {
@@ -1015,6 +1027,31 @@ function getContentGitSafety(items) {
       ? `${pending.length} 条公开内容的当前版本尚未进入远程发布链路。`
       : "",
   };
+}
+
+function pendingPublicationBatches(items, remote) {
+  const batches = new Map();
+  for (const item of items) {
+    if (item.publication?.state !== "pending") continue;
+    const receipt = item.workflow?.syncReceipt;
+    const branch = String(receipt?.branch || "");
+    if (!branch) continue;
+    const existing = batches.get(branch) || {
+      branch,
+      count: 0,
+      recordedAt: String(receipt.recordedAt || ""),
+      label: String(item.workflow?.remote?.label || "已推送"),
+      description: String(item.workflow?.remote?.description || "等待创建或合并 PR，并完成部署。"),
+      url: String(item.workflow?.remote?.url || githubCompareUrl(remote, branch)),
+      linkLabel: item.workflow?.remote?.url ? "打开 PR" : "创建 PR",
+    };
+    existing.count += 1;
+    if (String(receipt.recordedAt || "") > existing.recordedAt) {
+      existing.recordedAt = String(receipt.recordedAt || "");
+    }
+    batches.set(branch, existing);
+  }
+  return [...batches.values()].sort((left, right) => right.recordedAt.localeCompare(left.recordedAt));
 }
 
 async function assertGitAutomationAllowed(payload) {
@@ -3594,6 +3631,7 @@ async function buildPublisherStatusPayload() {
     gitCompareUrl: githubCompareUrl(git.remote, git.branch),
     contentSafety,
     publicationCounts: contentStatusCounts(publicationItems),
+    pendingPublicationBatches: pendingPublicationBatches(publicationItems, git.remote),
     syncQueue: syncQueueFrom(publicationItems, contentAudit.items, verifiedDeletionQueue),
     localContentHistory,
     services: {

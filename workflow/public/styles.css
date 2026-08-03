@@ -1672,6 +1672,26 @@ summary:focus-visible {
   margin-left: 3px;
 }
 
+.library-publishing-filter {
+  align-items: center;
+  color: var(--muted);
+  display: flex;
+  font-size: 11px;
+  gap: 8px;
+  margin: -5px 0 10px;
+  white-space: nowrap;
+}
+
+.library-publishing-filter[hidden] {
+  display: none;
+}
+
+.library-publishing-filter select {
+  min-height: 34px;
+  min-width: 168px;
+  padding: 0 30px 0 9px;
+}
+
 .library-toolbar {
   align-items: center;
   display: grid;
@@ -2162,6 +2182,51 @@ summary:focus-visible {
 
 .sync-queue-list {
   display: grid;
+}
+
+.sync-pending-batches {
+  border: 1px solid var(--line);
+  display: grid;
+}
+
+.sync-pending-batch {
+  align-items: center;
+  display: flex;
+  gap: 18px;
+  justify-content: space-between;
+  min-height: 58px;
+  padding: 10px 12px;
+}
+
+.sync-pending-batch + .sync-pending-batch {
+  border-top: 1px solid var(--line);
+}
+
+.sync-pending-batch > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.sync-pending-batch strong,
+.sync-pending-batch span {
+  overflow-wrap: anywhere;
+}
+
+.sync-pending-batch strong {
+  font-size: 13px;
+}
+
+.sync-pending-batch span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.sync-pending-batch a {
+  color: var(--accent);
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .sync-queue-item {
