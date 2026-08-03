@@ -1,3 +1,5 @@
+import { CONTENT_PATTERNS, rawHttpUrlPattern } from "./content-patterns.js";
+
 const sourceLabels = [
   { host: "jandan.net", name: "煎蛋" },
   { host: "zhihu.com", name: "知乎" },
@@ -11,9 +13,8 @@ const sourceLabels = [
   { host: "twitter.com", name: "X" },
 ];
 
-const sourcePrefix = /(?:来源链接|文章链接|原文链接|原链接|来源|原文|出处|链接)\s*[:：]\s*/iu;
-const sourceOnlyPrefix = /^(?:来源链接|文章链接|原文链接|原链接|来源|原文|出处|链接)\s*[:：]\s*/iu;
-const rawUrlPattern = /https?:\/\/[^\s<>"'`]+/giu;
+const sourcePrefix = CONTENT_PATTERNS.sourcePrefix;
+const sourceOnlyPrefix = CONTENT_PATTERNS.sourceOnlyPrefix;
 
 function trimUrlPunctuation(value) {
   let result = String(value || "").trim();
@@ -58,7 +59,7 @@ function lineIsSourceOnly(line) {
   const withoutPrefix = value.replace(sourceOnlyPrefix, "").trim();
   const markdownUrl = markdownOnlyUrl(withoutPrefix);
   if (markdownUrl) return Boolean(normalizeArticleSourceUrl(markdownUrl));
-  const matches = [...withoutPrefix.matchAll(rawUrlPattern)];
+  const matches = [...withoutPrefix.matchAll(rawHttpUrlPattern())];
   return matches.length === 1 && normalizeArticleSourceUrl(matches[0][0]) === normalizeArticleSourceUrl(withoutPrefix);
 }
 
@@ -69,7 +70,7 @@ function sourceCandidates(lines) {
     const explicit = sourcePrefix.test(value);
     sourcePrefix.lastIndex = 0;
     const markdownUrl = markdownOnlyUrl(value.replace(sourceOnlyPrefix, "").trim());
-    const rawUrls = markdownUrl ? [markdownUrl] : [...value.matchAll(rawUrlPattern)].map((match) => match[0]);
+    const rawUrls = markdownUrl ? [markdownUrl] : [...value.matchAll(rawHttpUrlPattern())].map((match) => match[0]);
     for (const rawUrl of rawUrls) {
       const url = normalizeArticleSourceUrl(rawUrl);
       if (!url) continue;

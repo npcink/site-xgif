@@ -2917,6 +2917,7 @@ function renderBatchPublishInspection(inspection) {
     `${inspection.eligible} 条草稿待发布`,
     inspection.needsParagraphs ? `${inspection.needsParagraphs} 条将自动安全分段` : "",
     inspection.needsInternalReview ? `${inspection.needsInternalReview} 条需要一次批量复核确认` : "",
+    inspection.needsRecommendationGroup ? `${inspection.needsRecommendationGroup} 条需要选择推荐分组` : "",
     manualCount ? `${manualCount} 条仍可能需要单独处理` : "",
     inspection.skipped ? `${inspection.skipped} 条已处于本地发布状态并会跳过` : "",
   ].filter(Boolean).join(" · ");
@@ -2932,6 +2933,7 @@ function renderBatchPublishInspection(inspection) {
         ? `<span>安全分段 ${item.longParagraphCount} 段 · 最长 ${item.longestParagraph} 字</span>`
         : "",
       item.needsInternalReview ? "<span>待批量复核</span>" : "",
+      item.needsRecommendationGroup ? "<span>待选推荐分组</span>" : "",
       ...(item.manualBlockers || []).map((issue) => `<span>需处理：${escapeHtml(issue.message)}</span>`),
     ].filter(Boolean).join("");
     const source = item.sourceUrl
@@ -2943,6 +2945,14 @@ function renderBatchPublishInspection(inspection) {
       ${item.summary ? `<p>${escapeHtml(item.summary)}</p>` : ""}
       ${item.internalNote ? `<p>复核备注：${escapeHtml(item.internalNote)}</p>` : ""}
       ${flags ? `<div class="batch-publish-review-flags">${flags}</div>` : ""}
+      ${item.type === "article" ? `<label class="batch-publish-group">
+        <span>推荐分组</span>
+        <select data-batch-publish-group="${escapeHtml(item.file)}">
+          <option value="">请选择</option>
+          <option value="general"${item.recommendationGroup === "general" ? " selected" : ""}>通用内容</option>
+          <option value="adult-humor"${item.recommendationGroup === "adult-humor" ? " selected" : ""}>成人幽默</option>
+        </select>
+      </label>` : ""}
       <details class="batch-publish-body">
         <summary>查看正文</summary>
         <pre>${escapeHtml(item.body || "")}</pre>
@@ -2982,6 +2992,21 @@ async function openBatchPublishDialog(button) {
 async function applyBatchPublish(event) {
   event.preventDefault();
   if (!batchPublishInspection?.eligible) return;
+  const eligibleItems = batchPublishInspection.results.filter((item) => item.eligible);
+  const recommendationGroups = new Map();
+  for (const item of eligibleItems) {
+    if (item.type !== "article") continue;
+    const select = document.querySelector(
+      `[data-batch-publish-group="${CSS.escape(item.file)}"]`,
+    );
+    const value = String(select?.value || "").trim();
+    if (!value) {
+      $("#batch-publish-status").textContent = `请先为《${item.title}》选择推荐分组。`;
+      select?.focus();
+      return;
+    }
+    recommendationGroups.set(item.file, value);
+  }
   const reviewConfirmed = $("#batch-publish-review-confirmed").checked;
   if (batchPublishInspection.needsInternalReview && !reviewConfirmed) {
     $("#batch-publish-status").textContent = "请先确认已经批量核对标题、来源和正文。";
@@ -3000,12 +3025,13 @@ async function applyBatchPublish(event) {
       action: "publish",
       autoOrganizeParagraphs: true,
       confirmInternalReview: reviewConfirmed,
-      items: batchPublishInspection.results
-        .filter((item) => item.eligible)
-        .map((item) => ({
+      items: eligibleItems.map((item) => ({
           type: item.type,
           file: item.file,
           expectedContentSha256: item.contentSha256,
+          ...(item.type === "article"
+            ? { recommendationGroup: recommendationGroups.get(item.file) }
+            : {}),
         })),
     });
     retainBatchFailures(result.failed);
@@ -3017,6 +3043,9 @@ async function applyBatchPublish(event) {
         `已发布 ${result.succeeded.length} 条到本地。`,
         result.paragraphsOrganized ? `已安全分段 ${result.paragraphsOrganized} 条，正文字符未改动。` : "",
         result.reviewsResolved ? `已记录 ${result.reviewsResolved} 条批量复核确认。` : "",
+        result.recommendationGroupsConfirmed
+          ? `已确认 ${result.recommendationGroupsConfirmed} 条推荐分组。`
+          : "",
         result.skipped.length ? `${result.skipped.length} 条已处于目标状态，已跳过。` : "",
         result.failed.length ? `${result.failed.length} 条未能自动完成并保持选中：\n${batchFailureSummary(result.failed)}` : "",
         "线上内容尚未变化；需要时再执行同步上线。",

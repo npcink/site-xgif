@@ -1,3 +1,5 @@
+import { CONTENT_PATTERNS } from "./content-patterns.js";
+
 function normalizeComparableTitle(value) {
   return String(value || "")
     .normalize("NFKC")
@@ -5,8 +7,12 @@ function normalizeComparableTitle(value) {
     .replace(/[\s·•—–_\-，。！？!?、：:；;“”"'《》〈〉【】()[\]{}]/gu, "");
 }
 
+export function isPlaceholderArticleTitle(value) {
+  return CONTENT_PATTERNS.placeholderArticleTitle.test(String(value || "").trim());
+}
+
 function unusableTitle(value) {
-  return /^(?:待整理|未命名|无标题)(?:\s*[·\-—:：]?\s*.*)?$/u.test(value)
+  return isPlaceholderArticleTitle(value)
     || /^\d{4}[-/.]\d{1,2}[-/.]\d{1,2}(?:\s*[·\-—]\s*\d+)?$/u.test(value);
 }
 

@@ -1,14 +1,18 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { auditContentLibrary, renderContentAuditMarkdown } from "./content-audit.js";
+import {
+  auditContentLibrary,
+  contentAuditSummary,
+  renderContentAuditMarkdown,
+} from "./content-audit.js";
 
 const workflowRoot = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(workflowRoot, "..");
 const writeReports = process.argv.includes("--write");
 const report = await auditContentLibrary({ repoRoot });
 
-console.log(`可直接上线 ${report.counts.ready} 条；需要人工确认 ${report.counts.review} 条；建议退回草稿 ${report.counts.draft} 条。`);
+console.log(contentAuditSummary(report));
 
 if (writeReports) {
   const outputRoot = path.join(workflowRoot, "records");

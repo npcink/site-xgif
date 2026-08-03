@@ -51,6 +51,7 @@ const images = defineCollection({
   schema: z.object({
     title: z.string(),
     contentId,
+    altText: z.string().max(160).optional(),
     description: z.string(),
     image: imagePath,
     width: z.number().int().positive().optional(),

@@ -58,6 +58,7 @@ test("batch review requires explicit confirmation and records its time", () => {
   const data = {
     internalNote: "请在公开前复核来源和内容。",
     internalReviewStatus: "unresolved",
+    body: "这是一段经过核对、长度足够的测试正文。".repeat(8),
   };
   assert.throws(
     () => applyBatchReviewConfirmation(data),
@@ -71,4 +72,15 @@ test("batch review requires explicit confirmation and records its time", () => {
   assert.equal(resolved.internalReviewStatus, "resolved");
   assert.equal(resolved.internalReviewResolvedAt, "2026-07-29T10:00:00.000Z");
   assert.equal(resolved.internalNote, data.internalNote);
+});
+
+test("batch review accepts a complete short form without changing its text", () => {
+  const body = "短文原文必须逐字保留，只允许在适当位置增加段落空行。";
+  const preparation = inspectArticleBatchPreparation({}, body);
+  assert.equal(preparation.needsShortFormReview, true);
+  assert.equal(preparation.needsInternalReview, true);
+
+  const resolved = applyBatchReviewConfirmation({ body }, { confirmed: true });
+  assert.equal(resolved.shortFormReviewed, true);
+  assert.equal(resolved.body, body);
 });

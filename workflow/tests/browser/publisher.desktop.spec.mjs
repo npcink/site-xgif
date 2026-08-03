@@ -194,6 +194,7 @@ test("batch publish repairs paragraphs and records one explicit review confirmat
           blocked: 1,
           needsParagraphs: 1,
           needsInternalReview: 1,
+          needsRecommendationGroup: 1,
           results: [{
             type: "article",
             file,
@@ -208,6 +209,8 @@ test("batch publish repairs paragraphs and records one explicit review confirmat
             longParagraphCount: 1,
             longestParagraph: 257,
             needsInternalReview: true,
+            recommendationGroup: "",
+            needsRecommendationGroup: true,
             internalNote: "从私人收藏导入，请在公开前复核。",
             manualBlockers: [],
             contentSha256: "a".repeat(64),
@@ -227,6 +230,7 @@ test("batch publish repairs paragraphs and records one explicit review confirmat
         failed: [],
         paragraphsOrganized: 1,
         reviewsResolved: 1,
+        recommendationGroupsConfirmed: 1,
       }),
     });
   });
@@ -239,12 +243,16 @@ test("batch publish repairs paragraphs and records one explicit review confirmat
   await expect(page.locator("#batch-publish-dialog")).toBeVisible();
   await expect(page.locator("#batch-publish-summary")).toContainText("1 条将自动安全分段");
   await expect(page.locator("#batch-publish-summary")).toContainText("1 条需要一次批量复核确认");
+  await expect(page.locator("#batch-publish-summary")).toContainText("1 条需要选择推荐分组");
   await page.locator(".batch-publish-body summary").click();
   await expect(page.locator(".batch-publish-body")).toContainText("需要批量安全分段的正文");
   await expect(page.locator("#batch-publish-submit")).toBeEnabled();
   await page.locator("#batch-publish-submit").click();
-  await expect(page.locator("#batch-publish-status")).toContainText("请先确认");
+  await expect(page.locator("#batch-publish-status")).toContainText("选择推荐分组");
 
+  await page.locator(`[data-batch-publish-group="${file}"]`).selectOption("adult-humor");
+  await page.locator("#batch-publish-submit").click();
+  await expect(page.locator("#batch-publish-status")).toContainText("请先确认");
   await page.locator("#batch-publish-review-confirmed").check();
   await page.locator("#batch-publish-submit").click();
   await expect(page.locator("#batch-publish-dialog")).toBeHidden();
@@ -255,6 +263,7 @@ test("batch publish repairs paragraphs and records one explicit review confirmat
     type: "article",
     file,
     expectedContentSha256: "a".repeat(64),
+    recommendationGroup: "adult-humor",
   }]);
 });
 

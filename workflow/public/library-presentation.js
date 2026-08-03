@@ -57,10 +57,10 @@ export function libraryTaskPresentation(counts = {}) {
   if (attention > 0) {
     return {
       state: "attention",
-      kicker: "下一步",
-      title: `${attention} 项内容待处理`,
+      kicker: "发布进度",
+      title: `${attention} 项内容发布中`,
       description: `本地待同步 ${local} 项 · 远程待合并或部署 ${pending} 项 · 线上待核验 ${unknown} 项。详情会分别显示 Git 与线上状态。`,
-      actionLabel: "查看待处理内容",
+      actionLabel: "查看发布进度",
       action: "attention",
     };
   }
@@ -78,7 +78,7 @@ export function libraryTaskPresentation(counts = {}) {
     state: "ready",
     kicker: "状态正常",
     title: total ? `${online} 项内容均已上线` : "内容库还是空的",
-    description: total ? "当前没有待处理的发布任务。" : "新建文章、图片或从备份导入内容。",
+    description: total ? "当前没有尚未完成的发布流程。" : "新建文章、图片或从备份导入内容。",
     actionLabel: "",
     action: "none",
   };

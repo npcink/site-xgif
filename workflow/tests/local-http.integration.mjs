@@ -182,6 +182,27 @@ try {
   assert.equal(overlongParagraph.json().ok, false);
   assert.match(overlongParagraph.json().issues.map((item) => item.message).join(" "), /超过 180 字的长段落/);
 
+  const placeholderTitle = await call({
+    method: "POST",
+    pathname: "/api/quality/article",
+    headers: {
+      "content-type": "application/json",
+      "x-xgif-csrf": csrf,
+      origin: `http://127.0.0.1:${port}`,
+    },
+    body: JSON.stringify({
+      title: "待整理 · 2026-01-10 · 15",
+      summary: "用于确认占位标题不能进入正式发布流程。",
+      source: "原创内容",
+      sourceKind: "original",
+      tags: ["生活"],
+      body: "这是一段字段完整、长度适中的正文，唯一需要阻断的问题是标题仍然属于导入阶段产生的占位标题。",
+    }),
+  });
+  assert.equal(placeholderTitle.status, 200);
+  assert.equal(placeholderTitle.json().ok, false);
+  assert.match(placeholderTitle.json().issues.map((item) => item.message).join(" "), /占位标题/);
+
   const missingSource = await call({
     method: "POST",
     pathname: "/api/quality/article",

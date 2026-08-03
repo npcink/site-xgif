@@ -36,9 +36,10 @@ const imageAspectRatio =
     >
       <img
         src={item.data.image}
-        alt={item.data.title}
+        alt={item.data.altText || item.data.title}
         width={item.data.width}
         height={item.data.height}
+        referrerpolicy="no-referrer"
       />
     </figure>
     <div class="image-detail-copy">
