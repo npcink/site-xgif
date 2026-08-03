@@ -53,8 +53,12 @@ test("home and discovery routes preserve the editorial visual hierarchy", async 
   assert.match(home, /data-home-discovery/);
   assert.match(home, /data-home-view="articles"/);
   assert.match(home, /data-home-view="images"/);
+  assert.match(home, /data-home-global-search/);
+  assert.match(home, /data-home-section-count/);
   assert.match(home, /class="newsletter-placeholder"/);
   assert.match(homeDiscovery, /data-home-section/);
+  assert.match(homeDiscovery, /window\.location\.href/);
+  assert.match(homeDiscovery, /data-home-section-count/);
   assert.doesNotMatch(home, /data-newsletter-form/);
   assert.doesNotMatch(homeDiscovery, /newsletterForm/);
 });

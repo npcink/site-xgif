@@ -68,7 +68,7 @@ const popularTags = ["AI", "互联网", "打工", "无语", "反转", "群聊", 
     <div class="search-panel" data-home-discovery>
       <label class="search-box">
         <span aria-hidden="true">⌕</span>
-        <input data-home-filter-input placeholder="搜索文章、图片、标签或来源…" aria-label="搜索内容" />
+        <input data-home-filter-input placeholder="筛选首页精选；按 Enter 搜索全站…" aria-label="筛选首页精选内容" />
         <button type="button" data-home-filter-clear aria-label="清空搜索" hidden>×</button>
       </label>
       <div class="view-tabs" role="group" aria-label="内容类型">
@@ -77,11 +77,14 @@ const popularTags = ["AI", "互联网", "打工", "无语", "反转", "群聊", 
         <button type="button" data-home-view="images" aria-pressed="false">图片 / GIF</button>
       </div>
     </div>
-    <p class="result-note" data-home-result-note aria-live="polite" hidden>关于“<span data-home-query></span>”找到 <strong data-home-visible-count>0</strong> 条内容</p>
+    <p class="home-search-scope">
+      当前只筛选首页精选；<a href="/search" data-home-global-search>搜索全部 {articles.length + images.length} 条内容 →</a>
+    </p>
+    <p class="result-note" data-home-result-note aria-live="polite" hidden>首页精选中，关于“<span data-home-query></span>”找到 <strong data-home-visible-count>0</strong> 条内容</p>
 
     <div class="content-section" id="articles" data-home-section="articles">
       <div class="content-title">
-        <h2>文章 <sup>{String(articles.length).padStart(2, "0")}</sup></h2>
+        <h2>文章 <sup data-home-section-count>{String(homeArticles.length).padStart(2, "0")}</sup></h2>
         <a href="/articles">查看全部文章 →</a>
       </div>
       <div class="article-grid">
@@ -91,7 +94,7 @@ const popularTags = ["AI", "互联网", "打工", "无语", "反转", "群聊", 
 
     <div class="content-section image-section" id="images" data-home-section="images">
       <div class="content-title">
-        <h2>图片 / 表情包 <sup>{String(images.length).padStart(2, "0")}</sup></h2>
+        <h2>图片 / 表情包 <sup data-home-section-count>{String(homeImages.length).padStart(2, "0")}</sup></h2>
         <a href="/images">查看全部图片 →</a>
       </div>
       <div class="masonry-grid">

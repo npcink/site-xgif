@@ -12,6 +12,10 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
+test.afterEach(async ({ page }) => {
+  await page.unrouteAll({ behavior: "ignoreErrors" });
+});
+
 test("key pages satisfy the basic accessibility contract", async ({ page }) => {
   const routes = ["/", "/articles", "/20260710-vfks", "/images", "/search", "/rights"];
   for (const route of routes) {
@@ -62,6 +66,27 @@ test("key pages satisfy the basic accessibility contract", async ({ page }) => {
       duplicateIds: [],
     });
   }
+});
+
+test("homepage discovery distinguishes featured filtering from full-site search", async ({ page }) => {
+  await page.goto("/", { waitUntil: "networkidle" });
+  const input = page.getByRole("textbox", { name: "筛选首页精选内容" });
+  await expect(page.locator('[data-home-section="articles"] [data-home-section-count]')).toHaveText("08");
+  await expect(page.locator('[data-home-section="images"] [data-home-section-count]')).toHaveText("06");
+  await input.fill("AI");
+  await expect(page.locator("[data-home-visible-count]")).toHaveText("1");
+  await expect(page.locator('[data-home-section="articles"]')).toBeHidden();
+  await expect(page.locator('[data-home-section="images"] [data-home-section-count]')).toHaveText("01");
+  await expect(page.locator("[data-home-global-search]")).toHaveAttribute("href", "/search?q=AI");
+  await input.press("Enter");
+  await expect(page).toHaveURL(/\/search\?q=AI$/);
+  await expect(page.locator("[data-visible-count]")).toHaveText("2");
+  await page.goBack();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(input).toHaveValue("AI");
+  await expect(page.locator("[data-home-visible-count]")).toHaveText("1");
+  await expect(page.locator('[data-home-section="articles"]')).toBeHidden();
+  await expect(page.locator('[data-home-section="images"] [data-home-section-count]')).toHaveText("01");
 });
 
 async function waitForImages(page) {
