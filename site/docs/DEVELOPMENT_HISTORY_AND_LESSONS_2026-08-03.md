@@ -81,16 +81,32 @@ Markdown 是公开内容权威源，SQLite 可重建；删除、同步和恢复�
 
 每批先声明目标、非目标和验收条件；从干净基线实现；只暂存明确文件；测试失败先找根因；合并后核对远端事实；确认干净且可恢复后再清理临时 worktree。
 
-## 6. 当前结论与下一阶段
+## 6. 从代码合并继续走到仓库收尾
+
+五批功能进入主线后，仓库仍没有自动变干净。主工作区停留在旧分支，混合了已进入 `main` 的文件、旧视觉基线、被替代的巡检实现、私有运行台账和被 Git 忽略的 SQLite/备份目录。
+
+这次最终收尾形成了四个新认识：
+
+1. **状态数量不等于真实差异。** 146 条状态记录经过 blob 比对后，有 120 条与 `main` 完全一致；旧提交图会制造大量视觉上的“待处理工作”。
+2. **收尾不要求产生提交。** 余下 26 条真实差异经审查均不应进入公开主线：旧实现由新 PR 替代，视觉变化会撤销稳定遮罩，私有台账属于独立恢复历史。
+3. **代码恢复和运行恢复是两件事。** 删除 worktree 前不仅要看 Git，还要保护 `.env`、SQLite/WAL、私有正文、回收站和备份，并在进程停止后迁移。
+4. **分支删除需要语义证据。** 已 squash 合并的分支和被明确替代的机器人分支可能都不是 `main` 的祖先；PR 状态、关闭原因、树内容和当前架构共同决定是否可删。
+
+最终有价值的汇总通过 PR #47 进入 `main`；无用途分支、开放 PR 和辅助 worktree 收敛为只剩主线与主工作区；两份本地运行台账则保留在私有 `history`，没有为了得到空白 `git status` 而公开或覆盖。
+
+完整方法、失败案例和完成定义见[仓库收尾与 Git 卫生规范](REPOSITORY_CLOSEOUT_AND_GIT_HYGIENE_STANDARD.md)。
+
+## 7. 当前结论与下一阶段
 
 截至 2026-08-03，已知 P0 工程问题已经收口。接下来不继续堆功能，而是完成 5–10 次真实自用发布循环，记录任务类型、卡点、额外补救和是否完成。
 
 只有重复摩擦、数据风险、发布阻断或可以稳定消除的高频重复操作，才进入下一批开发。具体门槛、Git/worktree 规则、验证矩阵和完成定义统一以[开发与交付规范](DEVELOPMENT_AND_DELIVERY_STANDARD.md)为准。
 
-## 7. 文档导航
+## 8. 文档导航
 
 - 技术选型：[ADR-017](decisions/ADR-017-retain-astro-over-hexo-or-ghost.md)
 - 开源项目比较与复杂度约束：[ADR-018](decisions/ADR-018-retain-local-publisher-and-learn-from-open-source-cms.md)
 - 五批实际落地与纠错：[下一阶段实施收口](NEXT_STAGE_IMPLEMENTATION_CLOSEOUT_2026-08-03.md)
 - 长期执行规则：[开发与交付规范](DEVELOPMENT_AND_DELIVERY_STANDARD.md)
+- 仓库、分支与 worktree 收尾：[仓库收尾与 Git 卫生规范](REPOSITORY_CLOSEOUT_AND_GIT_HYGIENE_STANDARD.md)
 - 当前运行与恢复：[项目交接](PROJECT_HANDOFF.md)
