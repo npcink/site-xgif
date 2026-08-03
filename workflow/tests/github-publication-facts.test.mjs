@@ -119,3 +119,21 @@ test("one failed GitHub branch query does not hide successful branch facts", asy
   assert.equal(result.get("content-sync/healthy").stage, "pr_open");
   assert.equal(result.get("content-sync/broken").stage, "remote_unknown");
 });
+
+test("GitHub publication facts can invalidate a branch after PR creation", async () => {
+  let calls = 0;
+  const facts = new GitHubPublicationFacts({
+    repoRoot: "/repo",
+    ttlMs: 30_000,
+    query: async () => {
+      calls += 1;
+      return calls === 1
+        ? "[]"
+        : JSON.stringify([{ number: 18, state: "OPEN", statusCheckRollup: [], url: "https://github.com/example/repo/pull/18" }]);
+    },
+  });
+  assert.equal((await facts.forBranches(["content-sync/new-pr"])).get("content-sync/new-pr").stage, "pushed_no_pr");
+  facts.invalidate(["content-sync/new-pr"]);
+  assert.equal((await facts.forBranches(["content-sync/new-pr"])).get("content-sync/new-pr").number, 18);
+  assert.equal(calls, 2);
+});

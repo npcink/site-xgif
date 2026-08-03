@@ -63,6 +63,7 @@ import {
 } from "./publication-receipts.js";
 import { SerialTaskQueue } from "./serial-task-queue.js";
 import { GitHubPublicationFacts } from "./github-publication-facts.js";
+import { ensureGitHubPullRequest } from "./github-pull-request.js";
 import { contentPathsMatchingRef } from "./git-content-membership.js";
 import { safeProcessError } from "./safe-process-error.js";
 import { resolveAuthoritativeTrashSelection } from "./trash-selection.js";
@@ -2697,6 +2698,22 @@ function githubCompareUrl(remote, branch) {
   return `https://github.com/${match[1]}/${match[2]}/compare/main...${encodeURIComponent(branch)}?expand=1`;
 }
 
+async function ensureContentSyncPullRequests(branches) {
+  const unique = [...new Set((branches || []).map((branch) => String(branch || "").trim()).filter(Boolean))];
+  const pullRequests = await Promise.all(unique.map((branch) => ensureGitHubPullRequest({
+    repoRoot,
+    branch,
+    title: "Publish XGIF content changes",
+    body: [
+      "由 XGIF 本地发布助手在内容通过上线体检后创建。",
+      "此 PR 只包含对应隔离内容分支中的变更。",
+      "请等待检查通过后人工合并；本流程不会自动合并。",
+    ].join("\n\n"),
+  })));
+  if (pullRequests.some((item) => item.ok)) githubPublicationFacts.invalidate(unique);
+  return pullRequests;
+}
+
 function syncQueueFrom(publicationItems, auditItems, deletionQueue = {}) {
   const localCandidates = publicationItems
     .filter((item) => matchesContentStatus(item, "local"))
@@ -2944,6 +2961,12 @@ async function syncBatchContent(input) {
     const failedRetry = deletionRetries.find((item) => !item.push.ok);
     const representativeRetry = failedRetry || deletionRetries.at(-1);
     const retryBranches = [...new Set(deletionRetries.map((item) => item.branch))];
+    const branchesForPullRequest = retryBranches.length
+      ? retryBranches
+      : [representativeRetry?.branch || referenceReceipt?.branch].filter(Boolean);
+    const pullRequests = failedRetry
+      ? []
+      : await ensureContentSyncPullRequests(branchesForPullRequest);
     return {
       ok: !failedRetry,
       reused: alreadyPushed.map(({ filePath, ...item }) => item),
@@ -2960,6 +2983,8 @@ async function syncBatchContent(input) {
         git.remote,
         representativeRetry?.branch || referenceReceipt?.branch,
       ),
+      pullRequests,
+      pullRequest: pullRequests.find((item) => item.ok) || pullRequests[0] || null,
     };
   }
 
@@ -3074,6 +3099,10 @@ async function syncBatchContent(input) {
     receipts: [...receipts, ...deletionReceipts],
     compareUrl: githubCompareUrl(git.remote, primaryResultBranch),
   };
+  result.pullRequests = result.ok
+    ? await ensureContentSyncPullRequests(uniqueResultBranches)
+    : [];
+  result.pullRequest = result.pullRequests.find((item) => item.ok) || result.pullRequests[0] || null;
   localDataStore.recordOperation("sync_content", {
     batchId: receipts[0]?.batchId || deletionReceipts[0]?.batchId || batchId,
     branch: result.branch,
@@ -3088,6 +3117,8 @@ async function syncBatchContent(input) {
     commitSha: sync.commitSha,
     pushOk: Boolean(result.ok),
     compareUrl: result.compareUrl,
+    pullRequestUrl: result.pullRequest?.url || "",
+    pullRequestNumber: result.pullRequest?.number || 0,
   });
   return result;
 }
@@ -3131,6 +3162,11 @@ async function retryFailedContentSync(input) {
     throw error;
   }
   const retried = await retryPublicationBatchFromReceipt(failed[0].receipt);
+  const pullRequests = retried.push.ok
+    ? await ensureContentSyncPullRequests([retried.branch])
+    : [];
+  retried.pullRequests = pullRequests;
+  retried.pullRequest = pullRequests.find((item) => item.ok) || pullRequests[0] || null;
   clearPublicationStateCaches();
   localDataStore.recordOperation("sync_retry", {
     batchId: retried.receipts[0]?.batchId || failed[0].receipt.batchId || randomUUID(),
@@ -3142,6 +3178,8 @@ async function retryFailedContentSync(input) {
       contentSha256: item.contentSha256,
     })),
     deleted: retried.deleted.length,
+    pullRequestUrl: retried.pullRequest?.url || "",
+    pullRequestNumber: retried.pullRequest?.number || 0,
   });
   return retried;
 }

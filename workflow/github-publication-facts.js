@@ -170,4 +170,14 @@ export class GitHubPublicationFacts {
         : remoteUnknown(),
     ]));
   }
+
+  invalidate(branches = []) {
+    const unique = [...new Set(branches.map((branch) => String(branch || "").trim()).filter(Boolean))];
+    if (unique.length) {
+      for (const branch of unique) this.cached.delete(branch);
+    } else {
+      this.cached.clear();
+    }
+    this.cachedAt = 0;
+  }
 }

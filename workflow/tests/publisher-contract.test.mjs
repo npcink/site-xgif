@@ -575,3 +575,20 @@ test("publisher keeps R2 optional and Git metadata authoritative", async () => {
   assert.match(readme, /已有 `site\/public\/images\/memes\/` 图片不会自动迁移/);
   assert.match(records, /R2 只保存图片字节/);
 });
+
+test("content sync creates or reuses a GitHub PR but never merges it", async () => {
+  const [server, pullRequests, app, readme] = await Promise.all([
+    read("server.js"),
+    read("github-pull-request.js"),
+    read("public/app.js"),
+    read("README.md"),
+  ]);
+
+  assert.match(server, /ensureContentSyncPullRequests/);
+  assert.match(server, /pullRequestUrl/);
+  assert.match(pullRequests, /"pr",\s+"create"/);
+  assert.doesNotMatch(pullRequests, /"merge"/);
+  assert.match(app, /已自动创建/);
+  assert.match(app, /PR 不会自动合并/);
+  assert.match(readme, /PR 永远不会自动合并/);
+});

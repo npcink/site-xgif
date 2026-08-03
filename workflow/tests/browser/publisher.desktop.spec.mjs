@@ -397,6 +397,7 @@ test("opening an audited article carries its repair guidance into the editor", a
 });
 
 test("sync publishing is a dedicated workspace and browser back restores the previous page", async ({ page }) => {
+  let syncPayload = null;
   await page.route("**/api/status", async (route) => {
     const response = await route.fetch();
     const status = await response.json();
@@ -425,6 +426,36 @@ test("sync publishing is a dedicated workspace and browser back restores the pre
       },
     });
   });
+  await page.route("**/api/content/batch", async (route) => {
+    syncPayload = route.request().postDataJSON();
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: true,
+        noChange: false,
+        branch: "content-sync/automatic-pr",
+        branches: ["content-sync/automatic-pr"],
+        synced: [{ type: "article", file: "site/src/content/articles/ready.md" }],
+        deleted: [],
+        skipped: [],
+        push: { attempted: true, ok: true, error: "" },
+        pullRequest: {
+          attempted: true,
+          ok: true,
+          created: true,
+          number: 21,
+          url: "https://github.com/npcink/site-xgif/pull/21",
+        },
+        pullRequests: [{
+          attempted: true,
+          ok: true,
+          created: true,
+          number: 21,
+          url: "https://github.com/npcink/site-xgif/pull/21",
+        }],
+      }),
+    });
+  });
   await page.goto("/#library");
   await page.locator('[data-tab="sync"]').click();
   await expect(page).toHaveURL(/#sync$/);
@@ -438,6 +469,12 @@ test("sync publishing is a dedicated workspace and browser back restores the pre
   await expect(page.locator("#sync-open-attention")).toHaveText("查看待处理（1）");
   await expect(page.locator("#sync-history-list")).toBeVisible();
   await expect(page.locator("#sync-history-dialog")).toHaveCount(0);
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.locator("#sync-all-local").click();
+  await expect.poll(() => syncPayload).not.toBeNull();
+  expect(syncPayload.action).toBe("sync");
+  await expect(page.locator("#sync-workspace-result")).toContainText("已自动创建 GitHub PR #21");
+  await expect(page.locator("#sync-workspace-result")).toContainText("PR 不会自动合并");
   await page.locator("#sync-open-attention").click();
   await expect(page).toHaveURL(/#audit$/);
   await page.goBack();
