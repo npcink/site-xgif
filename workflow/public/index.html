@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>XGIF 本地发布助手</title>
-    <link rel="stylesheet" href="/styles.css?v=20260729-publication-facts-1" />
+    <link rel="stylesheet" href="/styles.css?v=20260803-flomo-review-1" />
   </head>
   <body>
     <div class="app-frame" id="app-frame">
@@ -582,6 +582,27 @@
                 <button id="flomo-import-selected" type="button">保存所选为草稿</button>
               </div>
             </div>
+            <div class="import-batch-review" id="flomo-batch-review">
+              <div class="import-batch-group">
+                <label for="flomo-batch-group">所选文章统一分组</label>
+                <div>
+                  <select id="flomo-batch-group">
+                    <option value="">请选择</option>
+                    <option value="general">通用内容</option>
+                    <option value="adult-humor">成人幽默</option>
+                  </select>
+                  <button type="button" id="flomo-apply-batch-group">应用到所选文章</button>
+                </div>
+                <small id="flomo-batch-group-note">明确选择一次即可；仍可在单条内容中覆盖。</small>
+              </div>
+              <label class="import-batch-confirmation" id="flomo-batch-review-confirmation" hidden>
+                <input type="checkbox" id="flomo-review-confirmed" />
+                <span>
+                  <strong>我已核对所选异常内容</strong>
+                  <small>确认标题、来源、正文完整性和疑似重复项；选择或内容变化后需要重新确认。</small>
+                </span>
+              </label>
+            </div>
             <div class="import-list" id="flomo-list"></div>
           </div>
           <pre class="result" id="flomo-result" hidden></pre>
@@ -1089,6 +1110,6 @@
       <div class="asset-library-list" id="asset-library-list"></div>
     </dialog>
 
-    <script src="/app.js?v=20260729-publication-facts-1" type="module"></script>
+    <script src="/app.js?v=20260803-flomo-review-1" type="module"></script>
   </body>
 </html>

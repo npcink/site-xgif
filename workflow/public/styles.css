@@ -3376,6 +3376,71 @@ summary:focus-visible {
   gap: 8px;
 }
 
+.import-batch-review {
+  align-items: stretch;
+  background: #f8f5ee;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(280px, 1fr) minmax(320px, 1fr);
+  margin-bottom: 12px;
+  padding: 12px;
+}
+
+.import-batch-group {
+  display: grid;
+  gap: 6px;
+}
+
+.import-batch-group > label,
+.import-batch-confirmation strong {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.import-batch-group > div {
+  display: flex;
+  gap: 8px;
+}
+
+.import-batch-group select {
+  min-width: 150px;
+}
+
+.import-batch-group small,
+.import-batch-confirmation small {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.import-batch-confirmation {
+  align-items: flex-start;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  cursor: pointer;
+  display: flex;
+  gap: 9px;
+  padding: 10px;
+}
+
+.import-batch-confirmation[hidden] {
+  display: none;
+}
+
+.import-batch-confirmation input {
+  margin-top: 3px;
+  min-height: auto;
+  width: auto;
+}
+
+.import-batch-confirmation span {
+  display: grid;
+  gap: 3px;
+}
+
 .import-selection-summary {
   font-size: 13px;
   font-weight: 700;

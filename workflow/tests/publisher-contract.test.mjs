@@ -79,8 +79,8 @@ test("publisher exposes local public URLs and keeps empty result panels hidden",
   assert.doesNotMatch(html, /id="library-task-action"/);
   assert.match(html, /id="library-batch-toggle"/);
   assert.match(html, /id="library-feedback" hidden role="status" aria-live="polite"/);
-  assert.match(html, /styles\.css\?v=20260729-publication-facts-1/);
-  assert.match(html, /app\.js\?v=20260729-publication-facts-1/);
+  assert.match(html, /styles\.css\?v=20260803-flomo-review-1/);
+  assert.match(html, /app\.js\?v=20260803-flomo-review-1/);
   assert.match(html, /data-library-status="draft"/);
   assert.match(html, /data-library-status="publishing"/);
   assert.match(html, /data-library-status="online"/);
@@ -411,6 +411,12 @@ test("draft publishing uses explicit states, protected-branch guards, and mandat
   assert.match(server, /applyBatchReviewConfirmation/);
   assert.match(server, /autoOrganizeParagraphs/);
   assert.match(server, /confirmInternalReview/);
+  assert.match(server, /payload\.confirmInternalReview !== true/);
+  assert.match(server, /reviewConfirmed: payload\.confirmInternalReview === true/);
+  assert.match(html, /id="flomo-batch-group"/);
+  assert.match(html, /id="flomo-review-confirmed"/);
+  assert.match(app, /flomoApplyBatchGroup\.addEventListener/);
+  assert.match(app, /confirmInternalReview: flomoReviewConfirmed\.checked/);
   assert.match(server, /批量发布必须使用刚刚检查过的明确内容清单/);
   assert.match(server, /expectedVersions\.get\(item\.file\)/);
   assert.match(server, /async function transitionBatchContent/);
@@ -519,10 +525,11 @@ test("publisher imports flomo exports through a direct publish path with a draft
   assert.match(server, /\/api\/import\/flomo\/inspect/);
   assert.match(server, /\/api\/import\/flomo\/apply/);
   assert.match(server, /payload\.mode === "publish" \? "publish" : "draft"/);
-  assert.match(server, /mode === "publish" && item\.status !== "ready"/);
+  assert.doesNotMatch(server, /mode === "publish" && item\.status !== "ready"/);
+  assert.match(server, /const requiresReview = item\.needsReview \|\| item\.status === "similar"/);
   assert.match(server, /draft: mode !== "publish"/);
   assert.match(server, /flomo-imports\.jsonl/);
-  assert.match(server, /function normalizeImportedArticle\(item, override = \{\}, \{ draft = true \} = \{\}\)/);
+  assert.match(server, /function normalizeImportedArticle\(item, override = \{\}, \{ draft = true, reviewConfirmed = false \} = \{\}\)/);
   assert.match(importer, /normalizeImportText/);
   assert.match(importer, /inflateRawSync/);
   assert.doesNotMatch(app, /aiOrganizeSelectedImports/);
