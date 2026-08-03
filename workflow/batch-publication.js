@@ -11,12 +11,15 @@ export function inspectArticleBatchPreparation(data = {}, body = "") {
   const longParagraphs = overlongParagraphLengths(body);
   const internalNote = String(data.internalNote || "").trim();
   const internalReviewStatus = String(data.internalReviewStatus || "unresolved").trim();
+  const needsShortFormReview = [...String(body || "").replace(/\s/gu, "")].length < 80
+    && data.shortFormReviewed !== true;
   return {
     needsParagraphs: longParagraphs.length > 0,
     longParagraphCount: longParagraphs.length,
     longestParagraph: longParagraphs.length ? Math.max(...longParagraphs) : 0,
+    needsShortFormReview,
     needsInternalReview: Boolean(
-      internalNote && internalReviewStatus !== "resolved"
+      (internalNote && internalReviewStatus !== "resolved") || needsShortFormReview
     ),
     internalNote,
   };
@@ -42,14 +45,17 @@ export function applyBatchReviewConfirmation(
     resolvedAt = new Date().toISOString(),
   } = {},
 ) {
-  const preparation = inspectArticleBatchPreparation(data);
+  const preparation = inspectArticleBatchPreparation(data, data.body);
   if (!preparation.needsInternalReview) return { ...data };
   if (!confirmed) {
-    throw new Error("内部复核备注尚未确认，已保留原草稿。");
+    throw new Error("内容复核尚未确认，已保留原草稿。");
   }
   return {
     ...data,
-    internalReviewStatus: "resolved",
-    internalReviewResolvedAt: resolvedAt,
+    ...(preparation.internalNote ? {
+      internalReviewStatus: "resolved",
+      internalReviewResolvedAt: resolvedAt,
+    } : {}),
+    ...(preparation.needsShortFormReview ? { shortFormReviewed: true } : {}),
   };
 }
