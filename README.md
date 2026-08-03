@@ -9,6 +9,9 @@
 项目资料：
 
 - 当前交接与运行手册：[`site/docs/PROJECT_HANDOFF.md`](site/docs/PROJECT_HANDOFF.md)
+- 开发与交付规范：[`site/docs/DEVELOPMENT_AND_DELIVERY_STANDARD.md`](site/docs/DEVELOPMENT_AND_DELIVERY_STANDARD.md)
+- 开发历史与经验归纳：[`site/docs/DEVELOPMENT_HISTORY_AND_LESSONS_2026-08-03.md`](site/docs/DEVELOPMENT_HISTORY_AND_LESSONS_2026-08-03.md)
+- 2026-08-03 实施收口：[`site/docs/NEXT_STAGE_IMPLEMENTATION_CLOSEOUT_2026-08-03.md`](site/docs/NEXT_STAGE_IMPLEMENTATION_CLOSEOUT_2026-08-03.md)
 - 阶段开发复盘与经验：[`site/docs/DEVELOPMENT_RETROSPECTIVE_2026-07-24.md`](site/docs/DEVELOPMENT_RETROSPECTIVE_2026-07-24.md)
 - 本地发布助手产品复盘：[`workflow/docs/LOCAL_PUBLISHER_RETROSPECTIVE_2026-07-24.md`](workflow/docs/LOCAL_PUBLISHER_RETROSPECTIVE_2026-07-24.md)
 - 本地发布助手阶段收尾：[`workflow/docs/LOCAL_PUBLISHER_CLOSURE_2026-07-27.md`](workflow/docs/LOCAL_PUBLISHER_CLOSURE_2026-07-27.md)
@@ -29,4 +32,4 @@ cd workflow && npm start
 cd workflow && npm test
 ```
 
-`npm start` 会同时启动管理器与 Astro 预览，并自动替换已经过期的本地发布器进程。本地验证站点后，再由发布台提交并推送仓库变更。
+`npm start` 会同时启动管理器与 Astro 预览，并自动替换已经过期的本地发布器进程。本地验证站点后，发布台会从最新 `origin/main` 隔离同步公开内容、推送 `content-sync/*` 分支并创建或复用 GitHub PR；它不会自动合并。
