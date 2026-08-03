@@ -180,6 +180,8 @@ EXPECTED_SHA=<main-sha> REQUIRE_APEX_REDIRECT=true npm run test:production
 
 不删除共享脏工作区，不把“本地后台仍在运行”解释为“它运行的是最新主线”。后台版本必须通过运行时版本信息单独确认。
 
+涉及旧分支选择性吸收、历史形状造成的假差异、主 worktree 内被忽略的 SQLite/私有数据或公开与私有 Git 同步时，继续执行[仓库收尾与 Git 卫生规范](REPOSITORY_CLOSEOUT_AND_GIT_HYGIENE_STANDARD.md)，不能把生产闭环完成直接等同于本地仓库已经安全清空。
+
 ## 6. 常见失败与处理
 
 | 现象 | 首先核对 | 正确处理 |

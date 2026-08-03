@@ -18,7 +18,7 @@
 - 只为重复发生的真实问题增加复杂度；
 - 每个改动足够小，能够独立审查、验证和回退。
 
-历史事实、PR、测试结果和本轮纠错过程见[下一阶段实施收口](NEXT_STAGE_IMPLEMENTATION_CLOSEOUT_2026-08-03.md)。架构取舍见 [ADR-017](decisions/ADR-017-retain-astro-over-hexo-or-ghost.md) 和 [ADR-018](decisions/ADR-018-retain-local-publisher-and-learn-from-open-source-cms.md)。
+历史事实、PR、测试结果和本轮纠错过程见[下一阶段实施收口](NEXT_STAGE_IMPLEMENTATION_CLOSEOUT_2026-08-03.md)。架构取舍见 [ADR-017](decisions/ADR-017-retain-astro-over-hexo-or-ghost.md) 和 [ADR-018](decisions/ADR-018-retain-local-publisher-and-learn-from-open-source-cms.md)。阶段完成后的分支、worktree、私有运行状态和假差异处理见[仓库收尾与 Git 卫生规范](REPOSITORY_CLOSEOUT_AND_GIT_HYGIENE_STANDARD.md)。
 
 ## 2. 项目基本判断
 
@@ -146,6 +146,14 @@ git worktree list
 ```
 
 普通 Git 操作用 `git`；只有 PR、checks 和 GitHub API 使用 `gh`。多 worktree 环境下，远端合并后必须用 `gh pr view` 或 API 核对状态和合并提交，不得仅凭本地切换分支是否成功判断合并结果。
+
+### 7.4 阶段收尾
+
+- `git status` 只用于发现候选，不能证明文件是否尚未进入主线；旧分支收尾应逐文件比较工作区与 `main:<path>` 的 blob；
+- squash、cherry-pick 或重建合并的分支不能只依赖 `git branch --merged` 判断，应结合 PR、树内容、开放 worktree 和替代实现；
+- 不为了得到空白状态制造提交；旧实现、旧视觉基线和私有运行数据应分别舍弃、保留或进入私有历史；
+- 删除主 worktree 或原地切换前，先盘点 `.env`、SQLite/WAL、备份、私有来源、回收站和导入包，并停止占用进程；
+- 详细流程、删除矩阵和最终核对清单以[仓库收尾与 Git 卫生规范](REPOSITORY_CLOSEOUT_AND_GIT_HYGIENE_STANDARD.md)为准。
 
 ## 8. 内容与发布事实规范
 
