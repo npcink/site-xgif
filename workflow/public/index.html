@@ -609,10 +609,19 @@
           <div class="library-status-tabs" aria-label="按内容位置筛选">
             <button class="active" type="button" data-library-status="all" aria-pressed="true">全部 <span id="library-count-all">0</span></button>
             <button type="button" data-library-status="draft" aria-pressed="false">草稿 <span id="library-count-draft">0</span></button>
-            <button type="button" data-library-status="local" aria-pressed="false">本地发布 <span id="library-count-local">0</span></button>
-            <button type="button" data-library-status="cloud" aria-pressed="false">云端流程 <span id="library-count-cloud">0</span></button>
+            <button type="button" data-library-status="publishing" aria-pressed="false">发布中 <span id="library-count-publishing">0</span></button>
+            <button type="button" data-library-status="online" aria-pressed="false">已上线 <span id="library-count-online">0</span></button>
             <button type="button" id="library-audit">需处理</button>
           </div>
+          <label class="library-publishing-filter" id="library-publishing-filter" hidden>
+            <span>发布阶段</span>
+            <select id="library-publishing-status">
+              <option value="publishing">全部发布中</option>
+              <option value="local">待同步到远程</option>
+              <option value="pending">待合并或部署</option>
+              <option value="unknown">待线上核验</option>
+            </select>
+          </label>
           <div class="library-toolbar">
             <label class="library-search">
               <span class="sr-only">搜索内容</span>
@@ -774,6 +783,7 @@
               <button type="button" id="sync-workspace-refresh">刷新状态</button>
             </div>
           </div>
+          <div class="sync-pending-batches" id="sync-pending-batches" hidden></div>
           <div class="sync-queue-list" id="sync-queue-list"></div>
         </section>
 

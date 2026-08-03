@@ -566,16 +566,69 @@ test("recycle bin remains a focused dialog and returns focus to its library entr
 test("content library groups content locations and keeps process details", async ({ page }) => {
   await page.goto("/");
   await page.locator('[data-tab="library"]').click();
-  await expect(page.locator('[data-library-status="local"]')).toContainText("本地发布");
-  await expect(page.locator('[data-library-status="cloud"]')).toContainText("云端流程");
+  await expect(page.locator('[data-library-status="publishing"]')).toContainText("发布中");
+  await expect(page.locator('[data-library-status="online"]')).toContainText("已上线");
   await expect(page.locator('[data-library-status="pending"]')).toHaveCount(0);
-  await page.locator('[data-library-status="cloud"]').click();
-  await expect(page.locator('[data-library-status="cloud"]')).toHaveAttribute("aria-pressed", "true");
+  await page.locator('[data-library-status="publishing"]').click();
+  await expect(page.locator('[data-library-status="publishing"]')).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("#library-publishing-filter")).toBeVisible();
+  await page.locator("#library-publishing-status").selectOption("pending");
+  await expect(page.locator('[data-library-status="publishing"]')).toHaveAttribute("aria-pressed", "true");
   await page.locator('[data-library-status="all"]').click();
   await expect(page.locator(".content-table")).toBeVisible();
   await page.locator("[data-content-open]").first().click();
   await expect(page.locator(".content-state-grid")).toBeVisible();
   await expect(page.locator(".content-state-grid > div")).toHaveCount(3);
+});
+
+test("pending publication work links to its content branches instead of the active development branch", async ({ page }) => {
+  await page.route("**/api/status", async (route) => {
+    const response = await route.fetch();
+    const status = await response.json();
+    await route.fulfill({
+      response,
+      json: {
+        ...status,
+        gitCompareUrl: "https://github.com/npcink/site-xgif/compare/main...codex%2Fdevelopment",
+        publicationCounts: { ...status.publicationCounts, pending: 8 },
+        syncQueue: { counts: { total: 0, ready: 0, attention: 0 }, items: [], needsAttention: [] },
+        pendingPublicationBatches: [
+          {
+            branch: "content-sync/first",
+            count: 3,
+            label: "已推送 · 待建 PR",
+            url: "https://github.com/npcink/site-xgif/compare/main...content-sync%2Ffirst?expand=1",
+            linkLabel: "创建 PR",
+          },
+          {
+            branch: "content-sync/second",
+            count: 5,
+            label: "PR 已创建",
+            url: "https://github.com/npcink/site-xgif/pull/99",
+            linkLabel: "打开 PR",
+          },
+          {
+            branch: "content-sync/untrusted",
+            count: 1,
+            label: "远端返回异常",
+            url: "javascript:alert(1)",
+            linkLabel: "不可信入口",
+          },
+        ],
+      },
+    });
+  });
+
+  await page.goto("/#sync");
+  await expect(page.locator("#sync-pending-batches .sync-pending-batch")).toHaveCount(3);
+  await expect(page.locator("#sync-pending-batches")).toContainText("content-sync/first");
+  await expect(page.locator("#sync-pending-batches")).toContainText("content-sync/second");
+  await expect(page.locator("#sync-pending-batches a").first()).toHaveAttribute("href", /content-sync%2Ffirst/);
+  await expect(page.locator("#sync-pending-batches a").last()).toHaveAttribute("href", /pull\/99/);
+  await expect(page.locator("#sync-pending-batches a")).toHaveCount(2);
+  await expect(page.locator("#sync-pending-batches")).toContainText("GitHub 入口暂不可用");
+  await expect(page.locator("#sync-pr-link")).toBeHidden();
+  await page.unrouteAll({ behavior: "wait" });
 });
 
 test("switching workspaces resets the desktop scroll position", async ({ page }) => {

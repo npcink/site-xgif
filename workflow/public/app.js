@@ -119,6 +119,7 @@ let libraryCounts = {
   unverified: 0,
   cloud: 0,
   attention: 0,
+  publishing: 0,
 };
 let libraryBatchMode = false;
 let librarySearchTimer = null;
@@ -233,6 +234,16 @@ function escapeHtml(value) {
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;");
+}
+
+function githubLink(urlValue, label) {
+  try {
+    const url = new URL(String(urlValue || ""));
+    if (url.protocol !== "https:" || url.hostname !== "github.com") return "";
+    return `<a href="${escapeHtml(url.href)}" target="_blank" rel="noreferrer">${escapeHtml(label)} ↗</a>`;
+  } catch {
+    return "";
+  }
 }
 
 function renderTags(tags) {
@@ -1415,23 +1426,47 @@ function renderLibraryCounts(counts = {}) {
     unverified: Number(counts.unverified || 0),
     cloud: Number(counts.cloud || 0),
     attention: Number(counts.attention || 0),
+    publishing: Number(counts.publishing || counts.attention || 0),
   };
   const countTargets = {
     all: "#library-count-all",
     draft: "#library-count-draft",
-    local: "#library-count-local",
-    cloud: "#library-count-cloud",
+    publishing: "#library-count-publishing",
+    online: "#library-count-online",
   };
   for (const [status, selector] of Object.entries(countTargets)) {
     $(selector).textContent = Number(counts[status] || 0);
   }
   const task = libraryTaskPresentation(libraryCounts);
   $("#library-task-summary").textContent =
-    `${libraryCounts.all} 项内容 · ${libraryCounts.draft} 项草稿 · ${libraryCounts.local} 项本地发布 · ${libraryCounts.cloud} 项云端流程`;
+    `${libraryCounts.all} 项内容 · ${libraryCounts.draft} 项草稿 · ${libraryCounts.publishing} 项发布中 · ${libraryCounts.online} 项已上线`;
+  const filteredStatusLabels = {
+    draft: "草稿",
+    publishing: "发布中",
+    local: "待同步到远程",
+    pending: "待合并或部署",
+    unknown: "待线上核验",
+    online: "已上线",
+  };
+  const filteredCountKeys = {
+    draft: "draft",
+    publishing: "publishing",
+    local: "local",
+    pending: "pending",
+    unknown: "unknown",
+    online: "online",
+  };
+  const filteredLabel = filteredStatusLabels[libraryStatus];
   $("#library-task-banner").dataset.state = task.state;
-  $("#library-task-kicker").textContent = task.kicker;
-  $("#library-task-title").textContent = task.title;
-  $("#library-task-description").textContent = task.description;
+  $("#library-task-kicker").textContent = filteredLabel ? "当前筛选" : task.kicker;
+  $("#library-task-title").textContent = filteredLabel
+    ? `${filteredLabel} ${libraryCounts[filteredCountKeys[libraryStatus]]} 项`
+    : task.title;
+  $("#library-task-description").textContent = libraryStatus === "publishing"
+    ? `待同步 ${libraryCounts.local} 项 · 待合并或部署 ${libraryCounts.pending} 项 · 待线上核验 ${libraryCounts.unknown} 项。`
+    : filteredLabel
+      ? `发布中共有 ${libraryCounts.publishing} 项；内容检查与发布进度分别管理。`
+      : task.description;
 }
 
 function renderLibraryView() {
@@ -1600,11 +1635,16 @@ function renderLibraryPagination(pagination) {
 
 function setLibraryStatus(status) {
   libraryStatus = status;
+  const publishingStatuses = new Set(["publishing", "local", "pending", "unknown"]);
   for (const button of $$("[data-library-status]")) {
-    const active = button.dataset.libraryStatus === status;
+    const active = button.dataset.libraryStatus === status
+      || (button.dataset.libraryStatus === "publishing" && publishingStatuses.has(status));
     button.classList.toggle("active", active);
     button.setAttribute("aria-pressed", String(active));
   }
+  const publishingFilter = $("#library-publishing-filter");
+  publishingFilter.hidden = !publishingStatuses.has(status);
+  if (publishingStatuses.has(status)) $("#library-publishing-status").value = status;
 }
 
 function resetLibraryNavigation({ clearSelection = true } = {}) {
@@ -1808,11 +1848,8 @@ function renderSyncHistory(items = []) {
           <div><strong>${escapeHtml(item.details.branch || "未知分支")}</strong><time>${escapeHtml(new Date(item.createdAt).toLocaleString("zh-CN"))}</time></div>
           <p>${Number(item.details.count || 0)} 条内容 · ${item.details.pushOk ? "推送成功" : "推送未完成"}</p>
           ${item.details.commitSha ? `<code>${escapeHtml(item.details.commitSha)}</code>` : ""}
-          ${item.details.pullRequestUrl
-            ? `<a href="${escapeHtml(item.details.pullRequestUrl)}" target="_blank" rel="noreferrer">打开 GitHub PR #${Number(item.details.pullRequestNumber || 0)} ↗</a>`
-            : item.details.compareUrl
-              ? `<a href="${escapeHtml(item.details.compareUrl)}" target="_blank" rel="noreferrer">打开 GitHub 比较页 ↗</a>`
-              : ""}
+          ${githubLink(item.details.pullRequestUrl, `打开 GitHub PR #${Number(item.details.pullRequestNumber || 0)}`)
+            || githubLink(item.details.compareUrl, "打开 GitHub 比较页")}
         </article>`).join("")
     : '<p class="library-empty">还没有批量同步记录。</p>';
 }
@@ -1903,14 +1940,30 @@ function renderSyncWorkspace(status, history = []) {
         </article>`).join("")
     : '<p class="library-empty">待同步队列为空。</p>';
 
+  const pendingBatches = Array.isArray(status.pendingPublicationBatches)
+    ? status.pendingPublicationBatches
+    : [];
+  const pendingBatchList = $("#sync-pending-batches");
+  pendingBatchList.hidden = !pendingBatches.length;
+  pendingBatchList.innerHTML = pendingBatches.map((batch) => `
+    <article class="sync-pending-batch">
+      <div>
+        <strong>${escapeHtml(batch.branch)}</strong>
+        <span>${Number(batch.count || 0)} 条内容 · ${escapeHtml(batch.label || "已推送")}</span>
+      </div>
+      ${githubLink(batch.url, batch.linkLabel || "打开 GitHub") || "<span>GitHub 入口暂不可用</span>"}
+    </article>`).join("");
+
   const prLink = $("#sync-pr-link");
-  prLink.hidden = !status.gitCompareUrl;
-  if (status.gitCompareUrl) prLink.href = status.gitCompareUrl;
+  prLink.hidden = Boolean(pending) || !status.gitCompareUrl;
+  if (!pending && status.gitCompareUrl) prLink.href = status.gitCompareUrl;
   renderSyncHistory(history);
 }
 
 async function loadSyncWorkspace() {
   $("#sync-queue-summary").textContent = "正在读取本地发布状态…";
+  $("#sync-pending-batches").hidden = true;
+  $("#sync-pending-batches").innerHTML = "";
   $("#sync-queue-list").innerHTML = '<p class="library-empty">正在读取待同步内容…</p>';
   $("#sync-history-list").innerHTML = '<p class="library-empty">正在读取同步记录…</p>';
   try {
@@ -3270,6 +3323,12 @@ for (const button of $$("[data-library-status]")) {
     loadLibrary();
   });
 }
+
+$("#library-publishing-status").addEventListener("change", (event) => {
+  resetLibraryNavigation();
+  setLibraryStatus(event.target.value);
+  loadLibrary();
+});
 
 for (const button of $$("[data-library-view]")) {
   button.addEventListener("click", () => {
