@@ -1,6 +1,6 @@
 # XGIF Project Handoff
 
-最后更新：2026-07-24
+最后更新：2026-08-03
 
 ## 1. 当前状态
 
@@ -16,7 +16,7 @@ XGIF 是一个单人维护的轻内容站，当前生产闭环已经完成：
 - 私有恢复：`npcink/site-xgif-private-content` 的 `history` 分支
 - 生产证据：GitHub checks、Cloudflare build、`/build.json` 和每日生产巡检
 
-本阶段完整历史、问题和经验见 [开发复盘](DEVELOPMENT_RETROSPECTIVE_2026-07-24.md)；发布助手的详细产品复盘见 [本地发布助手阶段复盘](../../workflow/docs/LOCAL_PUBLISHER_RETROSPECTIVE_2026-07-24.md)。
+本阶段完整历史、问题和经验见 [开发复盘](DEVELOPMENT_RETROSPECTIVE_2026-07-24.md)、[开发历史与经验归纳](DEVELOPMENT_HISTORY_AND_LESSONS_2026-08-03.md)和 [2026-08-03 实施收口](NEXT_STAGE_IMPLEMENTATION_CLOSEOUT_2026-08-03.md)；后续开发必须遵守 [开发与交付规范](DEVELOPMENT_AND_DELIVERY_STANDARD.md)。发布助手的详细产品复盘见 [本地发布助手阶段复盘](../../workflow/docs/LOCAL_PUBLISHER_RETROSPECTIVE_2026-07-24.md)。
 
 ## 2. 不可破坏的架构边界
 
@@ -95,13 +95,13 @@ npm run r2:cleanup
 
 ## 5. 内容发布状态
 
-面向编辑者只有三个互斥状态：
+面向编辑者只有三个互斥主状态：
 
 1. 草稿；
-2. 本地发布；
-3. 云端发布。
+2. 发布中；
+3. 已核验上线。
 
-Git 提交、推送、PR 和 Cloudflare 部署是同步过程，不是第四种内容状态。
+“发布中”可以用次级筛选区分本地待同步、PR 待合并/部署和待线上核验。Git 提交、推送、PR 和 Cloudflare 部署是同步事实，不是额外的主状态；内容体检问题也不能与部署进度混成同一状态。
 
 批量发布、退回草稿、修改属性、同步、删除和恢复都从“内容管理”完成。草稿真实预览使用与线上相同的 Astro 模板，但生产构建不会输出草稿预览路由。
 
@@ -179,3 +179,5 @@ SQLite、`dist/`、Cloudflare 部署和浏览器状态都不是正文权威源�
 - 只为反复出现的痛点增加功能。
 
 不要继续为“可能以后会用”扩展基础设施。
+
+具体开发门槛、验证矩阵、Git/worktree 规则和完成定义见 [开发与交付规范](DEVELOPMENT_AND_DELIVERY_STANDARD.md)。在没有重复真实摩擦、数据风险或发布阻断证据前，停止新增功能。
