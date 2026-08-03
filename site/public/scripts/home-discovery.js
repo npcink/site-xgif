@@ -9,6 +9,7 @@
   const note = document.querySelector("[data-home-result-note]");
   const queryLabel = document.querySelector("[data-home-query]");
   const visibleCount = document.querySelector("[data-home-visible-count]");
+  const globalSearch = document.querySelector("[data-home-global-search]");
   const empty = document.querySelector("[data-home-empty]");
   const reset = document.querySelector("[data-home-reset]");
 
@@ -33,6 +34,8 @@
       });
 
       section.hidden = !viewMatches || sectionVisible === 0;
+      const sectionCount = section.querySelector("[data-home-section-count]");
+      if (sectionCount) sectionCount.textContent = String(sectionVisible).padStart(2, "0");
       visible += sectionVisible;
     });
 
@@ -40,10 +43,19 @@
     if (note) note.hidden = !query;
     if (queryLabel) queryLabel.textContent = input.value.trim();
     if (visibleCount) visibleCount.textContent = String(visible);
+    if (globalSearch instanceof HTMLAnchorElement) {
+      globalSearch.href = query ? `/search?q=${encodeURIComponent(input.value.trim())}` : "/search";
+    }
     if (empty) empty.hidden = visible !== 0;
   };
 
   input.addEventListener("input", apply);
+  input.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    const query = input.value.trim();
+    window.location.href = query ? `/search?q=${encodeURIComponent(query)}` : "/search";
+  });
   clear?.addEventListener("click", () => {
     input.value = "";
     input.focus();
@@ -71,5 +83,6 @@
     input.focus();
     apply();
   });
+  window.addEventListener("pageshow", apply);
   apply();
 })();
