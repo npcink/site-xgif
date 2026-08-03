@@ -268,7 +268,12 @@ test("article editor keeps writing central and publishing controls in a desktop 
   await expect(page.locator("#article-title")).toBeVisible();
   await expect(page.locator("#article-ai-menu")).toBeHidden();
   await expect(page.locator("#article-body")).toBeVisible();
-  await expect(page.locator('[data-ai-fill="article"]')).toHaveText("整理与分段");
+  await expect(page.locator("#article-open-assets")).toHaveText("插入图片");
+  await expect(page.locator(".article-insert-menu")).toHaveCount(0);
+  await page.locator("#article-open-assets").click();
+  await expect(page.locator("#asset-library-dialog")).toBeVisible();
+  await page.locator("#asset-library-close").click();
+  await expect(page.locator('[data-ai-fill="article"]')).toHaveText("整理正文与资料");
   await expect(page.locator("#article-ai-review")).toBeHidden();
   await expect(page.locator("#article-cover-alt-field")).toBeHidden();
   await expect(page.locator(".article-inspector-tabs [role=tab]")).toHaveCount(3);

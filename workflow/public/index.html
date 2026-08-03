@@ -121,13 +121,7 @@
               <span class="field-label-row">
                 <label for="article-body">正文</label>
                 <span class="article-field-actions">
-                  <details class="context-action-menu article-insert-menu">
-                    <summary>插入</summary>
-                    <div>
-                      <button type="button" id="article-open-assets">从素材库选择</button>
-                      <small>也可以直接粘贴或拖入图片</small>
-                    </div>
-                  </details>
+                  <button type="button" id="article-open-assets">插入图片</button>
                   <details class="context-action-menu article-ai-menu" id="article-ai-menu" hidden>
                     <summary>AI 辅助</summary>
                     <div>
@@ -142,7 +136,7 @@
                         type="button"
                         data-ai-fill="article"
                         aria-describedby="article-ai-availability"
-                      >整理与分段</button>
+                      >整理正文与资料</button>
                     </div>
                   </details>
                 </span>
@@ -1110,6 +1104,6 @@
       <div class="asset-library-list" id="asset-library-list"></div>
     </dialog>
 
-    <script src="/app.js?v=20260803-flomo-review-1" type="module"></script>
+    <script src="/app.js?v=20260803-editor-closure-1" type="module"></script>
   </body>
 </html>

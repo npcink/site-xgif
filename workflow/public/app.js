@@ -2714,7 +2714,7 @@ $('[data-ai-fill="article"]').addEventListener("click", async (event) => {
   catch (error) { showError(articleResult, error); }
   finally {
     button.disabled = false;
-    button.textContent = "整理与分段";
+    button.textContent = "整理正文与资料";
     articleAiMenu.open = false;
     syncAiAvailability();
   }
