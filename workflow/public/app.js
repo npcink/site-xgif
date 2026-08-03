@@ -1808,7 +1808,11 @@ function renderSyncHistory(items = []) {
           <div><strong>${escapeHtml(item.details.branch || "未知分支")}</strong><time>${escapeHtml(new Date(item.createdAt).toLocaleString("zh-CN"))}</time></div>
           <p>${Number(item.details.count || 0)} 条内容 · ${item.details.pushOk ? "推送成功" : "推送未完成"}</p>
           ${item.details.commitSha ? `<code>${escapeHtml(item.details.commitSha)}</code>` : ""}
-          ${item.details.compareUrl ? `<a href="${escapeHtml(item.details.compareUrl)}" target="_blank" rel="noreferrer">打开 GitHub 比较页 ↗</a>` : ""}
+          ${item.details.pullRequestUrl
+            ? `<a href="${escapeHtml(item.details.pullRequestUrl)}" target="_blank" rel="noreferrer">打开 GitHub PR #${Number(item.details.pullRequestNumber || 0)} ↗</a>`
+            : item.details.compareUrl
+              ? `<a href="${escapeHtml(item.details.compareUrl)}" target="_blank" rel="noreferrer">打开 GitHub 比较页 ↗</a>`
+              : ""}
         </article>`).join("")
     : '<p class="library-empty">还没有批量同步记录。</p>';
 }
@@ -1825,6 +1829,21 @@ function syncSkippedMessages(items = []) {
       : "",
     other.length ? `${other.length} 条内容不符合本次同步范围，已跳过。` : "",
   ].filter(Boolean);
+}
+
+function pullRequestMessages(result = {}) {
+  const pullRequests = Array.isArray(result.pullRequests)
+    ? result.pullRequests
+    : result.pullRequest
+      ? [result.pullRequest]
+      : [];
+  if (!pullRequests.length) return [];
+  const succeeded = pullRequests.filter((item) => item.ok);
+  const failed = pullRequests.filter((item) => item.attempted && !item.ok);
+  return [
+    ...succeeded.map((item) => `${item.created ? "已自动创建" : "已找到"} GitHub PR #${item.number}：${item.url}`),
+    ...failed.map((item) => `内容分支已推送，但自动创建 PR 失败：${item.error}`),
+  ];
 }
 
 function renderSyncWorkspace(status, history = []) {
@@ -1918,7 +1937,7 @@ async function syncAllLocalContent() {
     ? `\n其中 ${deletionReady} 条等待下架，${deletionRetry} 条重试原下架分支。`
     : "";
   if (!window.confirm(
-    `将 ${local} 项已通过检查的内容变更提交或重试并推送 GitHub。${deletionSummary}${attention ? `\n${attention} 条待处理内容不会参与本次同步。` : ""}\nPR 合并后由 Cloudflare Workers Builds 自动部署，是否继续？`,
+    `将 ${local} 项已通过检查的内容变更提交或重试并推送 GitHub。${deletionSummary}${attention ? `\n${attention} 条待处理内容不会参与本次同步。` : ""}\n系统会自动创建 PR，但不会自动合并；合并后由 Cloudflare Workers Builds 自动部署。是否继续？`,
   )) return;
   button.disabled = true;
   button.setAttribute("aria-busy", "true");
@@ -1936,8 +1955,9 @@ async function syncAllLocalContent() {
       result.ok
         ? result.noChange
           ? `${result.deleted?.length || 0} 条内容在远程主分支已经不存在；已转入线上 404/410 核验。`
-          : `已推送 ${result.synced.length} 条内容更新和 ${result.deleted?.length || 0} 条下架${result.branches?.length > 1 ? `，涉及 ${result.branches.length} 个恢复/新建分支` : `到 ${result.branch}`}。下一步合并 GitHub PR，Cloudflare 将自动部署。`
+          : `已推送 ${result.synced.length} 条内容更新和 ${result.deleted?.length || 0} 条下架${result.branches?.length > 1 ? `，涉及 ${result.branches.length} 个恢复/新建分支` : `到 ${result.branch}`}。PR 不会自动合并。`
         : `本地提交已完成，但推送失败：${result.push?.error || "未知错误"}`,
+      ...pullRequestMessages(result),
       ...syncSkippedMessages(result.skipped),
     ].filter(Boolean).join("\n");
     await Promise.all([loadStatus(), loadLibrary()]);
@@ -3012,7 +3032,7 @@ async function syncSelectedContent(button = $("#library-bulk-sync")) {
       return;
     }
     if (!window.confirm(
-      `将同步 ${eligible} 条已通过上线体检的内容。${inspection.attention ? `\n${inspection.attention} 条待处理内容不会参与本次同步。` : ""}${inspection.skipped ? `\n${inspection.skipped} 条草稿会跳过。` : ""}\n系统会创建或使用内容分支，只提交合格文件并推送。线上正式站点仍需合并 PR 并等待 Cloudflare 部署，是否继续？`,
+      `将同步 ${eligible} 条已通过上线体检的内容。${inspection.attention ? `\n${inspection.attention} 条待处理内容不会参与本次同步。` : ""}${inspection.skipped ? `\n${inspection.skipped} 条草稿会跳过。` : ""}\n系统会创建内容分支、推送并自动创建 PR，但不会自动合并。是否继续？`,
     )) {
       showResult(libraryResult, "已取消同步。");
       return;
@@ -3034,7 +3054,8 @@ async function syncSelectedContent(button = $("#library-bulk-sync")) {
           : `已完成本地提交，但推送失败：${result.push?.error || "未知错误"}`,
         result.reused?.length ? `${result.reused.length} 条相同版本已同步，已自动跳过。` : "",
         ...syncSkippedMessages(result.skipped),
-        result.compareUrl ? `下一步创建并合并 PR：${result.compareUrl}` : "",
+        ...pullRequestMessages(result),
+        !result.pullRequest?.ok && result.compareUrl ? `可手动创建 PR：${result.compareUrl}` : "",
         "Cloudflare 部署完成并通过线上核验后，列表会自动显示为“已上线”。",
       ].filter(Boolean).join("\n"),
     );
@@ -3615,7 +3636,7 @@ $("#retry-push").addEventListener("click", async () => {
     showResult(
       libraryResult,
       result.ok
-        ? `原内容分支 ${result.branch} 已推送成功。`
+        ? [`原内容分支 ${result.branch} 已推送成功。`, ...pullRequestMessages(result)].join("\n")
         : `原内容分支仍未推送成功：${result.push?.error || "未知错误"}`,
     );
     await Promise.all([loadLibrary(), loadStatus()]);
