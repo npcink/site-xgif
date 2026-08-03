@@ -80,7 +80,7 @@ test("publisher exposes local public URLs and keeps empty result panels hidden",
   assert.match(html, /id="library-batch-toggle"/);
   assert.match(html, /id="library-feedback" hidden role="status" aria-live="polite"/);
   assert.match(html, /styles\.css\?v=20260803-flomo-review-1/);
-  assert.match(html, /app\.js\?v=20260803-flomo-review-1/);
+  assert.match(html, /app\.js\?v=20260803-editor-closure-1/);
   assert.match(html, /data-library-status="draft"/);
   assert.match(html, /data-library-status="publishing"/);
   assert.match(html, /data-library-status="online"/);
