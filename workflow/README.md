@@ -1,5 +1,8 @@
 # XGIF 本地发布助手
 
+共享段落整理、中英文间距、自动检查和编辑器提示规范见：
+`/Users/muze/gitee/local-content-workbench/docs/content-authoring-and-formatting-standard.md`。
+
 这是一个只在本机运行的发布工具，用来给 Astro 内容站生成文章和图片内容文件。
 
 维护入口：
