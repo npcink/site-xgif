@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { readFile, rename, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { organizeMarkdownParagraphs } from "./article-paragraph-formatting.js";
+import { organizeMarkdownParagraphs } from "./shared-content-formatting.js";
 import { auditContentLibrary } from "./content-audit.js";
 
 function splitMarkdown(markdown) {
@@ -48,21 +48,25 @@ export async function migratePublishedArticleParagraphs({
     const markdown = await readFile(filePath, "utf8");
     const parsed = splitMarkdown(markdown);
     const result = organizeMarkdownParagraphs(parsed.body, { maxCharacters });
+    const longBefore = parsed.body.split(/\n[ \t]*\n/gu)
+      .filter((paragraph) => [...paragraph.replace(/\s/gu, "")].length > maxCharacters).length;
+    const longAfter = result.markdown.split(/\n[ \t]*\n/gu)
+      .filter((paragraph) => [...paragraph.replace(/\s/gu, "")].length > maxCharacters).length;
     const summary = {
       file,
-      paragraphFormatting: result.paragraphFormatting,
+      paragraphFormatting: result.changed ? "applied" : "unchanged",
       changedParagraphs: result.changedParagraphs,
-      longBefore: result.longBefore,
-      longAfter: result.longAfter,
-      unsplittableParagraphs: result.unsplittableParagraphs,
+      longBefore,
+      longAfter,
+      unsplittableParagraphs: 0,
     };
-    if (result.longAfter > 0 || result.paragraphFormatting !== "applied") {
+    if (longAfter > 0 || !result.changed) {
       blocked.push(summary);
       continue;
     }
     migrations.push({
       ...summary,
-      content: `${parsed.prefix}${result.body}${parsed.trailing}`,
+      content: `${parsed.prefix}${result.markdown}${parsed.trailing}`,
     });
   }
 
