@@ -1,0 +1,30 @@
+{
+  "contractVersion": 1,
+  "projectId": "site-xgif",
+  "displayName": "XGIF",
+  "contentStyleProfiles": ["CJK_LATIN_SPACING_V1", "SAFE_PARAGRAPH_SPLIT_V1"],
+  "content": {
+    "collections": [
+      {
+        "id": "articles",
+        "directory": "site/src/content/articles",
+        "extensions": [".md", ".mdx"]
+      },
+      {
+        "id": "images",
+        "directory": "site/src/content/images",
+        "extensions": [".md", ".mdx"]
+      }
+    ]
+  },
+  "media": {
+    "provider": "cloudflare-r2",
+    "publicBaseUrl": "https://img.xgif.cn",
+    "objectKeyPrefix": "memes",
+    "manifestPath": "workflow/records/r2-assets.jsonl",
+    "allowedKinds": ["image"]
+  },
+  "git": {
+    "provider": "github"
+  }
+}
