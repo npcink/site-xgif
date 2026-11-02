@@ -7,10 +7,16 @@ import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import sharp from "sharp";
+import { sampleImage } from "./fixtures/image-sample.mjs";
 
 const workflowRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const heldFixture = path.join(workflowRoot, "../site/src/content/articles/20990101-hold.md");
 let fixtureCreated = false;
+let imageFixtureCreated = false;
+let assetFixtureCreated = false;
+const imageFixture = path.join(workflowRoot, "../site/src/content/images/20990101-dupe.md");
+const assetFixture = path.join(workflowRoot, "../site/public/images/xgif-duplicate-fixture.png");
 const port = 18_000 + (process.pid % 10_000);
 const temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), "xgif-http-integration-"));
 const child = spawn(process.execPath, ["--disable-warning=ExperimentalWarning", "server.js"], {
@@ -310,6 +316,43 @@ draft: true
   assert.equal(batchHeld.json().failed.length, 1);
   assert.match(JSON.stringify(batchHeld.json().failed), /禁止公开发布/);
   assert.equal(await readFile(heldFixture, "utf8"), before);
+  const originalImage = await sampleImage();
+  await writeFile(assetFixture, originalImage, { flag: "wx" });
+  assetFixtureCreated = true;
+  await writeFile(imageFixture, `---
+contentId: "20990101-dupe"
+title: "相似图测试"
+image: "/images/xgif-duplicate-fixture.png"
+description: "用于查重测试"
+category: "表情包"
+ratio: "square"
+source: "群聊转存（来源待核实）"
+sourceKind: "unknown"
+tags: ["生活"]
+pubDate: 2099-01-01
+draft: true
+public: false
+---
+`, { flag: "wx" });
+  imageFixtureCreated = true;
+  const asDataUrl = (buffer, mime) => `data:${mime};base64,${buffer.toString("base64")}`;
+  const exactImage = await post("/api/publish/image", {
+    title: "改名的同一张图片", description: "测试重复拦截", sourceKind: "unknown",
+    fileName: "renamed.png", fileData: asDataUrl(originalImage, "image/png"),
+  });
+  assert.equal(exactImage.status, 409, exactImage.body);
+  const resizedImage = await sharp(originalImage).resize(240, 240).jpeg({ quality: 65 }).toBuffer();
+  const fileData = asDataUrl(resizedImage, "image/jpeg");
+  const similarImage = await post("/api/check/image", { fileData });
+  assert.equal(similarImage.status, 200, similarImage.body);
+  assert.ok(similarImage.json().similarity.matches.some((item) => item.title === "相似图测试" && item.kind === "similar"));
+  const unreviewed = await post("/api/publish/image", {
+    title: "相似的不同文件", description: "需要先比较", sourceKind: "unknown",
+    fileName: "smaller.jpg", fileData,
+    similarityReviewedSha256: createHash("sha256").update(originalImage).digest("hex"),
+  });
+  assert.equal(unreviewed.status, 422, unreviewed.body);
+  assert.match(unreviewed.json().error, /检查相似图片/);
   console.log("本地发布器 HTTP 集成检查通过。");
 } finally {
   child.kill("SIGTERM");
@@ -318,5 +361,7 @@ draft: true
     new Promise((resolve) => setTimeout(resolve, 3_000)),
   ]);
   if (fixtureCreated) await rm(heldFixture, { force: true });
+  if (imageFixtureCreated) await rm(imageFixture, { force: true });
+  if (assetFixtureCreated) await rm(assetFixture, { force: true });
   await rm(temporaryDirectory, { recursive: true, force: true });
 }

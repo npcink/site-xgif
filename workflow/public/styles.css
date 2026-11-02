@@ -4535,6 +4535,13 @@ summary:focus-visible {
   padding: 0 4px;
 }
 
+.image-duplicates { padding: 20px; border: 1px solid var(--line, #d9d9d9); background: var(--panel, #fff); }
+.image-duplicates > p { margin: 8px 0 16px; color: var(--muted, #666); font-size: 13px; line-height: 1.6; }
+#image-duplicate-candidates { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px; }
+#image-duplicate-candidates article { display: grid; align-content: start; gap: 6px; font-size: 13px; }
+#image-duplicate-candidates img { width: 100%; height: 150px; object-fit: contain; background: #f5f5f5; }
+#image-duplicate-candidates span, #image-duplicate-candidates small { color: var(--muted, #666); }
+
 .image-ai-row {
   background: #f7f3ea;
   border: 1px solid var(--line);

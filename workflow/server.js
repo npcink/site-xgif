@@ -37,6 +37,7 @@ import { calendarDate } from "./calendar-date.js";
 import { saveR2PrivateBackup } from "./r2-private-backup.js";
 import { loadLocalEnv } from "./local-env.js";
 import { listReusableAssets } from "./asset-library.js";
+import { ImageSimilarityIndex } from "./image-similarity.js";
 import {
   applyTagMerge,
   inspectTagGovernance,
@@ -134,6 +135,10 @@ const localDataStore = new LocalDataStore({
     : {}),
 });
 const localContentBackup = new LocalContentBackup({ repoRoot, workflowRoot: __dirname });
+const imageSimilarityIndex = new ImageSimilarityIndex({
+  repoRoot,
+  cachePath: path.join(path.dirname(localDataStore.databasePath), "image-fingerprints-v1.json"),
+});
 const publicationReceipts = new PublicationReceiptStore({
   filePath: target.publicationReceipts,
 });
@@ -2023,10 +2028,25 @@ async function checkImageQuality(payload) {
   const titleDuplicates = duplicates.filter((item) => item.reason === "标题重复");
   if (exactDuplicates.length) issues.push(qualityIssue("error", `已存在 ${exactDuplicates.length} 个完全相同的图片文件，不能重复发布。`));
   if (titleDuplicates.length) issues.push(qualityIssue("warning", `发现 ${titleDuplicates.length} 条同标题内容，请确认不是重复发布。`));
+  let similarity = null;
+  if (asset) {
+    try {
+      similarity = await imageSimilarityIndex.check({ buffer: asset.buffer, excludeFile: payload.excludeFile });
+      const similar = similarity.matches.filter((item) => item.kind === "similar");
+      if (!exactDuplicates.length && similarity.matches.some((item) => item.kind === "exact")) {
+        issues.push(qualityIssue("error", "已存在完全相同的图片文件，不能重复发布。"));
+      }
+      if (similar.length) issues.push(qualityIssue("warning", "发现疑似相似图片，请比较下方候选后再决定是否继续。"));
+      if (similarity.unavailable) issues.push(qualityIssue("warning", `${similarity.unavailable} 张已有图片暂时无法比对，本次相似图检查不完整。`));
+    } catch {
+      issues.push(qualityIssue("error", "无法解码图片完成相似图检查，请确认图片文件可正常打开。"));
+    }
+  }
   return {
     ok: !issues.some((item) => item.level === "error"),
     issues,
     duplicates,
+    similarity,
     asset: asset && {
       mime: asset.mime,
       byteLength: asset.byteLength,
@@ -4246,7 +4266,11 @@ async function handleApi(req, res) {
 
   if (pathname === "/api/check/image" && req.method === "POST") {
     const payload = await readJson(req);
-    sendJson(res, 200, { duplicates: await scanDuplicateImage(payload) });
+    const asset = payload.fileData ? inspectImageUpload(payload.fileData) : null;
+    sendJson(res, 200, {
+      duplicates: await scanDuplicateImage({ ...payload, sha256: asset?.sha256 || payload.sha256 }),
+      similarity: asset ? await imageSimilarityIndex.check({ buffer: asset.buffer, excludeFile: payload.excludeFile }) : null,
+    });
     return;
   }
 
@@ -4307,6 +4331,14 @@ async function handleApi(req, res) {
     const duplicates = await scanDuplicateImage({ title: payload.title, sha256: asset.sha256 });
     if (duplicates.some((item) => item.reason === "图片文件重复")) {
       throw imageValidationError("已存在完全相同的图片文件，不能重复发布。", 409);
+    }
+    const similarity = await imageSimilarityIndex.check({ buffer: asset.buffer });
+    if (similarity.matches.some((item) => item.kind === "exact")) {
+      throw imageValidationError("已存在完全相同的图片文件，不能重复发布。", 409);
+    }
+    if ((similarity.matches.length || similarity.unavailable) && payload.similarityReviewedSha256 !== asset.sha256) {
+      const error = imageValidationError("请先检查相似图片并确认后再保存。", 422);
+      throw error;
     }
 
     const date = payload.pubDate || todayIso();
