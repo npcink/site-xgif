@@ -1,6 +1,6 @@
 # 连续浏览与推荐改进（2026-11-02）
 
-状态：连续浏览与离线推荐已合并上线，生产核验通过；图片查重的实现与验收记录见文末。
+状态：连续浏览、离线推荐与图片查重已通过 PR #51、#52、#53 合并；生产与本机运行核验通过。
 
 ## 问题与目标
 
@@ -81,9 +81,14 @@ Linux 桌面与手机视觉及交互测试。视觉基线只更新首页与桌�
   合并提交 `ffd456dc39d9c4f9011eafe3b2f5f3abd3a2ef3a`。
 - [PR #52](https://github.com/npcink/site-xgif/pull/52)：M4 hybrid 推荐清单，
   合并提交 `9037e84f4849ca49bf6890cbae939961e4080153`。
+- [PR #53](https://github.com/npcink/site-xgif/pull/53)：本机图片查重与历史恢复保留发布限制，
+  合并提交 `5cc82a97a9c8eaf3fa01c3a58aa445033a98d0d8`。
 - `/build.json` 已核对到 `9037e84f4849ca49bf6890cbae939961e4080153`，
   `EXPECTED_SHA=9037e84f4849ca49bf6890cbae939961e4080153 REQUIRE_APEX_REDIRECT=true npm run test:production`
   通过。该 SHA 是本次核验时间点的证据，后续部署以当前 `/build.json` 为准。
+- #53 合并后再次以 `EXPECTED_SHA=5cc82a97a9c8eaf3fa01c3a58aa445033a98d0d8`
+  和 `REQUIRE_APEX_REDIRECT=true` 运行严格生产巡检通过；两条 held 详情返回 404 且不在 sitemap。
+  主工作区已更新到同一提交，本机 8787 / 4321 均可用，真实重新编码图片的查重请求命中相似候选。
 
 ## 图片查重补充
 
