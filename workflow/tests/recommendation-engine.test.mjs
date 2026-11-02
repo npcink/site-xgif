@@ -169,7 +169,7 @@ test("adult-humor recommendations stay in their group while general articles exc
 
   assert.ok(manifest.recommendations["general-source"].articles.includes("general-candidate"));
   assert.ok(!manifest.recommendations["general-source"].articles.includes("adult-candidate"));
-  assert.equal(manifest.recommendations["adult-source"].articles.length, 3);
+  assert.equal(manifest.recommendations["adult-source"].articles.length, 4);
   assert.ok(manifest.recommendations["adult-source"].articles.every((id) => id.startsWith("adult-")));
 });
 
@@ -271,6 +271,15 @@ pubDate: "2026-07-24"
 draft: true
 ---
 不会进入推荐。
+`, "utf8");
+
+  await writeFile(path.join(articlesDir, "held.md"), `---
+title: "禁止公开发布的测试条目"
+contentId: "20260724-held"
+publicationHold: true
+draft: false
+---
+普通测试正文，不得发送到向量服务。
 `, "utf8");
 
   const store = {
@@ -474,4 +483,15 @@ draft: false
     await readFile(path.join(root, "site", "src", "data", "recommendations.json"), "utf8"),
     before,
   );
+});
+
+
+test("image recommendations include other images with alternatives for seen content", () => {
+  const documents = Array.from({ length: 6 }, (_, index) => ({
+    id: `image-${index}`, type: "image", contentSha256: String(index),
+    entry: entry(`image-${index}`, { title: `群聊图片${index}`, tags: ["群聊"] }),
+  }));
+  const manifest = buildRecommendationManifest(documents);
+  assert.equal(manifest.recommendations["image-0"].images.length, 5);
+  assert.ok(!manifest.recommendations["image-0"].images.includes("image-0"));
 });

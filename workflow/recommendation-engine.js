@@ -222,7 +222,7 @@ export async function loadPublicRecommendationContent(repoRoot) {
     for (const file of files.sort()) {
       const raw = await readFile(file, "utf8");
       const { data, body } = parseContentDocument(raw);
-      if (Boolean(data.draft) || data.public === false) continue;
+      if (Boolean(data.draft) || data.public === false || data.publicationHold === true) continue;
       const contentId = String(data.contentId || "").trim();
       if (!contentId) continue;
       const input = semanticInput(source.type, data, body);
@@ -488,64 +488,37 @@ export function buildRecommendationManifest(
 
   for (const document of documents) {
     const source = document.entry;
-    if (document.type === "article") {
-      if (mode === "hybrid") {
-        const preferredArticles = rankHybridCandidates(
-          source,
-          articles.map((candidate) => candidate.entry),
-          vectors,
-        ).slice(0, 2).map((candidate) => candidate.id);
-        const preferredImages = rankHybridCandidates(
-          source,
-          images.map((candidate) => candidate.entry),
-          vectors,
-        ).slice(0, 3).map((candidate) => candidate.id);
-        recommendations[document.id] = {
-          articles: rulesFor(source, articles.map((candidate) => candidate.entry), {
-            limit: 3,
-            relatedSlots: 0,
-            allowSurprise: true,
-            preferredIds: preferredArticles,
-          }),
-          images: rulesFor(source, images.map((candidate) => candidate.entry), {
-            limit: 3,
-            relatedSlots: 0,
-            allowSurprise: false,
-            preferredIds: preferredImages,
-          }),
-        };
-      } else {
-        recommendations[document.id] = {
-          articles: rulesFor(source, articles.map((candidate) => candidate.entry), {
-            limit: 3,
-            relatedSlots: 2,
-            allowSurprise: true,
-          }),
-          images: rulesFor(source, images.map((candidate) => candidate.entry), {
-            limit: 3,
-            relatedSlots: 3,
-            allowSurprise: false,
-          }),
-        };
-      }
-    } else {
-      const preferredArticles = mode === "hybrid"
-        ? rankHybridCandidates(
-            source,
-            articles.map((candidate) => candidate.entry),
-            vectors,
-          ).slice(0, 2).map((candidate) => candidate.id)
-        : [];
-      recommendations[document.id] = {
-        articles: rulesFor(source, articles.map((candidate) => candidate.entry), {
-          limit: 2,
-          relatedSlots: mode === "hybrid" ? 0 : 2,
-          allowSurprise: false,
-          preferredIds: preferredArticles,
-        }),
-        images: [],
-      };
-    }
+    const sourceGroup = recommendationDocument(source).recommendationGroup;
+    const articleEntries = articles
+      .filter((candidate) => sourceGroup !== "adult-humor"
+        || recommendationDocument(candidate.entry).recommendationGroup === "adult-humor")
+      .map((candidate) => candidate.entry);
+    const imageEntries = images.map((candidate) => candidate.entry);
+    const articleLimit = document.type === "article" ? 12 : 8;
+    const rankedArticles = mode === "hybrid" ? rankHybridCandidates(source, articleEntries, vectors) : [];
+    const rankedImages = mode === "hybrid" ? rankHybridCandidates(source, imageEntries, vectors) : [];
+    // Keep two close matches and one exploration choice at the front, then
+    // retain ranked alternatives for browsers which have already seen them.
+    const firstArticles = rulesFor(source, articleEntries, {
+      limit: document.type === "article" ? 3 : 2,
+      relatedSlots: mode === "hybrid" ? 0 : 2,
+      allowSurprise: document.type === "article",
+      preferredIds: rankedArticles.slice(0, 2).map((candidate) => candidate.id),
+    });
+    recommendations[document.id] = {
+      articles: rulesFor(source, articleEntries, {
+        limit: articleLimit,
+        relatedSlots: articleLimit,
+        allowSurprise: false,
+        preferredIds: [...new Set([...firstArticles, ...rankedArticles.map((candidate) => candidate.id)])],
+      }),
+      images: rulesFor(source, imageEntries, {
+        limit: 8,
+        relatedSlots: 8,
+        allowSurprise: false,
+        preferredIds: rankedImages.map((candidate) => candidate.id),
+      }),
+    };
   }
 
   applyAdultHumorCoverage(documents, recommendations);
