@@ -38,6 +38,7 @@ import { saveR2PrivateBackup } from "./r2-private-backup.js";
 import { loadLocalEnv } from "./local-env.js";
 import { listReusableAssets } from "./asset-library.js";
 import { ImageSimilarityIndex } from "./image-similarity.js";
+import { preservePublicationHold } from "./publication-hold.js";
 import {
   applyTagMerge,
   inspectTagGovernance,
@@ -4092,13 +4093,18 @@ async function handleApi(req, res) {
     const payload = await readJson(req);
     const filePath = resolveManagedFile(payload.type, payload.file);
     const file = path.relative(repoRoot, filePath);
-    const content = await localContentBackup.readFileVersion(file, String(payload.commit || ""));
+    const existing = await readFile(filePath, "utf8");
+    const previous = await localContentBackup.readFileVersion(file, String(payload.commit || ""));
+    const content = payload.type === "article"
+      ? preservePublicationHold(parseFrontmatter(existing).data, previous)
+      : previous;
     const parsed = parseFrontmatter(content);
     if (!isContentId(parsed.data.contentId)) {
       const error = new Error("历史版本缺少有效内容 ID，已停止恢复。");
       error.statusCode = 422;
       throw error;
     }
+    await assertFileContentVersion(filePath, contentSha256(existing));
     await writeTextAtomic(filePath, content);
     const indexWarning = await refreshLocalIndexes("restore_content_version", {
       type: payload.type,
