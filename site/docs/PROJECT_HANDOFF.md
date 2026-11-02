@@ -18,8 +18,9 @@ XGIF 是一个单人维护的轻内容站，当前生产闭环已经完成：
 
 本阶段完整历史、问题和经验见 [开发复盘](DEVELOPMENT_RETROSPECTIVE_2026-07-24.md)、[开发历史与经验归纳](DEVELOPMENT_HISTORY_AND_LESSONS_2026-08-03.md)、[2026-08-03 实施收口](NEXT_STAGE_IMPLEMENTATION_CLOSEOUT_2026-08-03.md)和 [最近一次生产闭环复盘](DEVELOPMENT_RETROSPECTIVE_2026-08-03.md)；后续开发必须遵守 [开发与交付规范](DEVELOPMENT_AND_DELIVERY_STANDARD.md)，发布收尾按 [发布、恢复与阶段收尾规范](RELEASE_CLOSURE_STANDARD.md)执行，历史分支、worktree 和本地运行状态的最终清理按 [仓库收尾与 Git 卫生规范](REPOSITORY_CLOSEOUT_AND_GIT_HYGIENE_STANDARD.md)执行。发布助手的详细演进和维护顺序见 [最终交接](../../workflow/docs/LOCAL_PUBLISHER_FINAL_HANDOFF_2026-07-30.md)，产品复盘见 [本地发布助手阶段复盘](../../workflow/docs/LOCAL_PUBLISHER_RETROSPECTIVE_2026-07-24.md)。
 
-2026-11-02 连续浏览候选的行为、会话统计边界、内容发布拦截与本地验证见
-[连续浏览与推荐改进](DISCOVERY_IMPROVEMENTS_2026-11-02.md)。该记录不代表已经部署。
+2026-11-02 连续浏览与 M4 离线推荐已通过 PR #51、#52 合并，生产巡检通过。
+行为、会话统计边界、内容发布拦截、图片查重及验证证据见
+[连续浏览与推荐改进](DISCOVERY_IMPROVEMENTS_2026-11-02.md)。
 
 ## 2. 不可破坏的架构边界
 
@@ -61,6 +62,8 @@ XGIF 是一个单人维护的轻内容站，当前生产闭环已经完成：
 - `unknown`：群聊转存、来源待核实，可以公开，但必须显示投诉与下架入口
 - AI 不能推测作者、来源或授权
 - 新图片使用 `memes/<sha256>.<ext>` 的 R2 内容寻址对象
+- 相同文件用 SHA-256 拦截，疑似相似图用本机感知指纹提示并人工对照；
+  指纹位置、缓存重建和 GIF 首帧限制见 [图片查重说明](../../workflow/README.md#图片查重与指纹存放)
 
 ## 4. 本地运行
 

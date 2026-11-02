@@ -464,6 +464,7 @@ async function uploadArticleImage(file) {
 function updateImagePreview() {
   const data = formData(imageForm);
   const image = selectedImage?.dataUrl || "";
+  if (!image.startsWith("data:")) $("#image-duplicates").hidden = true;
   $("#image-preview-stage").dataset.empty = String(!image);
   $("#image-preview").innerHTML = `
     ${image ? `<img src="${image}" alt="${escapeHtml(data.title || "图片预览")}" />` : ""}
@@ -1131,6 +1132,34 @@ function imagePayload() {
   if (selectedImage?.dataUrl?.startsWith("data:")) data.fileData = selectedImage.dataUrl;
   if (imageForm.dataset.editFile) data.excludeFile = imageForm.dataset.editFile;
   return data;
+}
+
+function renderImageDuplicates(report, duplicates = []) {
+  const panel = $("#image-duplicates");
+  panel.hidden = false;
+  const matches = report?.matches || [];
+  const exact = duplicates.some((item) => item.reason === "图片文件重复") || matches.some((item) => item.kind === "exact");
+  $("#image-duplicates-status").textContent = report
+    ? `${exact ? "已有完全相同的图片，不能重复发布。" : matches.length ? "发现疑似相似图片，请对照当前图片比较。" : "未发现疑似相似图片。"} 已比对 ${report.checked} 张${report.unavailable ? `，另有 ${report.unavailable} 张暂时无法比对` : ""}。裁剪、加字可能漏检；GIF 仅比较首帧。`
+    : "暂时无法检查相似图片，保存时会重试。";
+  $("#image-duplicate-candidates").innerHTML = matches.map((item) => {
+    let url;
+    try { url = new URL(item.image, sitePreviewUrl); } catch { return ""; }
+    if (!["http:", "https:"].includes(url.protocol)) return "";
+    return `<article><a href="${escapeHtml(url.href)}" target="_blank" rel="noreferrer"><img src="${escapeHtml(url.href)}" alt="${escapeHtml(item.title)}" referrerpolicy="no-referrer" /></a><strong>${escapeHtml(item.title)}</strong><span>${item.kind === "exact" ? "文件相同" : "疑似相似"}${item.animated ? " · 仅比较首帧" : ""}</span><small>点击图片查看原图</small></article>`;
+  }).join("");
+}
+
+async function checkSelectedImage(image) {
+  $("#image-duplicates").hidden = false;
+  $("#image-duplicates-status").textContent = "正在比对已有图片…";
+  $("#image-duplicate-candidates").replaceChildren();
+  try {
+    const report = await api("/api/check/image", { fileData: image.dataUrl, excludeFile: imageForm.dataset.editFile });
+    if (selectedImage === image) renderImageDuplicates(report.similarity, report.duplicates);
+  } catch {
+    if (selectedImage === image) renderImageDuplicates(null);
+  }
 }
 
 const importStatusLabels = {
@@ -2674,6 +2703,7 @@ $('input[name="file"]', imageForm).addEventListener("change", async (event) => {
   try {
     const dataUrl = await fileToDataUrl(file);
     const dimensions = await imageDimensions(dataUrl);
+    if (event.target.files[0] !== file) return;
     const ratio = suggestRatio(dimensions.width, dimensions.height);
     selectedImage = { name: file.name, dataUrl };
     $('[name="ratio"]', imageForm).value = ratio;
@@ -2686,8 +2716,13 @@ $('input[name="file"]', imageForm).addEventListener("change", async (event) => {
     syncImageActionState();
     updateImagePreview();
     saveLocalDraft(imageForm);
+    checkSelectedImage(selectedImage);
   } catch (error) {
+    if (event.target.files[0] !== file) return;
     selectedImage = null;
+    updateImagePreview();
+    syncAiAvailability();
+    syncImageActionState();
     showError(imageResult, error);
   }
 });
@@ -2836,9 +2871,12 @@ imageForm.addEventListener("submit", async (event) => {
   syncImageActionState();
   try {
     const data = imagePayload();
+    const submittedImage = selectedImage;
     showResult(imageResult, data.draft ? "正在保存图片草稿..." : "正在检查并发布图片...");
     if (!imageForm.dataset.editFile && !selectedImage) throw new Error("请选择图片或 GIF。");
     const quality = await api("/api/quality/image", data);
+    if (submittedImage !== selectedImage) throw new Error("图片已更换，请重新检查后保存。");
+    if (quality.similarity) renderImageDuplicates(quality.similarity, quality.duplicates);
     if (!quality.ok) {
       showResult(imageResult, formatQuality(quality));
       return;
@@ -2848,6 +2886,7 @@ imageForm.addEventListener("submit", async (event) => {
       showResult(imageResult, "已取消发布，请调整内容后再试。");
       return;
     }
+    if (quality.asset) data.similarityReviewedSha256 = quality.asset.sha256;
     const result = imageForm.dataset.editFile
       ? await api("/api/content/update", {
           type: "image",

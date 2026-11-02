@@ -321,3 +321,29 @@ PUBLISHER_MAX_IMAGE_DIMENSION="6000"
 公开站点不需要数据库，也不会启动线上后台。本地发布台使用可删除重建的 SQLite 管理索引，Astro 只读取公开 Markdown 和图片文件。原创文章可以不填写外部来源链接；转载和编辑整理内容仍必须保留真实来源链接，完整正文会进入公开 Markdown，并在本机私有来源库保留备份。数据边界见 [`ADR-007`](../site/docs/decisions/ADR-007-local-sqlite-index.md) 与 [`ADR-010`](../site/docs/decisions/ADR-010-external-article-full-body-publication.md)。
 
 本地发布助手的长期开发约束、状态模型、批处理规则、恢复边界和提交清单见 [`LOCAL_PUBLISHER_ENGINEERING_STANDARD.md`](docs/LOCAL_PUBLISHER_ENGINEERING_STANDARD.md)。本轮可靠性复盘见 [`LOCAL_PUBLISHER_RELIABILITY_RETROSPECTIVE_2026-07-29.md`](docs/LOCAL_PUBLISHER_RELIABILITY_RETROSPECTIVE_2026-07-29.md)，发布事实链决策见 [`ADR-015`](../site/docs/decisions/ADR-015-local-publication-fact-chain.md)。
+
+## 图片查重与指纹存放
+
+通过发布助手选择图片时会自动检查已有图片；保存时再次检查。完全相同的文件阻止重复发布，
+疑似相似图片提供缩略图和原图入口，比较后可确认保留不同版本，不会自动删除或合并。
+保存确认绑定本次上传文件的 SHA-256，更换文件后必须重新检查。
+
+现有 SHA-256 的位置：
+
+- R2 台账：`workflow/records/r2-assets.jsonl` 的 `sha256` 字段。
+- R2 对象键：`memes/<sha256>.<ext>`；私有字节备份也以完整指纹命名。
+- 用户提供素材的授权台账：`workflow/records/user-provided-assets.jsonl` 同时记录 `sha256`。
+- 旧本地图片：从 `site/public/images/memes/` 读取文件，在查重时计算；没有独立持久化 SHA 表。
+- SQLite 的 `content_sha256` 是 Markdown 内容版本指纹，不能当作图片字节指纹使用。
+
+相似图采用 pHash 与 dHash 联合比较，归一化方向、尺寸和灰度，优先覆盖压缩、缩放和格式转换。
+它是人工复核提示，裁剪、加字或不同构图可能漏检；GIF 只比较首帧。
+低信息量的纯色图不做相似判定，仍保留精确文件查重。
+
+派生指纹保存在 `workflow/.runtime/image-fingerprints-v1.json`，按图片 SHA-256 关联。
+该文件被 Git 忽略，不上传 Cloudflare，可以删除后从原始字节重建；损坏时自动重建。
+缓存写入失败时当次仍能比较，源图片和台账不受影响。
+R2 图片从已有私有字节备份或已生成的指纹缓存比较；缺少可比对内容时明确提示数量，
+不会暗中联网下载，也不会把未检查的图片算作无重复。需要补齐字节时使用已有 `npm run r2:backup`。
+
+当前 11 张图片已完成指纹初始化。相似度计算在本机完成，M4 继续用于离线推荐。
