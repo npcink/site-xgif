@@ -19,8 +19,10 @@ XGIF 是一个单人维护的轻内容站，当前生产闭环已经完成：
 本阶段完整历史、问题和经验见 [开发复盘](DEVELOPMENT_RETROSPECTIVE_2026-07-24.md)、[开发历史与经验归纳](DEVELOPMENT_HISTORY_AND_LESSONS_2026-08-03.md)、[2026-08-03 实施收口](NEXT_STAGE_IMPLEMENTATION_CLOSEOUT_2026-08-03.md)和 [最近一次生产闭环复盘](DEVELOPMENT_RETROSPECTIVE_2026-08-03.md)；后续开发必须遵守 [开发与交付规范](DEVELOPMENT_AND_DELIVERY_STANDARD.md)，发布收尾按 [发布、恢复与阶段收尾规范](RELEASE_CLOSURE_STANDARD.md)执行，历史分支、worktree 和本地运行状态的最终清理按 [仓库收尾与 Git 卫生规范](REPOSITORY_CLOSEOUT_AND_GIT_HYGIENE_STANDARD.md)执行。发布助手的详细演进和维护顺序见 [最终交接](../../workflow/docs/LOCAL_PUBLISHER_FINAL_HANDOFF_2026-07-30.md)，产品复盘见 [本地发布助手阶段复盘](../../workflow/docs/LOCAL_PUBLISHER_RETROSPECTIVE_2026-07-24.md)。
 
 2026-11-02 连续浏览与 M4 离线推荐已通过 PR #51、#52 合并，生产巡检通过。
+图片精确查重与相似图提示已通过 PR #53 合并，本机主工作区已更新并验证。
 行为、会话统计边界、内容发布拦截、图片查重及验证证据见
-[连续浏览与推荐改进](DISCOVERY_IMPROVEMENTS_2026-11-02.md)。
+[连续浏览与推荐改进](DISCOVERY_IMPROVEMENTS_2026-11-02.md)，本轮经验、清理依据和后续观察见
+[阶段复盘与收尾](DISCOVERY_CLOSEOUT_2026-11-02.md)。
 
 ## 2. 不可破坏的架构边界
 
@@ -47,13 +49,17 @@ XGIF 是一个单人维护的轻内容站，当前生产闭环已经完成：
 
 ### 文章
 
-- URL 使用不可变 `contentId`：`YYYYMMDD-xxxx`
+- 文章和图片详情 URL 共用不可变 `contentId`：`YYYYMMDD-xxxx`，保留连字符；日期取生成 ID 时使用的发布日期，生成后不跟随日期编辑而改变
 - 标题和发布日期可以修改，`contentId` 不可修改
 - 外部来源文章必须保留有效 `sourceUrl`
 - 公开文章展示完整正文
 - 导入正文只允许纯文本和 Markdown，不允许原始 HTML
 - `editorNote` 可以公开，`internalNote` 只在本地显示
 - 权利反馈邮箱：`1355471563@qq.com`
+
+链接契约以 [ADR-008](decisions/ADR-008-stable-content-ids.md) 为准。
+2026-11-02 已确认保留带连字符格式；历史讨论与重新评估条件见
+[内容链接格式讨论收口](CONTENT_URL_DISCUSSION_CLOSEOUT_2026-11-02.md)。
 
 ### 图片
 
