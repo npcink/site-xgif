@@ -77,3 +77,44 @@ test("image actions expose the original and copy a usable link when clipboard is
   await expect(page.locator("[data-copy-fallback]")).toBeVisible();
   await expect(page.locator("[data-copy-fallback]")).toHaveValue(/\/20260725-0e6n$/);
 });
+
+test("local metrics count actual views and recommendation clicks without uploading them", async ({ page }) => {
+  await page.goto("/20260722-3u91");
+  await expect.poll(() => page.evaluate(() => JSON.parse(sessionStorage.getItem("xgif:discovery-metrics:v1")).articleViews)).toBe(1);
+  const next = page.locator("main .article-recommendation:visible").first();
+  await next.click();
+  await expect(page.locator("[data-detail-dialog]")).toHaveAttribute("aria-busy", "false");
+  await page.goto("/activity");
+  await expect(page.locator('[data-metric="articleViews"]')).toHaveText("2");
+  await expect(page.locator('[data-metric="recommendationClicks"]')).toHaveText("1");
+  const download = page.waitForEvent("download");
+  await page.getByRole("button", { name: "导出本次记录" }).click();
+  expect((await download).suggestedFilename()).toBe("xgif-browsing.json");
+});
+
+test("storage denial leaves recommendations and navigation usable", async ({ page }) => {
+  await page.addInitScript(() => Object.defineProperty(window, "sessionStorage", { get() { throw new Error("denied"); } }));
+  await page.goto("/20260722-3u91");
+  await page.locator("main .article-recommendation:visible").first().click();
+  await expect(page.locator("[data-detail-dialog]")).toHaveAttribute("aria-busy", "false");
+  await page.goto("/activity");
+  await expect(page.locator("[data-activity-status]")).toContainText("未允许保存记录");
+});
+
+
+test("static navigation and initial recommendations work without JavaScript", async ({ browser, baseURL }) => {
+  const context = await browser.newContext({ javaScriptEnabled: false });
+  const page = await context.newPage();
+  await page.route("https://img.xgif.cn/**", (route) => route.abort());
+  try {
+    await page.goto(`${baseURL}/20260725-0e6n`);
+    await expect(page.getByRole("heading", { name: "接着看图片" })).toBeVisible();
+    const next = page.locator('main a[data-recommendation-id][data-detail-kind="image"]:visible').first();
+    const href = await next.getAttribute("href");
+    await next.click();
+    await expect(page).toHaveURL(`${baseURL}${href}`);
+    await expect(page.locator("main [data-detail-content]")).toBeVisible();
+  } finally {
+    await context.close();
+  }
+});

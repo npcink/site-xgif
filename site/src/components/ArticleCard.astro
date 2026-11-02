@@ -28,7 +28,7 @@ const { Content } = await render(article);
     <time datetime={article.data.pubDate.toISOString()}>{formatShortDate(article.data.pubDate)}</time>
   </div>
   <h3><a href={href} data-detail-link data-detail-kind="article">{article.data.title}</a></h3>
-  {isShortForm ? <div class="article-inline-text prose"><Content /></div> : <p>{article.data.summary}</p>}
+  {isShortForm ? <div class="article-inline-text prose"><Content /><span data-reading-end aria-hidden="true"></span></div> : <p>{article.data.summary}</p>}
   {editorNote && <blockquote>{editorNote}</blockquote>}
   <div class="card-tags">
     {article.data.tags.map((tag) => <a href={`/tags/${encodeURIComponent(tag)}`}>#{tag}</a>)}

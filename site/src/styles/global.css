@@ -722,6 +722,13 @@ body.detail-dialog-open { overflow: hidden; }
 .image-save-hint, .action-feedback { color: var(--muted); font-size: 12px; line-height: 1.6; margin: 10px 0 0; }
 .action-feedback:empty { display: none; }
 .copy-link-fallback { width: 100%; min-height: 44px; margin-top: 10px; }
+[data-reading-end] { display: block; height: 1px; }
+.activity-page > h1 { font-size: clamp(36px, 6vw, 64px); }
+.activity-page > p { max-width: 65ch; line-height: 1.7; color: var(--muted); }
+.activity-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 28px; margin: 40px 0; }
+.activity-stats dt { color: var(--muted); font-size: 13px; }
+.activity-stats dd { margin: 10px 0 0; font-size: 36px; font-weight: 750; }
+.activity-continue { margin-left: 20px; font-weight: 700; }
 
 .favorites-page { max-width: 1200px; min-height: 70svh; margin: 0 auto; padding: 90px 5vw 130px; }
 .favorites-heading { max-width: 880px; }

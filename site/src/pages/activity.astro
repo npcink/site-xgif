@@ -1,0 +1,27 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import { pageTitle } from "../config/site";
+---
+
+<BaseLayout title={pageTitle("本次浏览")} noindex>
+  <section class="legal-page activity-page">
+    <h1>这次逛了多少？</h1>
+    <p>仅记录当前标签页的浏览情况，不上传到服务器。通常在关闭标签页后清除；浏览器恢复会话时可能恢复这些记录。</p>
+    <dl class="activity-stats">
+      <div><dt>打开 / 展示的文字</dt><dd data-metric="articleViews">0</dd></div>
+      <div><dt>打开的图片</dt><dd data-metric="imageViews">0</dd></div>
+      <div><dt>重复打开</dt><dd data-metric="repeatViews">0</dd></div>
+      <div><dt>看见的推荐</dt><dd data-metric="recommendationImpressions">0</dd></div>
+      <div><dt>点击的推荐</dt><dd data-metric="recommendationClicks">0</dd></div>
+      <div><dt>推荐点击率</dt><dd data-click-rate>0%</dd></div>
+      <div><dt>看到文字末尾</dt><dd data-metric="reachedEnd">0</dd></div>
+    </dl>
+    <p>推荐进入可见区域才计为“看见”；文字末尾停留至少 1.5 秒才计数，这不能证明已经读完。</p>
+    <p>这里只反映你当前标签页的使用情况，不代表全站访客表现。</p>
+    <button class="primary-button" type="button" data-export-activity>导出本次记录</button>
+    <a class="activity-continue" href="/">继续逛 →</a>
+    <p data-activity-status role="status"></p>
+    <noscript><p>启用 JavaScript 后，才能记录和查看本次浏览。</p></noscript>
+  </section>
+  <script is:inline type="module" src="/scripts/activity-page.js"></script>
+</BaseLayout>

@@ -22,6 +22,7 @@ export const siteConfig = {
     { href: "/about", label: "关于" },
     { href: "/rights", label: "版权与更正" },
     { href: "/privacy", label: "隐私" },
+    { href: "/activity", label: "本次浏览" },
     { href: "/rss.xml", label: "RSS" },
   ],
   rss: {

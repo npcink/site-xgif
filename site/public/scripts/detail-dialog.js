@@ -152,6 +152,7 @@
       body.hidden = true;
       loading.hidden = false;
       unlockPage();
+      window.dispatchEvent(new CustomEvent("xgif:detail-closed"));
       if (Number.isFinite(scrollY)) window.scrollTo({ top: scrollY, behavior: "auto" });
       if (lastTrigger instanceof HTMLElement && lastTrigger.isConnected) {
         lastTrigger.focus({ preventScroll: true });
