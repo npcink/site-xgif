@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, readFile, writeFile } from "node:fs/promises";
 import { request } from "node:http";
 import os from "node:os";
 import path from "node:path";
@@ -8,6 +9,8 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 
 const workflowRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const heldFixture = path.join(workflowRoot, "../site/src/content/articles/20990101-hold.md");
+let fixtureCreated = false;
 const port = 18_000 + (process.pid % 10_000);
 const temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), "xgif-http-integration-"));
 const child = spawn(process.execPath, ["--disable-warning=ExperimentalWarning", "server.js"], {
@@ -246,6 +249,67 @@ try {
   assert.equal(genericSource.json().ok, true);
   assert.match(genericSource.json().issues.map((item) => item.message).join(" "), /只指向网站首页/);
   assert.doesNotMatch(genericSource.json().issues.map((item) => item.message).join(" "), /同一原文拆分/);
+  const post = (pathname, data) => call({
+    method: "POST", pathname,
+    headers: { "content-type": "application/json", "x-xgif-csrf": csrf },
+    body: JSON.stringify(data),
+  });
+  const article = {
+    title: "发布拦截测试", summary: "一段用于验证发布限制的普通摘要。",
+    source: "原创内容", sourceKind: "original", tags: ["生活"],
+    recommendationGroup: "general", body: "用于验证的普通正文。",
+  };
+  const processingReply = await post("/api/publish/article", {
+    ...article, summary: "无法按原文整理。如需，我可以提供其他帮助。", draft: false,
+  });
+  assert.equal(processingReply.status, 422);
+  assert.match(processingReply.json().error, /AI 处理回复/);
+  const heldQuality = await post("/api/quality/article", { ...article, publicationHold: true });
+  assert.equal(heldQuality.json().ok, false);
+  assert.match(heldQuality.json().issues.map((item) => item.message).join(" "), /禁止公开发布/);
+
+  await writeFile(heldFixture, `---
+contentId: "20990101-hold"
+title: "发布拦截测试"
+summary: "普通摘要"
+source: "原创内容"
+sourceKind: "original"
+tags: ["生活"]
+pubDate: 2099-01-01
+recommendationGroup: "general"
+publicationHold: true
+draft: true
+---
+
+用于验证的普通正文。
+`, { flag: "wx" });
+  fixtureCreated = true;
+  const file = "site/src/content/articles/20990101-hold.md";
+  const version = async () => createHash("sha256").update(await readFile(heldFixture)).digest("hex");
+  for (const publicationHold of [undefined, false]) {
+    const saved = await post("/api/content/update", {
+      type: "article", file, expectedContentSha256: await version(),
+      data: { ...article, draft: true, publicationHold },
+    });
+    assert.equal(saved.status, 200, saved.body);
+    assert.match(await readFile(heldFixture, "utf8"), /publicationHold: true/);
+  }
+  const before = await readFile(heldFixture, "utf8");
+  const publishHeld = await post("/api/content/update", {
+    type: "article", file, expectedContentSha256: await version(),
+    data: { ...article, draft: false, publicationHold: false },
+  });
+  assert.equal(publishHeld.status, 422);
+  assert.match(publishHeld.json().error, /禁止公开发布/);
+  const batchHeld = await post("/api/content/batch", {
+    action: "publish", autoOrganizeParagraphs: true, confirmInternalReview: true,
+    items: [{ type: "article", file, expectedContentSha256: await version(), recommendationGroup: "general" }],
+  });
+  assert.equal(batchHeld.status, 200, batchHeld.body);
+  assert.equal(batchHeld.json().succeeded.length, 0);
+  assert.equal(batchHeld.json().failed.length, 1);
+  assert.match(JSON.stringify(batchHeld.json().failed), /禁止公开发布/);
+  assert.equal(await readFile(heldFixture, "utf8"), before);
   console.log("本地发布器 HTTP 集成检查通过。");
 } finally {
   child.kill("SIGTERM");
@@ -253,5 +317,6 @@ try {
     new Promise((resolve) => child.once("exit", resolve)),
     new Promise((resolve) => setTimeout(resolve, 3_000)),
   ]);
+  if (fixtureCreated) await rm(heldFixture, { force: true });
   await rm(temporaryDirectory, { recursive: true, force: true });
 }

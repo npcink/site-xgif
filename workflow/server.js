@@ -20,6 +20,7 @@ import {
   inspectArticleBatchPreparation,
 } from "./batch-publication.js";
 import { auditContentLibrary } from "./content-audit.js";
+import { isProcessingReply } from "../site/src/lib/content-quality.mjs";
 import { createContentId, isContentId } from "./content-id.js";
 import {
   canonicalTagsPrompt,
@@ -1877,11 +1878,17 @@ function buildArticleMarkdown(payload) {
   const coverAlt = String(payload.coverAlt || "").trim();
   const coverImageLine = coverImage ? `coverImage: ${yamlString(coverImage)}\n` : "";
   const coverAltLine = coverImage && coverAlt ? `coverAlt: ${yamlString(coverAlt)}\n` : "";
+  const publicationHoldLine = payload.publicationHold === true ? "publicationHold: true\n" : "";
   const shortFormReviewedLine = payload.shortFormReviewed === true ? "shortFormReviewed: true\n" : "";
-  return `---\ntitle: ${yamlString(payload.title)}\ncontentId: ${yamlString(payload.contentId)}\nsummary: ${yamlString(payload.summary)}\nsource: ${yamlString(payload.source)}\n${sourceUrlLine}sourceKind: ${yamlString(payload.sourceKind || "original")}\ntags: ${yamlArray(tags)}\npubDate: ${date}\nreadTime: ${yamlString(payload.readTime || "1 分钟")}\n${recommendationGroupLine}${editorNoteLine}${internalNoteLine}${internalReviewStatusLine}${internalReviewResolvedAtLine}${coverImageLine}${coverAltLine}${shortFormReviewedLine}featured: ${Boolean(payload.featured)}\ndraft: ${Boolean(payload.draft)}\n---\n\n${markdownBody(payload.body)}`;
+  return `---\ntitle: ${yamlString(payload.title)}\ncontentId: ${yamlString(payload.contentId)}\nsummary: ${yamlString(payload.summary)}\nsource: ${yamlString(payload.source)}\n${sourceUrlLine}sourceKind: ${yamlString(payload.sourceKind || "original")}\ntags: ${yamlArray(tags)}\npubDate: ${date}\nreadTime: ${yamlString(payload.readTime || "1 分钟")}\n${recommendationGroupLine}${editorNoteLine}${internalNoteLine}${internalReviewStatusLine}${internalReviewResolvedAtLine}${coverImageLine}${coverAltLine}${shortFormReviewedLine}${publicationHoldLine}featured: ${Boolean(payload.featured)}\ndraft: ${Boolean(payload.draft)}\n---\n\n${markdownBody(payload.body)}`;
 }
 
 function validateArticleAttribution(payload) {
+  if (!payload.draft && payload.publicationHold === true) {
+    const error = new Error("此内容已禁止公开发布，请保留为草稿。");
+    error.statusCode = 422;
+    throw error;
+  }
   const sourceKind = String(payload.sourceKind || "original").trim();
   if (!["original", "publication", "editorial", "unknown"].includes(sourceKind)) {
     const error = new Error("文章来源类型无效。");
@@ -1930,6 +1937,8 @@ function overlongMarkdownParagraphs(body, maxCharacters = 180) {
 async function checkArticleQuality(payload) {
   const issues = [];
   const tags = normalizeList(payload.tags);
+  if (payload.publicationHold === true) issues.push(qualityIssue("error", "此内容已禁止公开发布，请保留为草稿。"));
+  if (isProcessingReply(payload.summary)) issues.push(qualityIssue("error", "摘要包含 AI 处理回复，请改为准确的内容摘要。"));
   if (!String(payload.title || "").trim()) issues.push(qualityIssue("error", "缺少标题。"));
   else if (isPlaceholderArticleTitle(payload.title)) {
     issues.push(qualityIssue("error", "标题仍是占位标题，正式发布前必须确认标题。"));
@@ -2179,6 +2188,8 @@ async function updateManagedContent(
     const articlePayload = validateArticleAttribution({
       ...existing.data,
       ...payload,
+      // A normal editor save cannot lift an existing publication hold.
+      publicationHold: existing.data.publicationHold === true || payload.publicationHold === true,
       body: Object.hasOwn(payload, "body") ? payload.body : existing.body,
       excludeFile: file,
     });
@@ -2522,6 +2533,7 @@ async function publishBatchDrafts(input) {
 
       if (item.type === "article") {
         next.recommendationGroup = requestedItem.recommendationGroup;
+        validateArticleAttribution(next);
         const longParagraphs = overlongMarkdownParagraphs(next.body);
         if (longParagraphs.length) {
           if (input.autoOrganizeParagraphs !== true) {
