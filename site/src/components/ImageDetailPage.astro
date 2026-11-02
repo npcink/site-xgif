@@ -69,7 +69,12 @@ const imageAspectRatio =
           title={item.data.title}
           href={canonicalPath}
         />
+        <a class="image-original-link" href={item.data.image} target="_blank" rel="noreferrer">查看 / 保存原图 ↗</a>
+        <button class="copy-link-button" type="button" data-copy-url={canonicalPath}>复制链接</button>
       </div>
+      <p class="image-save-hint">打开原图后，可长按或右键保存。</p>
+      <p class="action-feedback" data-copy-status role="status" aria-live="polite"></p>
+      <input class="copy-link-fallback" data-copy-fallback aria-label="图片链接，可选择后复制" readonly hidden />
       <div class="prose image-note"><Content /></div>
       <p class="image-source">
         {isUserProvided

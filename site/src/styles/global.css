@@ -716,7 +716,12 @@ body.detail-dialog-open { overflow: hidden; }
 .favorite-toggle-mark { font-size: 18px; line-height: 1; }
 .detail-favorite-standalone { margin-top: 24px; }
 .detail-dialog .detail-favorite-standalone { display: none; }
-.image-detail-actions { margin-top: 24px; }
+.image-detail-actions { margin-top: 24px; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.image-original-link, .copy-link-button { min-height: 44px; display: inline-flex; align-items: center; padding: 10px 12px; border: 1px solid var(--ink); border-radius: 2px; font-size: 12px; font-weight: 700; background: transparent; cursor: pointer; }
+.image-original-link:hover, .copy-link-button:hover { background: var(--yellow); }
+.image-save-hint, .action-feedback { color: var(--muted); font-size: 12px; line-height: 1.6; margin: 10px 0 0; }
+.action-feedback:empty { display: none; }
+.copy-link-fallback { width: 100%; min-height: 44px; margin-top: 10px; }
 
 .favorites-page { max-width: 1200px; min-height: 70svh; margin: 0 auto; padding: 90px 5vw 130px; }
 .favorites-heading { max-width: 880px; }
