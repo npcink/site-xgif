@@ -4,9 +4,11 @@ import { contentHref } from "../lib/content";
 
 interface Props {
   item: CollectionEntry<"images">;
+  recommendation?: boolean;
+  hidden?: boolean;
 }
 
-const { item } = Astro.props;
+const { item, recommendation = false, hidden = false } = Astro.props;
 const href = contentHref(item);
 ---
 
@@ -15,6 +17,8 @@ const href = contentHref(item);
   href={href}
   data-detail-link
   data-detail-kind="image"
+  data-recommendation-id={recommendation ? item.data.contentId : undefined}
+  hidden={hidden}
   data-search-item
   data-search={`${item.data.title} ${item.data.description} ${item.data.source} ${item.data.tags.join(" ")} ${item.data.mood.join(" ")} ${item.data.scenes.join(" ")}`.toLowerCase()}
   aria-label={`查看图片：${item.data.title}`}

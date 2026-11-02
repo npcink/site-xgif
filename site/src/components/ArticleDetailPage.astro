@@ -2,7 +2,7 @@
 import { getCollection, render, type CollectionEntry } from "astro:content";
 import ArticleRecommendations from "./ArticleRecommendations.astro";
 import FavoriteButton from "./FavoriteButton.astro";
-import ImageCard from "./ImageCard.astro";
+import ImageRecommendations from "./ImageRecommendations.astro";
 import {
   contentHref,
   formatShortDate,
@@ -27,11 +27,11 @@ const [allArticles, allImages] = await Promise.all([
 const recommendedArticles = selectArticleRecommendations(
   article,
   allArticles,
-  3,
+  12,
   staticRecommendationIds(article.data.contentId, "articles"),
 );
 const relatedImages = selectContentRecommendations(article, allImages, {
-  limit: 3,
+  limit: 8,
   relatedSlots: 3,
   allowSurprise: false,
   preferredIds: staticRecommendationIds(article.data.contentId, "images"),
@@ -63,7 +63,7 @@ const dialogTitleSize = titleLength <= 12
   </aside>
 )}
 
-<article class="detail-page article-detail" data-detail-content data-detail-kind="article">
+<article class="detail-page article-detail" data-detail-content data-detail-kind="article" data-content-id={article.data.contentId}>
   <header class="detail-header">
     <a class="back-link" href="/articles">← 返回文章列表</a>
     <div class="detail-meta">
@@ -147,13 +147,5 @@ const dialogTitleSize = titleLength <= 12
   </div>
 
   <ArticleRecommendations articles={recommendedArticles} />
+  <ImageRecommendations images={relatedImages} />
 </article>
-
-{relatedImages.length > 0 && (
-  <section class="related-section">
-    <div class="content-title"><h2>相关图片 / 表情包</h2><a href="/images">更多图片 →</a></div>
-    <div class="masonry-grid compact-grid">
-      {relatedImages.map((item) => <ImageCard item={item} />)}
-    </div>
-  </section>
-)}

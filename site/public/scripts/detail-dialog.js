@@ -122,6 +122,7 @@
       }
       document.title = payload.title;
       setLoading(false);
+      window.dispatchEvent(new CustomEvent("xgif:detail-opened", { detail: { root: body } }));
       closeButton?.focus({ preventScroll: true });
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;

@@ -421,6 +421,10 @@ body.detail-dialog-open { overflow: hidden; }
 .detail-dialog-body .image-detail-copy h1 { margin: 30px 0 18px; font-size: 40px; line-height: 1.08; }
 .detail-dialog-body .image-detail-copy .detail-summary { font-size: 17px; line-height: 1.7; }
 .detail-dialog-body .image-detail-copy dl { display: none; }
+.detail-page > .related-section { padding: 0; margin-top: 48px; }
+.detail-dialog-body > .image-detail > .related-section,
+.detail-dialog-body > .image-detail > .article-recommendations { padding: 28px; margin: 0; }
+.recommendations-exhausted { color: var(--muted); line-height: 1.7; }
 .detail-dialog-body .image-detail-copy .image-note { display: none; }
 .image-source { margin: auto 0 0; padding-top: 35px; color: var(--muted); font-family: var(--font-geist-mono); font-size: 10px; }
 .image-source a { color: var(--ink); font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }

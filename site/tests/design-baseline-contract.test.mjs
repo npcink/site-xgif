@@ -141,7 +141,7 @@ test("article and tag routes retain their direct-reading and discovery hierarchy
   assert.match(articleDetail, /class:list=\{\["detail-grid"/);
   assert.match(articleDetail, /hasArticleSidebar/);
   assert.match(articleDetail, /detail-grid--single/);
-  assert.match(articleDetail, /class="related-section"/);
+  assert.match(articleDetail, /<ImageRecommendations images=\{relatedImages\}/);
   assert.match(tagIndex, /class="archive-hero tags-archive-hero"/);
   assert.match(tagIndex, /class="tag-index"/);
   assert.match(tagDetail, /class="tag-detail-hero"/);

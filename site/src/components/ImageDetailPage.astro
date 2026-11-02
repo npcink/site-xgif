@@ -1,6 +1,7 @@
 ---
 import { getCollection, render, type CollectionEntry } from "astro:content";
-import ArticleCard from "./ArticleCard.astro";
+import ArticleRecommendations from "./ArticleRecommendations.astro";
+import ImageRecommendations from "./ImageRecommendations.astro";
 import FavoriteButton from "./FavoriteButton.astro";
 import { contentHref, selectContentRecommendations } from "../lib/content";
 import { staticRecommendationIds } from "../lib/recommendation-manifest";
@@ -13,8 +14,15 @@ const { item } = Astro.props;
 const canonicalPath = contentHref(item);
 const { Content } = await render(item);
 const allArticles = (await getCollection("articles")).filter((entry) => !entry.data.draft);
+const allImages = (await getCollection("images")).filter((entry) => !entry.data.draft && entry.data.public);
+const relatedImages = selectContentRecommendations(item, allImages, {
+  limit: 8,
+  relatedSlots: 8,
+  allowSurprise: false,
+  preferredIds: staticRecommendationIds(item.data.contentId, "images"),
+});
 const relatedArticles = selectContentRecommendations(item, allArticles, {
-  limit: 2,
+  limit: 8,
   relatedSlots: 2,
   allowSurprise: false,
   preferredIds: staticRecommendationIds(item.data.contentId, "articles"),
@@ -27,7 +35,7 @@ const imageAspectRatio =
     : undefined;
 ---
 
-<article class="detail-page image-detail" data-detail-content data-detail-kind="image">
+<article class="detail-page image-detail" data-detail-content data-detail-kind="image" data-content-id={item.data.contentId}>
   <a class="back-link" href="/images">← 返回图片库</a>
   <div class="image-detail-grid">
     <figure
@@ -72,13 +80,6 @@ const imageAspectRatio =
       </p>
     </div>
   </div>
+  <ImageRecommendations images={relatedImages} />
+  <ArticleRecommendations articles={relatedArticles} limit={2} title="换个口味，读一篇" />
 </article>
-
-{relatedArticles.length > 0 && (
-  <section class="related-section">
-    <div class="content-title"><h2>相关文章</h2><a href="/articles">更多文章 →</a></div>
-    <div class="article-grid">
-      {relatedArticles.map((article, index) => <ArticleCard article={article} index={index} />)}
-    </div>
-  </section>
-)}
