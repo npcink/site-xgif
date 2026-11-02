@@ -99,7 +99,8 @@ async function waitForImages(page) {
 }
 
 async function openImageDialog(page) {
-  await page.goto("/images", { waitUntil: "networkidle" });
+  // Offscreen CDN requests do not determine whether this dialog is ready.
+  await page.goto("/images", { waitUntil: "domcontentloaded" });
   await waitForImages(page);
   await page.locator('a[href="/20260723-z4xw"][data-detail-link]').click();
   const dialog = page.getByRole("dialog", { name: "去摧毁金融区吧" });
