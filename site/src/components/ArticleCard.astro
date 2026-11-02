@@ -1,5 +1,5 @@
 ---
-import type { CollectionEntry } from "astro:content";
+import { render, type CollectionEntry } from "astro:content";
 import { contentHref, formatShortDate, publicArticleNote } from "../lib/content";
 
 interface Props {
@@ -12,10 +12,14 @@ const accents = ["coral", "sage", "blue", "yellow"];
 const accent = accents[index % accents.length];
 const editorNote = publicArticleNote(article.data);
 const href = contentHref(article);
+const isShortForm = article.data.recommendationGroup !== "adult-humor"
+  && Boolean(article.body?.trim()) && [...(article.body || "").trim()].length <= 300;
+const { Content } = await render(article);
 ---
 
 <article
-  class:list={["article-card", accent]}
+  class:list={["article-card", accent, { "article-card--short": isShortForm }]}
+  data-inline-content-id={isShortForm ? article.data.contentId : undefined}
   data-search-item
   data-search={`${article.data.title} ${article.data.summary} ${article.data.source} ${article.data.tags.join(" ")}`.toLowerCase()}
 >
@@ -23,15 +27,14 @@ const href = contentHref(article);
     <span>{article.data.source}</span>
     <time datetime={article.data.pubDate.toISOString()}>{formatShortDate(article.data.pubDate)}</time>
   </div>
-  <div class="article-number">{String(index + 1).padStart(2, "0")}</div>
   <h3><a href={href} data-detail-link data-detail-kind="article">{article.data.title}</a></h3>
-  <p>{article.data.summary}</p>
+  {isShortForm ? <div class="article-inline-text prose"><Content /><span data-reading-end aria-hidden="true"></span></div> : <p>{article.data.summary}</p>}
   {editorNote && <blockquote>{editorNote}</blockquote>}
   <div class="card-tags">
     {article.data.tags.map((tag) => <a href={`/tags/${encodeURIComponent(tag)}`}>#{tag}</a>)}
   </div>
   <div class="article-footer">
     <span>{article.data.readTime}</span>
-    <a href={href} data-detail-link data-detail-kind="article">读完整摘要 <span aria-hidden="true">→</span></a>
+    <a href={href} data-detail-link data-detail-kind="article">{isShortForm ? "接着看" : "阅读全文"} <span aria-hidden="true">→</span></a>
   </div>
 </article>

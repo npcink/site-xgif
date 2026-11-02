@@ -46,7 +46,7 @@ test("home and discovery routes preserve the editorial visual hierarchy", async 
 
   assert.match(home, /class="hero"/);
   assert.match(home, /class="tag-ticker"/);
-  assert.match(home, /class="article-grid"/);
+  assert.match(home, /class="home-feed"/);
   assert.match(imageCard, /class:list=\{\["image-card", item\.data\.ratio\]\}/);
   assert.match(imageCard, /class="image-shade"/);
   assert.match(search, /class="search-page"/);
@@ -54,16 +54,16 @@ test("home and discovery routes preserve the editorial visual hierarchy", async 
   assert.match(styles, /@fontsource-variable\/geist/);
   assert.match(styles, /font-family: var\(--font-geist-sans\)/);
   assert.match(styles, /font-family: var\(--font-geist-mono\)/);
-  assert.match(styles, /\.hero \{[\s\S]*min-height: 680px;/);
+  assert.match(styles, /\.hero \{[\s\S]*min-height: 0;/);
   assert.match(home, /data-home-discovery/);
   assert.match(home, /data-home-view="articles"/);
   assert.match(home, /data-home-view="images"/);
   assert.match(home, /data-home-global-search/);
-  assert.match(home, /data-home-section-count/);
+  assert.match(home, /data-home-count/);
   assert.match(home, /class="newsletter-placeholder"/);
   assert.match(homeDiscovery, /data-home-section/);
   assert.match(homeDiscovery, /window\.location\.href/);
-  assert.match(homeDiscovery, /data-home-section-count/);
+  assert.match(homeDiscovery, /data-home-count/);
   assert.doesNotMatch(home, /data-newsletter-form/);
   assert.doesNotMatch(homeDiscovery, /newsletterForm/);
 });
@@ -86,11 +86,11 @@ test("production assets define a defensive Cloudflare header policy", async () =
   assert.match(headers, /X-Content-Type-Options: nosniff/);
 });
 
-test("mobile hero preserves the archived first-screen rhythm", async () => {
+test("mobile hero leaves room for actual content", async () => {
   const styles = await read("src/styles/global.css");
 
-  assert.match(styles, /@media \(max-width: 600px\) \{[\s\S]*\.hero-copy \{ min-height: 560px;/);
-  assert.match(styles, /@media \(max-width: 600px\) \{[\s\S]*\.hero-feature \{ min-height: 560px;/);
+  assert.match(styles, /@media \(max-width: 600px\) \{[\s\S]*\.hero-copy \{ padding: 26px 20px 24px;/);
+  assert.match(styles, /\.hero-feature \{ display: none; \}/);
 });
 
 test("image discovery and search retain filterable archive states", async () => {
@@ -141,7 +141,7 @@ test("article and tag routes retain their direct-reading and discovery hierarchy
   assert.match(articleDetail, /class:list=\{\["detail-grid"/);
   assert.match(articleDetail, /hasArticleSidebar/);
   assert.match(articleDetail, /detail-grid--single/);
-  assert.match(articleDetail, /class="related-section"/);
+  assert.match(articleDetail, /<ImageRecommendations images=\{relatedImages\}/);
   assert.match(tagIndex, /class="archive-hero tags-archive-hero"/);
   assert.match(tagIndex, /class="tag-index"/);
   assert.match(tagDetail, /class="tag-detail-hero"/);

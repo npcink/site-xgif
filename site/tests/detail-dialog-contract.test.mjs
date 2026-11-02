@@ -49,13 +49,14 @@ test("article and image routes expose extractable detail content", async () => {
   assert.match(article, /data-detail-kind="article"/);
   assert.match(article, /class="article-recommendations"/);
   assert.equal(
-    (article.match(/class="article-recommendation"/g) || []).length,
+    (article.match(/class="article-recommendation"[^>]*data-recommendation-id="[^"]+"(?! hidden)[^>]*>/g) || []).length,
     3,
     "公开文章末尾应提供三篇继续阅读内容",
   );
   assert.match(article, /class="article-recommendation"[^>]*data-detail-link/);
   assert.match(image, /data-detail-content/);
   assert.match(image, /data-detail-kind="image"/);
+  assert.match(image, /接着看图片/);
 });
 
 test("unknown-source images expose a direct rights and takedown route", async () => {

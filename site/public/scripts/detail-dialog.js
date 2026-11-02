@@ -122,6 +122,7 @@
       }
       document.title = payload.title;
       setLoading(false);
+      window.dispatchEvent(new CustomEvent("xgif:detail-opened", { detail: { root: body } }));
       closeButton?.focus({ preventScroll: true });
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;
@@ -151,6 +152,7 @@
       body.hidden = true;
       loading.hidden = false;
       unlockPage();
+      window.dispatchEvent(new CustomEvent("xgif:detail-closed"));
       if (Number.isFinite(scrollY)) window.scrollTo({ top: scrollY, behavior: "auto" });
       if (lastTrigger instanceof HTMLElement && lastTrigger.isConnected) {
         lastTrigger.focus({ preventScroll: true });

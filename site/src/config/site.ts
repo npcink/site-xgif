@@ -6,8 +6,8 @@ export const siteConfig = {
     suffix: ".cn",
   },
   locale: "zh-CN",
-  defaultTitle: "xgif.cn — 值得看的，三分钟看懂",
-  description: "整理有趣文章、编辑摘要、网络热点、图片和表情包的轻内容站。",
+  defaultTitle: "xgif.cn · 好图与值得一读的片段",
+  description: "分享收集的图片、表情包和有趣文字，沿着相关推荐继续发现。",
   defaultSocialImage: "/og.png",
   publisherName: "xgif.cn",
   mainNavigation: [
@@ -22,6 +22,7 @@ export const siteConfig = {
     { href: "/about", label: "关于" },
     { href: "/rights", label: "版权与更正" },
     { href: "/privacy", label: "隐私" },
+    { href: "/activity", label: "本次浏览" },
     { href: "/rss.xml", label: "RSS" },
   ],
   rss: {

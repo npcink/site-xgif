@@ -1,0 +1,21 @@
+---
+import type { CollectionEntry } from "astro:content";
+import ImageCard from "./ImageCard.astro";
+
+interface Props {
+  images: CollectionEntry<"images">[];
+  title?: string;
+}
+
+const { images, title = "接着看图片" } = Astro.props;
+---
+
+{images.length > 0 && (
+  <section class="related-section" data-recommendations data-recommendation-limit="3">
+    <div class="content-title"><h2>{title}</h2><a href="/images">更多图片 →</a></div>
+    <div class="masonry-grid compact-grid">
+      {images.map((item, index) => <ImageCard item={item} recommendation hidden={index >= 3} />)}
+    </div>
+    <p class="recommendations-exhausted" data-recommendations-empty hidden>这一组已经看过了，去图片库发现更多。</p>
+  </section>
+)}

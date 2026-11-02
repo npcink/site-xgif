@@ -8,6 +8,8 @@
 
 项目资料：
 
+- 连续浏览与本机推荐验证：[`site/docs/DISCOVERY_IMPROVEMENTS_2026-11-02.md`](site/docs/DISCOVERY_IMPROVEMENTS_2026-11-02.md)
+
 - 当前交接与运行手册：[`site/docs/PROJECT_HANDOFF.md`](site/docs/PROJECT_HANDOFF.md)
 - 开发与交付规范：[`site/docs/DEVELOPMENT_AND_DELIVERY_STANDARD.md`](site/docs/DEVELOPMENT_AND_DELIVERY_STANDARD.md)
 - 开发历史与经验归纳：[`site/docs/DEVELOPMENT_HISTORY_AND_LESSONS_2026-08-03.md`](site/docs/DEVELOPMENT_HISTORY_AND_LESSONS_2026-08-03.md)

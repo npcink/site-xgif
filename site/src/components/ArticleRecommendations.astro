@@ -4,24 +4,28 @@ import { contentHref, formatShortDate } from "../lib/content";
 
 interface Props {
   articles: CollectionEntry<"articles">[];
+  limit?: number;
+  title?: string;
 }
 
-const { articles } = Astro.props;
+const { articles, limit = 3, title = "继续阅读" } = Astro.props;
 ---
 
 {articles.length > 0 && (
-  <section class="article-recommendations" aria-labelledby="article-recommendations-title">
+  <section class="article-recommendations" data-recommendations data-recommendation-limit={limit}>
     <div class="article-recommendations-heading">
-      <h2 id="article-recommendations-title">继续阅读</h2>
+      <h2>{title}</h2>
       <a href="/articles">查看全部文章 →</a>
     </div>
     <div class="article-recommendation-list">
-      {articles.map((item) => (
+      {articles.map((item, index) => (
         <a
           class="article-recommendation"
           href={contentHref(item)}
           data-detail-link
           data-detail-kind="article"
+          data-recommendation-id={item.data.contentId}
+          hidden={index >= limit}
         >
           <span class="article-recommendation-meta">
             <span>{item.data.source}</span>
@@ -33,5 +37,6 @@ const { articles } = Astro.props;
         </a>
       ))}
     </div>
+    <p class="recommendations-exhausted" data-recommendations-empty hidden>这一组已经看过了，去文章库发现更多。</p>
   </section>
 )}

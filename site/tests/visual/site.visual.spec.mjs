@@ -71,12 +71,12 @@ test("key pages satisfy the basic accessibility contract", async ({ page }) => {
 test("homepage discovery distinguishes featured filtering from full-site search", async ({ page }) => {
   await page.goto("/", { waitUntil: "networkidle" });
   const input = page.getByRole("textbox", { name: "筛选首页精选内容" });
-  await expect(page.locator('[data-home-section="articles"] [data-home-section-count]')).toHaveText("08");
-  await expect(page.locator('[data-home-section="images"] [data-home-section-count]')).toHaveText("06");
+  await expect(page.locator('[data-home-count="articles"]')).toHaveText("08");
+  await expect(page.locator('[data-home-count="images"]')).toHaveText("06");
   await input.fill("AI");
   await expect(page.locator("[data-home-visible-count]")).toHaveText("1");
-  await expect(page.locator('[data-home-section="articles"]')).toBeHidden();
-  await expect(page.locator('[data-home-section="images"] [data-home-section-count]')).toHaveText("01");
+  await expect(page.locator('[data-home-section="articles"]').first()).toBeHidden();
+  await expect(page.locator('[data-home-count="images"]')).toHaveText("01");
   await expect(page.locator("[data-home-global-search]")).toHaveAttribute("href", "/search?q=AI");
   await input.press("Enter");
   await expect(page).toHaveURL(/\/search\?q=AI$/);
@@ -85,8 +85,8 @@ test("homepage discovery distinguishes featured filtering from full-site search"
   await expect(page).toHaveURL(/\/$/);
   await expect(input).toHaveValue("AI");
   await expect(page.locator("[data-home-visible-count]")).toHaveText("1");
-  await expect(page.locator('[data-home-section="articles"]')).toBeHidden();
-  await expect(page.locator('[data-home-section="images"] [data-home-section-count]')).toHaveText("01");
+  await expect(page.locator('[data-home-section="articles"]').first()).toBeHidden();
+  await expect(page.locator('[data-home-count="images"]')).toHaveText("01");
 });
 
 async function waitForImages(page) {
@@ -99,7 +99,8 @@ async function waitForImages(page) {
 }
 
 async function openImageDialog(page) {
-  await page.goto("/images", { waitUntil: "networkidle" });
+  // Offscreen CDN requests do not determine whether this dialog is ready.
+  await page.goto("/images", { waitUntil: "domcontentloaded" });
   await waitForImages(page);
   await page.locator('a[href="/20260723-z4xw"][data-detail-link]').click();
   const dialog = page.getByRole("dialog", { name: "去摧毁金融区吧" });
@@ -129,10 +130,10 @@ test("homepage matches the approved visual baseline", async ({ page }, testInfo)
     mask: [
       page.locator(".hero-feature"),
       page.locator(".ticker-track"),
-      page.locator('[data-home-section="articles"] .article-grid'),
-      page.locator('[data-home-section="articles"] .content-title sup'),
-      page.locator('[data-home-section="images"] .masonry-grid'),
-      page.locator('[data-home-section="images"] .content-title sup'),
+      page.locator('[data-home-section="articles"]'),
+      page.locator('[data-home-count="articles"]'),
+      page.locator('[data-home-section="images"]'),
+      page.locator('[data-home-count="images"]'),
     ],
   });
 });

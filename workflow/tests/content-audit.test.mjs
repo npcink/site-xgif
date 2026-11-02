@@ -421,3 +421,15 @@ test("content audit warns about long Markdown paragraphs without blocking public
   assert.equal(item.status, "review");
   assert.match(item.warnings.join(" "), /1 个超过 180 字的长段落/);
 });
+
+
+test("content audit blocks processing replies and publication holds", async () => {
+  const dirs = await fixture();
+  const reply = article().replace('这是一段长度合适、能够清楚说明文章重点的测试摘要。', '无法按原文整理；如需，我可以继续。');
+  const held = article({ contentId: "20260723-0099", draft: true }).replace('draft: true', 'draft: true\npublicationHold: true');
+  await writeFile(path.join(dirs.articlesDir, "20260723-0001.md"), reply);
+  await writeFile(path.join(dirs.articlesDir, "20260723-0099.md"), held);
+  const report = await auditContentLibrary({ repoRoot: dirs.repoRoot });
+  assert.match(report.items.find((item) => item.contentId === "20260723-0001").blockers.join(" "), /AI 处理回复/);
+  assert.match(report.items.find((item) => item.contentId === "20260723-0099").blockers.join(" "), /禁止公开发布/);
+});
