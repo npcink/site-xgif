@@ -20,6 +20,7 @@
   const apply = () => {
     const query = input.value.trim().toLowerCase();
     let visible = 0;
+    const counts = { articles: 0, images: 0 };
 
     sections.forEach((section) => {
       const kind = section.dataset.homeSection;
@@ -37,6 +38,11 @@
       const sectionCount = section.querySelector("[data-home-section-count]");
       if (sectionCount) sectionCount.textContent = String(sectionVisible).padStart(2, "0");
       visible += sectionVisible;
+      counts[kind] += sectionVisible;
+    });
+
+    root.querySelectorAll("[data-home-count]").forEach((counter) => {
+      counter.textContent = String(counts[counter.dataset.homeCount] || 0).padStart(2, "0");
     });
 
     clear.hidden = !query;

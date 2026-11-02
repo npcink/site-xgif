@@ -3,68 +3,59 @@ import { getCollection } from "astro:content";
 import ArticleCard from "../components/ArticleCard.astro";
 import ImageCard from "../components/ImageCard.astro";
 import BaseLayout from "../layouts/BaseLayout.astro";
-import { allTags, contentHref, sortByDate } from "../lib/content";
+import { contentHref, sortByDate } from "../lib/content";
 
 const articles = sortByDate((await getCollection("articles")).filter((entry) => !entry.data.draft));
 const images = sortByDate(
   (await getCollection("images")).filter((entry) => !entry.data.draft && entry.data.public),
 );
-const featured = articles.find((entry) => entry.data.featured) ?? articles[0];
+const featured = articles.find((entry) => entry.data.featured) ?? articles.find((entry) => entry.data.recommendationGroup === "general") ?? articles[0];
 const homeArticles = articles.slice(0, 8);
 const homeImages = images.slice(0, 6);
-const tags = allTags(articles, images);
-const popularTags = ["AI", "互联网", "打工", "无语", "反转", "群聊", "职场", "观察"].filter((tag) =>
-  tags.includes(tag),
-);
+const tagCounts = new Map<string, number>();
+for (const entry of [...articles, ...images]) {
+  for (const tag of new Set(entry.data.tags)) tagCounts.set(tag, (tagCounts.get(tag) || 0) + 1);
+}
+const popularTags = [...tagCounts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "zh-CN")).slice(0, 7).map(([tag]) => tag);
+type FeedItem = { kind: "articles"; article: typeof articles[number] } | { kind: "images"; image: typeof images[number] };
+const feed: FeedItem[] = [];
+for (let index = 0; index < Math.max(homeImages.length, Math.ceil(homeArticles.length / 2)); index += 1) {
+  if (homeImages[index]) feed.push({ kind: "images", image: homeImages[index] });
+  for (const article of homeArticles.slice(index * 2, index * 2 + 2)) feed.push({ kind: "articles", article });
+}
 ---
 
 <BaseLayout>
   <section class="hero" id="top">
     <div class="hero-copy reveal">
-      <p class="eyebrow"><span></span> 轻内容，每日手工整理</p>
-      <h1>值得看的，<br /><em>三分钟看懂。</em></h1>
+      <h1>随手翻翻，<br /><em>总有一条对味。</em></h1>
       <p class="hero-intro">
-        文章负责整理信息，图片负责表达情绪。<br />
-        AI 帮忙归纳，最后由人决定什么值得留下。
+        收集好图和有趣文字，留给想歇一会儿的你。
       </p>
       <div class="hero-actions">
-        <a class="primary-button" href="#discover">开始浏览 <span>↘</span></a>
-        <span class="edition">人工复核 · 保留来源 · 持续更新</span>
+        <a href="/images">找张表情包 →</a>
       </div>
     </div>
 
-    <div class="hero-feature reveal-late" aria-label="今日推荐">
-      <div class="feature-topline"><span>今日推荐</span><span>01 / {String(articles.length).padStart(2, "0")}</span></div>
-      <div class="feature-visual">
-        <div class="feature-orbit orbit-one"></div>
-        <div class="feature-orbit orbit-two"></div>
-        <div class="feature-face">◉</div>
-        <div class="feature-sticker">AI<br />观察</div>
-      </div>
+    {featured && <div class="hero-feature reveal-late" aria-label="先读一篇">
+      <div class="feature-topline"><span>先读一篇</span><span>{featured.data.source}</span></div>
       <div class="feature-copy">
         <span class="mini-label">READ · {featured.data.readTime.toUpperCase()}</span>
         <h2>{featured.data.title}</h2>
+        <p>{featured.data.summary}</p>
         <a href={contentHref(featured)} data-detail-link data-detail-kind="article">阅读全文 <span>→</span></a>
       </div>
-    </div>
+    </div>}
   </section>
 
   <section class="tag-ticker" aria-label="热门标签">
-    <div class="ticker-label">本周热词</div>
+    <div class="ticker-label">常见主题</div>
     <div class="ticker-track">
       {popularTags.slice(0, 5).map((tag) => <a href={`/tags/${encodeURIComponent(tag)}`}>#{tag}</a>)}
     </div>
   </section>
 
   <section class="explore" id="discover">
-    <div class="section-heading">
-      <div>
-        <p class="section-kicker">DISCOVER / 发现</p>
-        <h2>今天有什么好东西？</h2>
-      </div>
-      <p>先从编辑摘要快速了解，也可以继续阅读完整正文。</p>
-    </div>
-
     <div class="search-panel" data-home-discovery>
       <label class="search-box">
         <span aria-hidden="true">⌕</span>
@@ -73,8 +64,8 @@ const popularTags = ["AI", "互联网", "打工", "无语", "反转", "群聊", 
       </label>
       <div class="view-tabs" role="group" aria-label="内容类型">
         <button class="active" type="button" data-home-view="all" aria-pressed="true">全部</button>
-        <button type="button" data-home-view="articles" aria-pressed="false">文章</button>
-        <button type="button" data-home-view="images" aria-pressed="false">图片 / GIF</button>
+        <button type="button" data-home-view="articles" aria-pressed="false">文章 <span data-home-count="articles">08</span></button>
+        <button type="button" data-home-view="images" aria-pressed="false">图片 / GIF <span data-home-count="images">06</span></button>
       </div>
     </div>
     <p class="home-search-scope">
@@ -82,24 +73,16 @@ const popularTags = ["AI", "互联网", "打工", "无语", "反转", "群聊", 
     </p>
     <p class="result-note" data-home-result-note aria-live="polite" hidden>首页精选中，关于“<span data-home-query></span>”找到 <strong data-home-visible-count>0</strong> 条内容</p>
 
-    <div class="content-section" id="articles" data-home-section="articles">
-      <div class="content-title">
-        <h2>文章 <sup data-home-section-count>{String(homeArticles.length).padStart(2, "0")}</sup></h2>
-        <a href="/articles">查看全部文章 →</a>
-      </div>
-      <div class="article-grid">
-        {homeArticles.map((article, index) => <ArticleCard article={article} index={index} />)}
-      </div>
+    <div class="home-feed-heading">
+      <h2>最近收藏</h2>
+      <div><a href="/articles">全部文章 →</a><a href="/images">全部图片 →</a></div>
     </div>
-
-    <div class="content-section image-section" id="images" data-home-section="images">
-      <div class="content-title">
-        <h2>图片 / 表情包 <sup data-home-section-count>{String(homeImages.length).padStart(2, "0")}</sup></h2>
-        <a href="/images">查看全部图片 →</a>
-      </div>
-      <div class="masonry-grid">
-        {homeImages.map((item) => <ImageCard item={item} />)}
-      </div>
+    <div class="home-feed">
+      {feed.map((entry, index) => (
+        <div class="home-feed-item" data-home-section={entry.kind}>
+          {entry.kind === "articles" ? <ArticleCard article={entry.article} index={index} /> : <ImageCard item={entry.image} />}
+        </div>
+      ))}
     </div>
 
     <div class="empty-state" data-home-empty hidden>
