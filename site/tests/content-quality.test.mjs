@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
+import { isProcessingReply } from "../src/lib/content-quality.mjs";
 
 const legacyDisclosure = [
   "> 本页只提供编辑摘要，不转载来源站全文。",
@@ -12,6 +13,14 @@ const legacyDisclosure = [
 const rawArticleHtml = /<(?!https?:\/\/)\s*(?:\/?\s*[A-Za-z][^>]*|!--[\s\S]*?--)>/iu;
 
 const contentRoot = new URL("../src/content/", import.meta.url);
+
+test("public summaries describe content and publication holds remain drafts", async () => {
+  for (const { file, text } of await frontmatter("articles")) {
+    if (field(text, "publicationHold") === "true") assert.equal(field(text, "draft"), "true", file);
+    if (field(text, "draft") === "true") continue;
+    assert.equal(isProcessingReply(field(text, "summary")), false, `${file} 发布了 AI 处理回复`);
+  }
+});
 
 async function frontmatter(directory) {
   const files = (await readdir(new URL(directory, contentRoot))).filter((file) => file.endsWith(".md"));

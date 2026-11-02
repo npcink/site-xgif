@@ -8,6 +8,7 @@ import {
 import { isPlaceholderArticleTitle } from "./article-title-suggestions.js";
 import { isContentId } from "./content-id.js";
 import { CANONICAL_TAGS } from "./content-taxonomy.js";
+import { isProcessingReply } from "../site/src/lib/content-quality.mjs";
 import {
   localAssetFileFromUrl,
   referencedLocalAssetFiles,
@@ -137,6 +138,8 @@ async function auditArticle(item, repoRoot) {
   const { data, body, file, sourceKind, sourceUrl } = item;
   if (!String(data.title || "").trim()) item.blockers.push("缺少标题。");
   if (!String(data.summary || "").trim()) item.blockers.push("缺少摘要。");
+  if (isProcessingReply(data.summary)) item.blockers.push("摘要包含 AI 处理回复，需要改为真实内容摘要。");
+  if (data.publicationHold === true) item.blockers.push("此内容被禁止公开发布，必须保留为草稿。");
   if (!body.trim()) item.blockers.push("缺少正文。");
   if (rawArticleHtml.test(body)) {
     item.blockers.push("正文包含原始 HTML；导入文章只能使用纯文本和 Markdown。");

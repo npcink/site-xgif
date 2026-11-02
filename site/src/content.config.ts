@@ -1,6 +1,7 @@
 import { defineCollection } from "astro:content";
 import { glob } from "astro/loaders";
 import { z } from "astro/zod";
+import { isProcessingReply } from "./lib/content-quality.mjs";
 
 const httpUrl = z.url().refine((value) => /^https?:\/\//.test(value), {
   message: "必须使用 http 或 https 地址",
@@ -39,7 +40,14 @@ const articles = defineCollection({
     shortFormReviewed: z.boolean().default(false),
     featured: z.boolean().default(false),
     draft: z.boolean().default(false),
+    publicationHold: z.boolean().default(false),
   }).superRefine((data, context) => {
+    if (!data.draft && data.publicationHold) {
+      context.addIssue({ code: "custom", path: ["draft"], message: "内容被禁止公开发布，必须保留为草稿" });
+    }
+    if (!data.draft && isProcessingReply(data.summary)) {
+      context.addIssue({ code: "custom", path: ["summary"], message: "摘要包含 AI 处理回复，不能公开发布" });
+    }
     if (["publication", "editorial"].includes(data.sourceKind) && !data.sourceUrl) {
       context.addIssue({ code: "custom", path: ["sourceUrl"], message: "外部来源文章必须保留来源链接" });
     }
