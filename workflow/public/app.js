@@ -2718,7 +2718,11 @@ $('input[name="file"]', imageForm).addEventListener("change", async (event) => {
     saveLocalDraft(imageForm);
     checkSelectedImage(selectedImage);
   } catch (error) {
+    if (event.target.files[0] !== file) return;
     selectedImage = null;
+    updateImagePreview();
+    syncAiAvailability();
+    syncImageActionState();
     showError(imageResult, error);
   }
 });
