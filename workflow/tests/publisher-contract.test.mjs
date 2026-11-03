@@ -225,7 +225,7 @@ test("publisher exposes local public URLs and keeps empty result panels hidden",
   assert.match(html, /class=\"image-inspector\"/);
   assert.equal((html.match(/data-image-inspector-tab=/g) || []).length, 3);
   assert.match(html, /id=\"image-save-draft\"/);
-  assert.match(html, /id=\"image-real-preview\" hidden disabled/);
+  assert.match(html, /<a[^>]+id="image-real-preview"[^>]+hidden>查看效果<\/a>/);
   assert.match(html, /id=\"image-next-action\"[^>]*>发布<\/button>/);
   assert.match(html, /id=\"image-ai-review\" aria-live=\"polite\" hidden/);
   assert.match(html, /id=\"image-ai-availability\"/);

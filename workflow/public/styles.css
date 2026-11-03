@@ -3841,6 +3841,14 @@ summary:focus-visible {
   padding-inline: 12px;
 }
 
+.article-toolbar-actions > a {
+  color: var(--accent);
+  flex: 0 0 auto;
+  font-size: 12px;
+  padding: 10px 12px;
+  text-underline-offset: 3px;
+}
+
 .article-toolbar-actions {
   align-items: center;
   display: flex;

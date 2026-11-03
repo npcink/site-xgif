@@ -670,8 +670,8 @@ function publicContentUrl(type, contentId) {
   return new URL(contentRoute(type, contentId), localSiteUrl).href;
 }
 
-function previewContentUrl(type, contentId) {
-  if (type !== "article") return "";
+function previewContentUrl(type, contentId, data = {}) {
+  if (type === "image") return data.draft || data.public === false ? "" : publicContentUrl(type, contentId);
   return new URL(contentRoute(type, contentId, { preview: true }), localSiteUrl).href;
 }
 
@@ -716,7 +716,7 @@ async function listContent(type = "all") {
         draft: Boolean(parsed.data.draft),
         public: parsed.data.public !== false,
         publicUrl: publicContentUrl(kind, parsed.data.contentId),
-        previewUrl: previewContentUrl(kind, parsed.data.contentId),
+        previewUrl: previewContentUrl(kind, parsed.data.contentId, parsed.data),
         bodyExcerpt: parsed.body.replace(/\s+/g, " ").slice(0, 140),
         contentSha256: version.contentSha256,
         publicationSha256: version.publicationSha256,
@@ -2194,7 +2194,7 @@ async function publishGallery(input, { contentId = "" } = {}) {
   const git = payload.commit ? await commitAndMaybePush(bundle.files.map((file) => path.join(repoRoot, file)), `Add gallery: ${payload.title}`, Boolean(payload.push)) : null;
   const indexWarning = await refreshLocalIndexes("create_image_gallery", { file: path.relative(repoRoot, entryPath), draft: Boolean(payload.draft) });
   return { ok: true, file: path.relative(repoRoot, entryPath), images: prepared.images, publicImagePath: prepared.image,
-    previewUrl: previewContentUrl("image", payload.contentId), contentSha256: contentSha256(markdown),
+    previewUrl: previewContentUrl("image", payload.contentId, payload), contentSha256: contentSha256(markdown),
     quality, git, indexWarning };
 }
 
@@ -2245,7 +2245,7 @@ async function publishReviewedGallery(data, { file = "", version = "" } = {}) {
     // Recovery after Markdown was saved but the receipt write/process was interrupted.
     const indexWarning = await refreshLocalIndexes("recover_gallery_save", { file: targetFile });
     return galleryReviews.complete(receipt, { ok: true, file: targetFile, contentSha256: contentSha256(current),
-      previewUrl: previewContentUrl("image", receipt.contentId), recovered: true, indexWarning });
+      previewUrl: previewContentUrl("image", receipt.contentId, data), recovered: true, indexWarning });
   }
   if (!file && current) throw imageValidationError("预览对应的内容位置已被占用，请重新预览。", 409);
   const result = file
@@ -2480,7 +2480,7 @@ async function updateManagedContent(
     quality,
     indexWarning,
     publicUrl: publicContentUrl(type, parsed.data.contentId),
-    previewUrl: previewContentUrl(type, parsed.data.contentId),
+    previewUrl: previewContentUrl(type, parsed.data.contentId, parsed.data),
     workflow: await getFileWorkflowState(type, filePath, parsed.data),
     contentSha256: contentSha256(markdown),
   };
@@ -4248,7 +4248,7 @@ async function handleApi(req, res) {
     const indexedItems = localDataStore.listContentIndex({ type, query, sort }).map((item) => ({
       ...item,
       publicUrl: publicContentUrl(item.type, item.contentId),
-      previewUrl: previewContentUrl(item.type, item.contentId),
+      previewUrl: previewContentUrl(item.type, item.contentId, item),
     }));
     const searchableItems = await getContentPublicationStates(indexedItems);
     const counts = contentStatusCounts(searchableItems);
@@ -4288,7 +4288,7 @@ async function handleApi(req, res) {
         ? await readEditableArticleBody({ ...parsed.data, body: parsed.body }, { workflowRoot: __dirname })
         : parsed.body,
       publicUrl: publicContentUrl(type, parsed.data.contentId),
-      previewUrl: previewContentUrl(type, parsed.data.contentId),
+      previewUrl: previewContentUrl(type, parsed.data.contentId, parsed.data),
       contentSha256: contentSha256(markdown),
       workflow: await getFileWorkflowState(type, filePath, parsed.data),
     });
@@ -4690,7 +4690,7 @@ async function handleApi(req, res) {
       git,
       duplicates,
       indexWarning,
-      previewUrl: previewContentUrl("image", payload.contentId),
+      previewUrl: previewContentUrl("image", payload.contentId, payload),
       contentSha256: contentSha256(entryMarkdown),
     });
     return;

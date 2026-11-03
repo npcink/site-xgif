@@ -1006,6 +1006,7 @@ function syncImageActionState() {
   const alreadyPublished = editing && !originalDraft;
   const dirty = isFormDirty(imageForm);
   const canPreview = editing
+    && !originalDraft
     && !dirty
     && Boolean(imageForm.dataset.previewUrl)
     && sitePreviewAvailable;
@@ -1014,7 +1015,8 @@ function syncImageActionState() {
   imageSaveDraft.hidden = !dirty;
   imageSaveDraft.disabled = !dirty;
   imageRealPreview.hidden = !canPreview;
-  imageRealPreview.disabled = !canPreview;
+  if (canPreview) imageRealPreview.href = imageForm.dataset.previewUrl;
+  else imageRealPreview.removeAttribute("href");
   imageNextAction.disabled = imageForm.dataset.publishing === "true";
   imageNextAction.dataset.action = alreadyPublished && !dirty ? "sync" : "publish";
   imageNextAction.textContent = alreadyPublished
@@ -2940,7 +2942,7 @@ imageForm.addEventListener("submit", async (event) => {
     setEditing(imageForm, {
       file: result.file || imageForm.dataset.editFile,
       draft: Boolean(data.draft),
-      previewUrl: result.previewUrl || imageForm.dataset.previewUrl,
+      previewUrl: result.previewUrl ?? imageForm.dataset.previewUrl,
       contentSha256: result.contentSha256,
     });
     if (changedWhileSaving) {
@@ -3775,10 +3777,7 @@ articleNextAction.addEventListener("click", () => {
 });
 
 imageRealPreview.addEventListener("click", () => {
-  if (!imageForm.dataset.previewUrl || imageRealPreview.disabled) return;
-  window.open(imageForm.dataset.previewUrl, "_blank", "noopener");
   imageForm.dataset.previewed = "true";
-  syncImageActionState();
 });
 imageSaveDraft.addEventListener("click", () => {
   const alreadyPublished =
