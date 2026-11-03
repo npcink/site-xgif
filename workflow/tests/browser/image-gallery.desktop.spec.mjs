@@ -14,6 +14,42 @@ async function mockChecks(page) {
   await page.route("**/api/image-reviews", (route) => route.fulfill({ json: { quality: { ok: true, issues: [], perImage: [], duplicates: [] }, review: { id: "fixture-review", warnings: [] } } }));
 }
 
+test("R2 images load after restoring a draft and in publication review without a localhost referrer", async ({ page }) => {
+  const files = await imageFiles(2);
+  const sources = ["https://img.xgif.cn/fixtures/preview.png", "https://img.xgif.cn/fixtures/similar.png"];
+  const referrers = [];
+  await page.route("https://img.xgif.cn/fixtures/*", (route) => {
+    const referrer = route.request().headers().referer || "";
+    referrers.push(referrer);
+    return route.fulfill({ status: referrer ? 403 : 200, contentType: "image/png", body: files[0].buffer });
+  });
+  await page.route("**/api/ai/gallery-status", (route) => route.fulfill({ json: { available: false } }));
+  await page.route("**/api/check/image", (route) => route.fulfill({ json: { duplicates: [], similarity: { checked: 0, unavailable: 0, matches: [] } } }));
+  await page.route("**/api/image-reviews", (route) => route.fulfill({ json: {
+    quality: { ok: true, issues: [], perImage: [{ src: sources[0], similarity: { matches: [{ image: sources[1], title: "相似图片" }] } }] },
+    review: { id: "fixture-review", warnings: ["请对照相似图片"] },
+  } }));
+  await page.addInitScript((src) => {
+    localStorage.setItem("xgif-publisher-draft:image-form:new", JSON.stringify({ savedAt: Date.now(), data: {
+      title: "恢复后的 R2 图片", description: "实际显示远端图片", tags: "生活", sourceKind: "unknown",
+      images: [{ src, width: 128, height: 128, altText: "待确认图片" }],
+    } }));
+  }, sources[0]);
+  await page.goto("/#image");
+  await page.reload();
+  const loaded = (image) => image.complete && image.naturalWidth > 0;
+  await expect.poll(() => page.locator("#image-gallery-list img").evaluate(loaded)).toBe(true);
+  await expect.poll(() => page.locator("#image-preview img").evaluate(loaded)).toBe(true);
+  await page.locator("#image-next-action").click();
+  await expect(page.locator("#image-publication-review")).toBeVisible();
+  await expect.poll(() => page.locator("#image-review-images img").evaluate(loaded)).toBe(true);
+  await expect(page.locator("#image-review-warning-list img")).toHaveCount(2);
+  await expect.poll(() => page.locator("#image-review-warning-list img").evaluateAll((images) => images.every((image) => image.complete && image.naturalWidth > 0))).toBe(true);
+  expect(referrers.length).toBeGreaterThan(0);
+  expect(referrers.every((value) => value === "")).toBe(true);
+  await page.locator("#image-review-edit").click();
+});
+
 test("gallery appends up to twelve images, supports keyboard sorting and cover, and restores its order", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await mockChecks(page);
