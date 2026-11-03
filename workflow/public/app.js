@@ -1,4 +1,5 @@
 import { createImageGallery } from "./image-gallery.js";
+import { createGalleryAi } from "./gallery-ai.js";
 import { importItemMatchesFilter, summarizeImportSelection } from "./import-selection.js";
 import {
   clearLibrarySelectionState,
@@ -148,10 +149,13 @@ let assetLibraryItems = [];
 let assetPickerMode = "insert";
 let versionHistoryForm = articleForm;
 
+let imageAiController = null;
 const imageGallery = createImageGallery({
   root: imageForm,
   api,
-  onChange(item, images, { restored = false, previewOnly = false } = {}) {
+  scope: () => draftScope(imageForm),
+  onChange(item, images, options = {}) {
+    const { restored = false, previewOnly = false } = options;
     const previous = selectedImage;
     selectedImage = item;
     const cover = images[0];
@@ -159,12 +163,19 @@ const imageGallery = createImageGallery({
     if (!restored && !previewOnly) {
       markFormDirty(imageForm);
       saveLocalDraft(imageForm);
-      if (!imageGallery.ready()) $("#image-editor-state").textContent = "图片尚未全部上传；请保留当前页面，完成后再保存图集。";
+      if (!imageGallery.ready()) $("#image-editor-state").textContent = "图片尚未全部上传，完成后可保存图集；待上传文件已尝试在浏览器暂存。";
     }
     syncAiAvailability();
     syncImageActionState();
     updateImagePreview();
     if (previous !== item && item?.dataUrl?.startsWith("data:")) checkSelectedImage(item);
+    imageAiController?.sync(options);
+  },
+});
+imageAiController = createGalleryAi({ root: imageForm, api, gallery: imageGallery, context: () => draftScope(imageForm),
+  onChange({ progressOnly = false } = {}) {
+    if (!progressOnly) { markFormDirty(imageForm); updateImagePreview(); syncImageActionState(); }
+    saveLocalDraft(imageForm);
   },
 });
 
@@ -175,7 +186,7 @@ try {
   lastTrashedItems = [];
 }
 
-for (const input of $$("input[type=\"date\"]")) input.value = today;
+for (const input of $$("input[type=\"date\"]:not([name=\"confirmedAt\"])")) input.value = today;
 
 let csrfTokenPromise = null;
 
@@ -624,16 +635,6 @@ function syncAiAvailability() {
     articleTitleAiStatus.dataset.state = "";
     articleTitleAiStatus.textContent = "";
   }
-  const imageAi = $('[data-ai-fill="image"]');
-  const localImageAvailable = Boolean(selectedImage?.dataUrl?.startsWith("data:"));
-  imageAi.disabled = aiAvailable !== true || !localImageAvailable;
-  $("#image-ai-availability").textContent = aiAvailable === null
-    ? "正在检查 AI 配置"
-    : aiAvailable === false
-      ? "AI 未配置，可在系统状态中查看。"
-      : localImageAvailable
-        ? `将发送当前图片到 ${aiModel || "已配置模型"}`
-        : "选择本地图片后可以使用 AI 整理。";
 }
 
 function syncArticleAttribution() {
@@ -731,7 +732,7 @@ function readDraftRevisions(form) {
 
 function saveLocalDraft(form, { checkpoint = false } = {}) {
   const data = formData(form);
-  if (form === imageForm) { data.images = imageGallery.snapshot(); data.pendingImages = imageGallery.pendingCount(); }
+  if (form === imageForm) { data.images = imageGallery.snapshot(); data.galleryItems = imageGallery.draftSnapshot(); data.pendingImages = imageGallery.pendingCount(); data.galleryAi = imageAiController?.snapshot(); }
   if (!Object.values(data).some((value) => value && value !== false && value !== today)) return;
   const savedAt = Date.now();
   localStorage.setItem(draftKey(form), JSON.stringify({ savedAt, data }));
@@ -810,11 +811,12 @@ function restoreLocalDraft(form, stateNode) {
       stored.data.sourceKind = "unknown";
     }
     setFormValues(form, stored.data);
-    if (form === imageForm && stored.data.images) imageGallery.restore(stored.data.images);
+    if (form === imageForm && stored.data.images) imageGallery.restore(stored.data.galleryItems || stored.data.images);
+    if (form === imageForm) imageAiController.restore(stored.data.galleryAi);
     setPublishMode(form, stored.data.publishMode || (stored.data.draft ? "draft" : "publish"));
     form.dataset.dirty = "true";
     stateNode.textContent = stored.data.pendingImages
-      ? `已恢复上传成功的图片；另有 ${stored.data.pendingImages} 张未完成上传，请重新添加。`
+      ? `正在恢复 ${stored.data.pendingImages} 张待上传图片；无法恢复的文件会单独提示重新添加。`
       : "已恢复浏览器临时暂存 · 尚未保存到 Markdown";
     if (!scopedValue && legacyValue) {
       localStorage.setItem(scopedKey, legacyValue);
@@ -841,12 +843,14 @@ function setEditing(form, item) {
     form.dataset.previewUrl = item?.previewUrl || "";
     form.dataset.previewed = "false";
     syncImageActionState();
+    imageAiController?.sync({ restored: true });
   }
 }
 
 function restoreFormSnapshot(form, data) {
   setFormValues(form, data);
-  if (form === imageForm && data.images) imageGallery.restore(data.images);
+  if (form === imageForm && data.images) imageGallery.restore(data.galleryItems || data.images);
+  if (form === imageForm) imageAiController.restore(data.galleryAi);
   setPublishMode(form, data.publishMode || (data.draft ? "draft" : "publish"));
   if (form === articleForm) {
     syncArticleAttribution();
@@ -1015,7 +1019,7 @@ function syncImageActionState() {
   imageNextAction.dataset.action = alreadyPublished && !dirty ? "sync" : "publish";
   imageNextAction.textContent = alreadyPublished
     ? dirty ? "保存修改" : "同步上线"
-    : originalDraft ? "发布草稿" : "发布";
+    : "预览并发布";
 }
 
 function switchTab(name, { skipRoute = false, systemView = "status" } = {}) {
@@ -1114,19 +1118,6 @@ function applyArticleSuggestion(suggestion, expectedBody) {
   return paragraphFormatting;
 }
 
-function applyImageSuggestion(suggestion) {
-  for (const field of ["title", "description", "tags", "category", "mood", "scenes"]) {
-    const input = $(`[name="${field}"]`, imageForm);
-    const value = Array.isArray(suggestion[field]) ? suggestion[field].join(", ") : suggestion[field];
-    if (input && value) input.value = value;
-  }
-  $("#image-ai-review").hidden = false;
-  setImageInspectorTab("details");
-  updateImagePreview();
-  markFormDirty(imageForm);
-  saveLocalDraft(imageForm);
-}
-
 async function fileToDataUrl(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -1148,6 +1139,8 @@ function imagePayload() {
   data.commit = false;
   data.push = false;
   data.images = imageGallery.snapshot();
+  const jobId = imageAiController?.jobId();
+  if (jobId) data.galleryAiJobId = jobId;
   if (imageForm.dataset.editFile) data.excludeFile = imageForm.dataset.editFile;
   return data;
 }
@@ -2687,6 +2680,7 @@ for (const input of $$("input, textarea, select", imageForm)) {
     markFormDirty(imageForm);
     syncPublishMode(imageForm);
     syncImageAttribution();
+    if (input.name === "sourceKind") localStorage.setItem("xgif-image-source-kind", input.value);
     syncImageActionState();
     syncAiAvailability();
     updateImagePreview();
@@ -2696,6 +2690,7 @@ for (const input of $$("input, textarea, select", imageForm)) {
     markFormDirty(imageForm);
     syncPublishMode(imageForm);
     syncImageAttribution();
+    if (input.name === "sourceKind") localStorage.setItem("xgif-image-source-kind", input.value);
     syncImageActionState();
     updateImagePreview();
     saveLocalDraft(imageForm);
@@ -2773,20 +2768,6 @@ articleTitleCandidateList.addEventListener("click", (event) => {
   applyArticleTitleSuggestion(button.dataset.titleCandidate);
 });
 
-$('[data-ai-fill="image"]').addEventListener("click", async (event) => {
-  const button = event.currentTarget;
-  button.disabled = true; button.textContent = "AI 整理中..."; showResult(imageResult, "正在识别图片并生成建议...");
-  try {
-    if (!selectedImage?.dataUrl?.startsWith("data:")) throw new Error("请选择本地图片后再使用 AI 整理。");
-    const image = selectedImage;
-    const result = await api("/api/ai/image-suggestion", { ...formData(imageForm), fileData: image.dataUrl });
-    if (selectedImage !== image) throw new Error("当前图片已更换，请重新整理。");
-    applyImageSuggestion(result.suggestion);
-    showResult(imageResult, "AI 已填写建议内容。请检查后再发布。");
-  } catch (error) { showError(imageResult, error); }
-  finally { button.disabled = false; button.textContent = "AI 整理当前图片资料"; syncAiAvailability(); }
-});
-
 articleForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   articleForm.dataset.publishing = "true";
@@ -2855,11 +2836,59 @@ articleForm.addEventListener("submit", async (event) => {
   }
 });
 
+function confirmGalleryPublication(data, review, quality) {
+  const dialog = $("#image-publication-review");
+  $("#image-publication-review-title").textContent = `图集预览 · 共 ${data.images.length} 张`;
+  $("#image-review-images").innerHTML = data.images.map((image, index) => `<figure><a href="${escapeHtml(image.src)}" target="_blank" rel="noreferrer" aria-label="查看第 ${index + 1} 张原图"><img src="${escapeHtml(image.src)}" alt="${escapeHtml(image.altText || data.title)}" /></a><figcaption>${index === 0 ? "封面" : `第 ${index + 1} 张`} · ${escapeHtml(image.altText || "尚未填写逐图描述")}</figcaption></figure>`).join("");
+  const source = data.sourceKind === "unknown" ? "群聊转存 / 来源未知（公开显示来源待核实）"
+    : data.sourceKind === "user_provided" ? `用户提供素材 · 公开发布确认日期：${data.confirmedAt || "未填写"}`
+    : [data.source, data.sourceUrl, data.author, data.license, data.licenseUrl].filter(Boolean).join(" · ");
+  $("#image-review-metadata").innerHTML = `<h3>${escapeHtml(data.title)}</h3><p>${escapeHtml(data.description)}</p><div class="tags">${renderTags(data.tags)}</div><p>情绪：${escapeHtml(data.mood || "未填写")} · 场景：${escapeHtml(data.scenes || "未填写")}</p><p>来源：${escapeHtml(source)}</p><small>此来源声明适用于全部图片；来源或授权不同的图片请返回拆分图集。</small>`;
+  const warnings = [...review.warnings];
+  $("#image-review-warning-list").replaceChildren();
+  for (const warning of warnings) {
+    const item = document.createElement("li"); item.textContent = warning; $("#image-review-warning-list").append(item);
+  }
+  for (const item of quality.perImage || []) {
+    for (const match of item.similarity.matches || []) {
+      let matchUrl;
+      try { matchUrl = new URL(match.image, window.location.origin); } catch { continue; }
+      if (!["http:", "https:"].includes(matchUrl.protocol)) continue;
+      const image = document.createElement("img"); image.src = match.image; image.alt = match.title || "相似图片";
+      const row = document.createElement("li"); row.className = "image-review-similar";
+      const original = document.createElement("img"); original.src = item.src; original.alt = "本次上传图片";
+      const label = document.createElement("span"); label.textContent = `第 ${data.images.findIndex((member) => member.src === item.src) + 1} 张与《${match.title || "已有图片"}》疑似相似，请对照。`;
+      const originalLink = document.createElement("a"); originalLink.href = item.src; originalLink.target = "_blank"; originalLink.rel = "noreferrer"; originalLink.append(original);
+      const matchLink = document.createElement("a"); matchLink.href = matchUrl.href; matchLink.target = "_blank"; matchLink.rel = "noreferrer"; matchLink.append(image);
+      row.append(originalLink, matchLink, label); $("#image-review-warning-list").append(row);
+    }
+  }
+  $("#image-review-warnings").hidden = !warnings.length;
+  $("#image-review-confirmation").hidden = !warnings.length;
+  $("#image-review-warnings-confirmed").checked = false;
+  $("#image-review-status").textContent = "";
+  const publish = $("#image-review-publish"); publish.disabled = false;
+  dialog.returnValue = "";
+  dialog.showModal();
+  return new Promise((resolve) => {
+    $("#image-review-close").onclick = $("#image-review-edit").onclick = () => dialog.close("cancel");
+    publish.onclick = () => {
+      if (warnings.length && !$("#image-review-warnings-confirmed").checked) {
+        $("#image-review-status").textContent = "请先逐项检查提示，并勾选确认；需要调整时点击返回修改。";
+        return;
+      }
+      publish.disabled = true; dialog.close("publish");
+    };
+    dialog.addEventListener("close", () => resolve(dialog.returnValue === "publish"), { once: true });
+  });
+}
+
 imageForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   if (imageForm.dataset.publishing === "true") return;
   imageForm.dataset.publishing = "true";
   imageGallery.setLocked(true);
+  imageAiController.setLocked(true);
   syncImageActionState();
   try {
     if (!imageGallery.ready()) throw new Error("请添加 1 至 12 张图片，并等待全部上传成功；失败的图片可单独重试或移除。");
@@ -2869,7 +2898,9 @@ imageForm.addEventListener("submit", async (event) => {
     const submittedVersion = imageForm.dataset.contentSha256;
     showResult(imageResult, data.draft ? "正在保存图片草稿..." : "正在检查并发布图片...");
     if (!imageForm.dataset.editFile && !selectedImage) throw new Error("请选择图片或 GIF。");
-    const quality = await api("/api/quality/image", data);
+    const inspection = data.draft ? { quality: await api("/api/quality/image", data) }
+      : await api("/api/image-reviews", { data, file: submittedFile || "", expectedContentSha256: submittedVersion || "" });
+    const quality = inspection.quality;
     if (submittedPayload !== JSON.stringify(imagePayload()) || submittedFile !== imageForm.dataset.editFile) throw new Error("图集资料或图片已更换，请重新检查后保存。");
     if (quality.similarity) renderImageDuplicates(quality.similarity, quality.duplicates);
     if (quality.perImage) {
@@ -2881,12 +2912,17 @@ imageForm.addEventListener("submit", async (event) => {
     }
     if (!quality.ok) {
       showResult(imageResult, formatQuality(quality));
+      if (quality.issues.some((issue) => /来源|授权|确认日期/u.test(issue.message))) setImageInspectorTab("source");
       return;
     }
-    const warnings = quality.issues.filter((item) => item.level === "warning");
-    if (warnings.length && !window.confirm(`发布前请确认：\n${warnings.map((item) => `- ${item.message}`).join("\n")}`)) {
-      showResult(imageResult, "已取消发布，请调整内容后再试。");
-      return;
+    if (!data.draft) {
+      if (!inspection.review || !await confirmGalleryPublication(data, inspection.review, quality)) {
+        showResult(imageResult, "已取消发布，图片与资料已保留，可修改或保存草稿。");
+        return;
+      }
+      if (submittedPayload !== JSON.stringify(imagePayload()) || submittedFile !== imageForm.dataset.editFile) throw new Error("预览期间资料已更新，请重新预览后发布。");
+      data.galleryReviewId = inspection.review.id;
+      data.galleryWarningsConfirmed = true;
     }
     if (quality.asset) data.similarityReviewedSha256 = quality.asset.sha256;
     if (quality.perImage) data.similarityReviewedHashes = quality.perImage.map((image) => image.sha256);
@@ -2918,6 +2954,7 @@ imageForm.addEventListener("submit", async (event) => {
   } finally {
     imageForm.dataset.publishing = "false";
     imageGallery.setLocked(false);
+    imageAiController.setLocked(false);
     syncImageActionState();
   }
 });
@@ -4054,6 +4091,10 @@ async function loadStatus({ refreshRemote = false } = {}) {
     $("#connection-ai-detail").textContent = status.ai?.available
       ? `${status.ai.model}，${aiEndpoint}`
       : status.ai?.configurationError || "需要 API 密钥与模型名称，不会在页面显示密钥";
+    const galleryAiLabel = status.galleryAi?.available ? `${status.galleryAi.model}（已配置）` : status.galleryAi?.configurationError || "未配置";
+    $("#network-ai-detail").textContent += `；图集：${galleryAiLabel}，上传后自动整理，仅连接本机 / M4，不使用文章 AI 服务。`;
+    $("#connection-ai").textContent = `文章${status.ai?.available ? "已配置" : "未配置"} · 图集${status.galleryAi?.available ? "已配置" : "未配置"}`;
+    $("#connection-ai-detail").textContent += `；图集：${galleryAiLabel}`;
     $("#connection-public-git").textContent = status.git?.canPush
       ? `${status.branch} · 远程已配置`
       : `${status.branch} · 远程未配置`;
@@ -4156,6 +4197,8 @@ async function loadStatus({ refreshRemote = false } = {}) {
 }
 
 restoreLocalDraft(articleForm, $("#article-editor-state"));
+const preferredImageSource = localStorage.getItem("xgif-image-source-kind");
+if (["unknown", "original", "user_provided"].includes(preferredImageSource)) $('[name="sourceKind"]', imageForm).value = preferredImageSource;
 restoreLocalDraft(imageForm, $("#image-editor-state"));
 syncPublishMode(articleForm);
 syncPublishMode(imageForm);
@@ -4176,6 +4219,7 @@ renderLibraryView();
 updateArticlePreview();
 updateImagePreview();
 loadStatus();
+imageAiController.init();
 restoreWorkspaceRoute({ replace: true });
 window.addEventListener("popstate", () => restoreWorkspaceRoute());
 

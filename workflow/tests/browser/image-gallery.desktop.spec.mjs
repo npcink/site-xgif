@@ -11,6 +11,7 @@ async function imageFiles(count) {
 async function mockChecks(page) {
   await page.route("**/api/check/image", (route) => route.fulfill({ json: { duplicates: [], similarity: { checked: 0, unavailable: 0, matches: [] } } }));
   await page.route("**/api/quality/image", (route) => route.fulfill({ json: { ok: true, issues: [], perImage: [], duplicates: [] } }));
+  await page.route("**/api/image-reviews", (route) => route.fulfill({ json: { quality: { ok: true, issues: [], perImage: [], duplicates: [] }, review: { id: "fixture-review", warnings: [] } } }));
 }
 
 test("gallery appends up to twelve images, supports keyboard sorting and cover, and restores its order", async ({ page }) => {
@@ -21,6 +22,11 @@ test("gallery appends up to twelve images, supports keyboard sorting and cover, 
     return route.fulfill({ json: { url: `/images/memes/${fileName}`, width: 128, height: 128 } });
   });
   await page.goto("/#image");
+  await expect(page.locator('#image-form [name="confirmedAt"]')).toHaveValue("");
+  await page.locator("#image-tab-source").click();
+  await page.locator('#image-form [name="sourceKind"]').selectOption("user_provided");
+  await expect(page.locator('#image-form [name="confirmedAt"]')).toHaveValue("");
+  await page.locator('#image-form [name="sourceKind"]').selectOption("unknown");
   const files = await imageFiles(13);
   const input = page.locator('#image-form input[type="file"]');
   await input.setInputFiles(files.slice(0, 13));
@@ -57,6 +63,8 @@ test("gallery appends up to twelve images, supports keyboard sorting and cover, 
   await page.locator('#image-form [name="description"]').fill("共用标题和描述");
   await page.locator('#image-form [name="tags"]').fill("生活");
   await page.locator("#image-next-action").click();
+  await expect(page.locator("#image-publication-review")).toBeVisible();
+  await page.locator("#image-review-publish").click();
   await expect(page.locator("#image-result")).toContainText("已验证图集请求");
   expect(submitted.images).toHaveLength(11);
   expect(submitted.images[0].src).toBe("/images/memes/gallery-0.png");
@@ -81,9 +89,53 @@ test("a failed image can retry independently and incomplete galleries cannot pub
   await page.locator("#image-next-action").click();
   await expect(page.locator("#image-result")).toContainText("等待全部上传成功");
   await page.getByRole("button", { name: "重试", exact: true }).click();
-  await expect(page.locator("#image-gallery-list li small")).toHaveText("已上传");
+  await expect(page.locator("#image-gallery-list li small:not(.gallery-ai-item-state)")).toHaveText("已上传");
   expect(attempts).toBe(2);
   await page.locator('#image-form input[type="file"]').setInputFiles(files);
   await expect(page.locator("#image-gallery-feedback")).toContainText("已选过相同图片");
   await expect(page.locator("#image-gallery-list li")).toHaveCount(1);
+});
+
+test("reload resumes a failed middle upload in order and recovers its completed upload reference", async ({ page }) => {
+  await mockChecks(page);
+  const attempts = new Map();
+  let disconnected = true;
+  await page.route("**/api/assets/upload", (route) => {
+    const { fileName } = route.request().postDataJSON();
+    attempts.set(fileName, (attempts.get(fileName) || 0) + 1);
+    return route.fulfill(disconnected && fileName === "gallery-1.png"
+      ? { status: 503, json: { error: "网络中断" } }
+      : { json: { url: `/images/memes/${fileName}`, width: 128, height: 128 } });
+  });
+  await page.goto("/#image");
+  await page.locator('#image-form input[type="file"]').setInputFiles(await imageFiles(3));
+  await expect(page.locator("#image-gallery-list")).toContainText("网络中断");
+  await expect(page.locator("#image-gallery-list li small").filter({ hasText: "已上传" })).toHaveCount(2);
+  await page.locator("#image-gallery-list textarea").nth(1).fill("我的中间图片描述");
+  // Simulate closing after the upload reference is committed to IndexedDB but
+  // before the newer LocalStorage snapshot is written.
+  const pendingDraft = await page.evaluate(() => localStorage.getItem("xgif-publisher-draft:image-form:new"));
+  disconnected = false;
+  await page.reload();
+  await expect(page.locator("#image-gallery-list li small").filter({ hasText: "已上传" })).toHaveCount(3);
+  expect(await page.locator("#image-gallery-list li img").evaluateAll((nodes) => nodes.map((node) => node.getAttribute("src")))).toEqual([
+    "/images/memes/gallery-0.png", expect.stringMatching(/^(?:data:image|\/images\/memes\/gallery-1)/u), "/images/memes/gallery-2.png",
+  ]);
+  await expect(page.locator("#image-gallery-list textarea").nth(1)).toHaveValue("我的中间图片描述");
+  expect([...attempts.values()]).toEqual([1, 2, 1]);
+  await page.evaluate((draft) => localStorage.setItem("xgif-publisher-draft:image-form:new", draft), pendingDraft);
+  await page.reload();
+  await expect(page.locator("#image-gallery-list li small").filter({ hasText: "已上传" })).toHaveCount(3);
+  await expect(page.locator("#image-gallery-list li img").nth(1)).toHaveAttribute("src", "/images/memes/gallery-1.png");
+  expect([...attempts.values()]).toEqual([1, 2, 1]);
+});
+
+test("unavailable browser file storage explicitly warns while allowing uploads", async ({ page }) => {
+  await mockChecks(page);
+  await page.addInitScript(() => { indexedDB.open = () => { throw new Error("模拟空间不足"); }; });
+  await page.route("**/api/assets/upload", (route) => route.fulfill({ json: { url: "/images/memes/no-storage.png", width: 128, height: 128 } }));
+  await page.goto("/#image");
+  await page.locator('#image-form input[type="file"]').setInputFiles(await imageFiles(1));
+  await expect(page.locator("#image-gallery-feedback")).toContainText("浏览器无法暂存，请在关闭页面前完成上传");
+  await expect(page.locator("#image-gallery-list li small").filter({ hasText: "已上传" })).toHaveCount(1);
 });

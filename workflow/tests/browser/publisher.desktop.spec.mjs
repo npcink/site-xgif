@@ -382,7 +382,7 @@ test("image editor keeps the media central and publishing fields in a desktop in
   await expect(page.locator("#image-save-draft")).toBeHidden();
   await expect(page.locator("#image-real-preview")).toBeHidden();
   await expect(page.locator("#image-next-action")).toBeVisible();
-  await expect(page.locator("#image-next-action")).toHaveText("发布");
+  await expect(page.locator("#image-next-action")).toHaveText("预览并发布");
   await expect(page.locator("#image-next-action")).toBeEnabled();
   await expect(page.locator('#image-form [name="publishMode"][value="draft"]')).toBeChecked();
   await expect(page.locator("#image-form-submit")).toBeHidden();
