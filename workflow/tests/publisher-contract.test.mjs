@@ -176,7 +176,7 @@ test("publisher exposes local public URLs and keeps empty result panels hidden",
   assert.match(html, /id="article-save-draft"/);
   assert.match(html, /id="article-real-preview" hidden disabled/);
   assert.match(html, /class="toolbar-more-menu"/);
-  assert.match(html, /id="article-next-action"[^>]*>发布<\/button>/);
+  assert.match(html, /id="article-next-action"[^>]*>保存并预览<\/button>/);
   assert.doesNotMatch(html, /id="article-next-action"[^>]*disabled/);
   assert.match(html, /id="article-read-time-display">1 分钟<\/output>/);
   assert.match(html, /name="readTime" type="hidden" value="1 分钟"/);
@@ -217,7 +217,7 @@ test("publisher exposes local public URLs and keeps empty result panels hidden",
   assert.doesNotMatch(html, /id="article-next-step-title"/);
   assert.match(html, /class="library-tools-more"/);
   assert.match(html, /class="advanced-settings article-publishing-settings"/);
-  assert.match(app, /articleNextAction\.dataset\.action = alreadyPublished && !dirty \? "sync" : "publish"/);
+  assert.match(app, /articleNextAction\.hidden = alreadyPublished && !dirty/);
   assert.match(app, /imageNextAction\.hidden = alreadyPublished && !dirty/);
   assert.doesNotMatch(app, /image-advanced-summary/);
   assert.match(html, /class=\"editor image-workspace-form\"/);

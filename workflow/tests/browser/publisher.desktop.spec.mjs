@@ -127,6 +127,10 @@ test("flomo import applies one batch group and confirms review exceptions once",
   });
 
   await page.goto("/#import");
+  const fileBounds = await page.locator("#flomo-file").boundingBox();
+  const parseBounds = await page.locator("#flomo-inspect").boundingBox();
+  expect(parseBounds.x).toBeGreaterThan(fileBounds.x + fileBounds.width);
+  expect(Math.abs(parseBounds.y - fileBounds.y)).toBeLessThan(8);
   await page.locator("#flomo-file").setInputFiles({
     name: "flomo.zip",
     mimeType: "application/zip",
@@ -134,6 +138,7 @@ test("flomo import applies one batch group and confirms review exceptions once",
   });
   await page.locator("#flomo-inspect").click();
 
+  await expect(page.locator(".import-toolbar")).toHaveCSS("top", "80px");
   const publish = page.locator("#flomo-publish-selected");
   await expect(publish).toBeDisabled();
   await page.locator(`[data-import-hash="${reviewHash}"] [data-import-select]`).check();
@@ -289,7 +294,7 @@ test("article editor keeps writing central and publishing controls in a desktop 
   await expect(page.locator("#article-save-draft")).toBeHidden();
   await expect(page.locator("#article-real-preview")).toBeHidden();
   await expect(page.locator("#article-next-action")).toBeVisible();
-  await expect(page.locator("#article-next-action")).toHaveText("发布");
+  await expect(page.locator("#article-next-action")).toHaveText("保存并预览");
   await expect(page.locator("#article-next-action")).toBeEnabled();
 
   await page.locator("#article-body").fill("这是一段用于计算阅读时间的正文。");
@@ -339,9 +344,9 @@ test("article publish stays actionable and returns quality problems to the edito
   await page.locator("#article-next-action").click();
 
   await expect(page.locator("#article-audit-guidance")).toBeVisible();
-  await expect(page.locator("#article-audit-guidance")).toContainText("发布检查未通过");
+  await expect(page.locator("#article-audit-guidance")).toContainText("保存检查未通过");
   await expect(page.locator("#article-next-action")).toBeEnabled();
-  await expect(page.locator("#article-next-action")).toHaveText("发布");
+  await expect(page.locator("#article-next-action")).toHaveText("保存并预览");
 });
 
 test("system status is a dedicated workspace instead of a floating popover", async ({ page }) => {
@@ -351,6 +356,9 @@ test("system status is a dedicated workspace instead of a floating popover", asy
   await expect(page.locator("#workspace-page-title")).toHaveText("系统");
   await expect(page.locator(".status-details")).toHaveCount(0);
   await expect(page.locator(".network-disclosure")).toBeVisible();
+  await expect(page.locator(".network-disclosure dl")).toBeHidden();
+  await page.locator(".network-disclosure > summary").click();
+  await expect(page.locator(".network-disclosure dl")).toBeVisible();
   await expect(page.locator(".network-disclosure")).toContainText("M4 Ollama");
   await expect(page.locator(".recommendation-status")).toBeVisible();
   await expect(page.locator("#recommendation-mode")).not.toHaveText("检查中");
@@ -484,6 +492,9 @@ test("opening an audited article carries its repair guidance into the editor", a
 
   await page.goto("/");
   await page.locator("#library-audit").click();
+  await expect(page.locator('.audit-technical code').first()).toBeHidden();
+  await page.locator('.audit-technical > summary').first().click();
+  await expect(page.locator('.audit-technical code').first()).toBeVisible();
   await page.locator('[data-audit-open-article]').click();
 
   const guidance = page.locator("#article-audit-guidance");
