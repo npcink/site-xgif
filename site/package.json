@@ -15,11 +15,12 @@
     "test": "npm run build && node --test tests/*.test.mjs && npm run test:links",
     "test:links": "node scripts/check-links.mjs",
     "test:production": "node scripts/production-smoke.mjs",
+    "test:gallery": "node scripts/test-gallery.mjs",
     "test:visual": "playwright test --config playwright.config.mjs",
     "test:visual:update": "playwright test --config playwright.config.mjs --update-snapshots",
     "test:visual:linux": "sh scripts/run-visual-baseline.sh",
     "test:visual:update:linux": "sh scripts/run-visual-baseline.sh --update-snapshots",
-    "test:all": "npm run test && npm run test:visual",
+    "test:all": "npm run test && npm run test:visual && npm run test:gallery",
     "check:deploy": "npm run build && wrangler deploy --dry-run"
   },
   "dependencies": {

@@ -1,3 +1,4 @@
+import { galleryImages } from "../site/src/lib/image-gallery.mjs";
 import { createHash } from "node:crypto";
 import { access, readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
@@ -112,32 +113,34 @@ export async function listReusableAssets({
     const filePath = path.join(imageDirectory, file);
     const parsed = parseContentDocument(await readFile(filePath, "utf8"));
     if (!parsed) continue;
-    const image = String(parsed.data.image || "");
-    if (!image) continue;
-    const details = image.startsWith("/")
-      ? await localAssetDetails(repoRoot, image)
-      : await remoteAssetDetails({ image, ledger, privateBackupDirectory });
-    const references = usage.get(image) || [];
-    items.push({
-      contentId: String(parsed.data.contentId || path.basename(file, path.extname(file))),
-      title: String(parsed.data.title || "未命名素材"),
-      description: String(parsed.data.description || ""),
-      image,
-      width: Number(parsed.data.width || 0),
-      height: Number(parsed.data.height || 0),
-      ratio: String(parsed.data.ratio || ""),
-      source: String(parsed.data.source || ""),
-      sourceKind: String(parsed.data.sourceKind || "unknown"),
-      author: String(parsed.data.author || ""),
-      license: String(parsed.data.license || ""),
-      tags: Array.isArray(parsed.data.tags) ? parsed.data.tags.map(String) : [],
-      draft: Boolean(parsed.data.draft) || parsed.data.public === false,
-      file: path.relative(repoRoot, filePath).split(path.sep).join("/"),
-      usage: references,
-      usageCount: references.length,
-      missingAltCount: references.filter((item) => item.altMissing).length,
-      ...details,
-    });
+    for (const galleryImage of galleryImages(parsed.data)) {
+      const image = galleryImage.src;
+      if (!image) continue;
+      const details = image.startsWith("/")
+        ? await localAssetDetails(repoRoot, image)
+        : await remoteAssetDetails({ image, ledger, privateBackupDirectory });
+      const references = usage.get(image) || [];
+      items.push({
+        contentId: String(parsed.data.contentId || path.basename(file, path.extname(file))),
+        title: String(parsed.data.title || "未命名素材"),
+        description: String(parsed.data.description || ""),
+        image,
+        width: Number(galleryImage.width || 0),
+        height: Number(galleryImage.height || 0),
+        ratio: String(parsed.data.ratio || ""),
+        source: String(parsed.data.source || ""),
+        sourceKind: String(parsed.data.sourceKind || "unknown"),
+        author: String(parsed.data.author || ""),
+        license: String(parsed.data.license || ""),
+        tags: Array.isArray(parsed.data.tags) ? parsed.data.tags.map(String) : [],
+        draft: Boolean(parsed.data.draft) || parsed.data.public === false,
+        file: path.relative(repoRoot, filePath).split(path.sep).join("/"),
+        usage: references,
+        usageCount: references.length,
+        missingAltCount: references.filter((item) => item.altMissing).length,
+        ...details,
+      });
+    }
   }
   const knownImages = new Set(items.map((item) => item.image));
   for (const file of articleAssetFiles.filter((name) => /\.(?:png|jpe?g|gif|webp)$/iu.test(name)).sort()) {

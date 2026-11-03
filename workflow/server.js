@@ -1,7 +1,11 @@
+import { galleryImages, validateGalleryImages } from "../site/src/lib/image-gallery.mjs";
+import { GalleryAiJobs, galleryAiConfig } from "./gallery-ai.js";
+import { GalleryReviews } from "./gallery-reviews.js";
+import { LocalAiTunnel } from "./local-ai-tunnel.js";
 import { createHash, randomUUID } from "node:crypto";
 import { createServer } from "node:http";
 import { execFile } from "node:child_process";
-import { appendFile, mkdir, readdir, readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readdir, readFile, realpath, rename, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { brotliCompressSync, gzipSync } from "node:zlib";
@@ -34,7 +38,7 @@ import { reconcileR2Assets } from "./r2-reconciliation.js";
 import { localRequestSecurityError } from "./local-request-security.js";
 import { publisherSourceVersion } from "./runtime-version.js";
 import { calendarDate } from "./calendar-date.js";
-import { saveR2PrivateBackup } from "./r2-private-backup.js";
+import { inspectR2PrivateBackup, saveR2PrivateBackup } from "./r2-private-backup.js";
 import { loadLocalEnv } from "./local-env.js";
 import { listReusableAssets } from "./asset-library.js";
 import { ImageSimilarityIndex } from "./image-similarity.js";
@@ -92,6 +96,7 @@ import {
   buildPublicationBundle,
   publicationVersion,
   verifiablePublicAssetUrls,
+  referencedAssetUrls,
 } from "./publication-bundle.js";
 import { retryPublicationBatch } from "./publication-batch-recovery.js";
 import { validateServiceBaseUrl } from "./service-url-policy.js";
@@ -140,6 +145,14 @@ const imageSimilarityIndex = new ImageSimilarityIndex({
   repoRoot,
   cachePath: path.join(path.dirname(localDataStore.databasePath), "image-fingerprints-v1.json"),
 });
+const imageAiConfig = galleryAiConfig();
+const imageAiTunnel = new LocalAiTunnel({ baseUrl: imageAiConfig.baseUrl, host: process.env.XGIF_IMAGE_AI_SSH_HOST });
+const galleryAiJobs = new GalleryAiJobs({
+  directory: path.join(path.dirname(localDataStore.databasePath), "gallery-ai", "jobs"),
+  readAsset: (src) => readGalleryAsset(src, { preserved: true }), config: imageAiConfig,
+  beforeRequest: () => imageAiConfig.available ? imageAiTunnel.ensure() : undefined,
+});
+const galleryReviews = new GalleryReviews(path.join(path.dirname(localDataStore.databasePath), "gallery-ai", "reviews"));
 const publicationReceipts = new PublicationReceiptStore({
   filePath: target.publicationReceipts,
 });
@@ -363,7 +376,7 @@ function readWebpDimensions(buffer) {
   throw imageValidationError("WebP 图片缺少可用的尺寸信息。");
 }
 
-function inspectImageUpload(fileData) {
+function inspectImageUpload(fileData, { preserved = false } = {}) {
   const match = String(fileData || "").match(/^data:([^;]+);base64,([A-Za-z0-9+/]+={0,2})$/);
   if (!match) throw imageValidationError("图片数据格式无效，请重新选择文件。", 400);
   const [, declaredMime, encoded] = match;
@@ -371,7 +384,7 @@ function inspectImageUpload(fileData) {
 
   const buffer = Buffer.from(encoded, "base64");
   if (buffer.length === 0) throw imageValidationError("图片文件为空。");
-  if (buffer.length > maxImageBytes) throw imageValidationError(`图片文件超过 ${Math.floor(maxImageBytes / 1024 / 1024)} MB 限制。`);
+  if (!preserved && buffer.length > maxImageBytes) throw imageValidationError(`图片文件超过 ${Math.floor(maxImageBytes / 1024 / 1024)} MB 限制。`);
 
   let mime = "";
   let dimensions;
@@ -393,10 +406,10 @@ function inspectImageUpload(fileData) {
 
   if (mime !== declaredMime) throw imageValidationError("图片扩展类型与实际文件内容不一致。");
   if (!dimensions.width || !dimensions.height) throw imageValidationError("图片尺寸无效。");
-  if (dimensions.width < minImageDimension || dimensions.height < minImageDimension) {
+  if (!preserved && (dimensions.width < minImageDimension || dimensions.height < minImageDimension)) {
     throw imageValidationError(`图片尺寸至少需要 ${minImageDimension} × ${minImageDimension} 像素。`);
   }
-  if (dimensions.width > maxImageDimension || dimensions.height > maxImageDimension) {
+  if (!preserved && (dimensions.width > maxImageDimension || dimensions.height > maxImageDimension)) {
     throw imageValidationError(`图片单边不能超过 ${maxImageDimension} 像素。`);
   }
 
@@ -594,6 +607,7 @@ async function scanMarkdownFrontmatter(dir) {
       title: extractFrontmatterString(content, "title"),
       sourceUrl: extractFrontmatterString(content, "sourceUrl"),
       image: extractFrontmatterString(content, "image"),
+      imageUrls: referencedAssetUrls(content),
       body: parsed.body,
     });
   }
@@ -1507,8 +1521,12 @@ async function scanDuplicateImage({ title, sha256, excludeFile }) {
       reason: "标题重复",
     }));
 
-  const hashMatches = sha256 ? await findFilesByHash(target.memeAssets, sha256) : [];
-  const r2Matches = sha256 ? await findR2AssetsByHash(sha256) : [];
+  const referenced = new Set(records
+    .filter((record) => !excludedPath || path.resolve(record.file) !== excludedPath)
+    .flatMap((record) => record.imageUrls));
+  const hashMatches = sha256 ? (await findFilesByHash(target.memeAssets, sha256))
+    .filter((file) => referenced.has(`/${path.relative(path.join(siteRoot, "public"), file).split(path.sep).join("/")}`)) : [];
+  const r2Matches = sha256 ? (await findR2AssetsByHash(sha256)).filter((row) => referenced.has(row.publicUrl)) : [];
 
   return [
     ...titleMatches,
@@ -1999,6 +2017,8 @@ async function checkArticleQuality(payload) {
 }
 
 async function checkImageQuality(payload) {
+  if (payload.images !== undefined) return checkGalleryQuality(payload);
+
   const issues = [];
   const tags = normalizeList(payload.tags);
   let asset = null;
@@ -2057,6 +2077,181 @@ async function checkImageQuality(payload) {
       sha256: asset.sha256,
     },
   };
+}
+
+async function readGalleryAsset(src, { preserved = false } = {}) {
+  let buffer;
+  let mime;
+  if (src.startsWith("/images/") && !/[?#%]/u.test(src) && !src.split("/").includes("..")) {
+    const root = await realpath(path.join(siteRoot, "public"));
+    const file = await realpath(path.join(root, src));
+    if (!file.startsWith(`${root}${path.sep}images${path.sep}`)) throw imageValidationError("图片不在站点资源目录。", 422);
+    buffer = await readFile(file);
+    mime = [...imageExtensions].find(([, ext]) => file.toLowerCase().endsWith(ext))?.[0];
+    if (file.toLowerCase().endsWith(".jpeg")) mime = "image/jpeg";
+  } else {
+    const row = (await readJsonLines(target.r2AssetLedger)).find((item) => item.publicUrl === src);
+    if (!row) throw imageValidationError("图集只能使用已上传的图片。", 422);
+    const backup = await inspectR2PrivateBackup({ row, directory: target.r2PrivateAssets });
+    if (!backup.ok) throw imageValidationError("图集图片缺少可核验的原始字节备份。", 422);
+    buffer = await readFile(backup.filePath);
+    mime = row.mime;
+  }
+  return inspectImageUpload(`data:${mime};base64,${buffer.toString("base64")}`, { preserved });
+}
+
+async function prepareGallery(payload, existing = {}) {
+  const images = validateGalleryImages(payload.images);
+  const preserved = new Map(galleryImages(existing).map((image) => [image.src, image]));
+  const prepared = [];
+  const hashes = new Set();
+  for (const image of images) {
+    // Keep legacy external URLs without fetching them. Local and backed-up images
+    // are always read again so dimensions, missing files and byte duplicates stay authoritative.
+    const saved = preserved.get(image.src);
+    const backedUp = saved && (await readJsonLines(target.r2AssetLedger)).some((row) => row.publicUrl === image.src);
+    if (saved && !image.src.startsWith("/images/") && !backedUp) {
+      prepared.push({ src: image.src, width: Number(saved.width) || undefined, height: Number(saved.height) || undefined, altText: image.altText || saved.altText });
+      continue;
+    }
+    const asset = await readGalleryAsset(image.src, { preserved: Boolean(saved) });
+    if (hashes.has(asset.sha256)) throw imageValidationError("图集中不能包含相同字节的重复图片。", 422);
+    hashes.add(asset.sha256);
+    prepared.push({ src: image.src, width: asset.width, height: asset.height, ...(image.altText ? { altText: image.altText } : {}) });
+  }
+  const cover = prepared[0];
+  return { images: prepared, image: cover.src, width: cover.width, height: cover.height,
+    ratio: cover.width && cover.height ? suggestedImageRatio(cover.width, cover.height) : payload.ratio || "square" };
+}
+
+async function checkGalleryQuality(payload) {
+  const { images, fileData, ...metadata } = payload;
+  const base = await checkImageQuality(metadata);
+  const perImage = [];
+  try {
+    let existing = {};
+    if (payload.excludeFile) existing = parseFrontmatter(await readFile(resolveManagedFile("image", payload.excludeFile), "utf8")).data;
+    const prepared = await prepareGallery(payload, existing);
+    const preserved = new Set(galleryImages(existing).map((image) => image.src));
+    if (payload.sourceKind === "user_provided"
+      && (existing.sourceKind !== "user_provided" || prepared.images.some((image) => !preserved.has(image.src)))
+      && !validImageConfirmationDate(payload.confirmedAt)) {
+      base.issues.push(qualityIssue("error", "请在来源中填写有效的公开发布确认日期；AI 不代为确认授权。"));
+    }
+    for (const [index, image] of prepared.images.entries()) {
+      if (preserved.has(image.src)) continue;
+      const asset = await readGalleryAsset(image.src);
+      const similarity = await imageSimilarityIndex.check({ buffer: asset.buffer, excludeFile: payload.excludeFile });
+      if (similarity.matches.some((match) => match.kind === "exact")) base.issues.push(qualityIssue("error", `第 ${index + 1} 张图片已存在，不能重复发布。`));
+      if (similarity.matches.some((match) => match.kind === "similar")) base.issues.push(qualityIssue("warning", `第 ${index + 1} 张发现疑似相似图片，请对照后确认。`));
+      if (similarity.unavailable) base.issues.push(qualityIssue("warning", `第 ${index + 1} 张相似图检查不完整，有 ${similarity.unavailable} 张暂时无法比对。`));
+      perImage.push({ src: image.src, sha256: asset.sha256, similarity });
+    }
+  } catch (error) { base.issues.push(qualityIssue("error", error.message)); }
+  return { ...base, ok: !base.issues.some((issue) => issue.level === "error"), perImage };
+}
+
+function assertGalleryQuality(quality, payload) {
+  const errors = quality.issues.filter((issue) => issue.level === "error");
+  if (errors.length) throw imageValidationError(errors.map((issue) => issue.message).join("；"), 422);
+  for (const image of quality.perImage) {
+    if ((image.similarity.matches.length || image.similarity.unavailable)
+      && !payload.similarityReviewedHashes?.includes(image.sha256)) {
+      throw imageValidationError("请先检查图集中每张图片的相似候选并确认后再保存。", 422);
+    }
+  }
+}
+
+async function recordGalleryAuthorization(images, payload, entryPath) {
+  if (payload.sourceKind !== "user_provided") return;
+  if (images.length && !validImageConfirmationDate(payload.confirmedAt)) throw imageValidationError("请填写有效的公开发布确认日期。", 422);
+  for (const { src } of images) {
+    const asset = await readGalleryAsset(src, { preserved: true });
+    await recordUserProvidedAsset({ payload, asset, entryPath, assetUrl: src });
+  }
+}
+
+function validImageConfirmationDate(value) {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/u.test(value)) return false;
+  const date = new Date(`${value}T00:00:00Z`);
+  return Number.isFinite(date.valueOf()) && date.toISOString().slice(0, 10) === value;
+}
+
+async function publishGallery(input, { contentId = "" } = {}) {
+  const payload = normalizeImageAttribution(input);
+  validateRequired(payload, ["title", "description"]);
+  const prepared = await prepareGallery(payload);
+  const quality = await checkGalleryQuality({ ...payload, ...prepared, excludeFile: undefined });
+  assertGalleryQuality(quality, payload);
+  payload.contentId = contentId || await allocateContentId(payload.pubDate || todayIso());
+  const entryPath = path.join(target.imageEntries, `${payload.contentId}.md`);
+  const markdown = buildImageMarkdown({ ...payload, ...prepared });
+  await mkdir(target.imageEntries, { recursive: true });
+  await recordGalleryAuthorization(prepared.images, payload, entryPath);
+  await writeTextAtomic(entryPath, markdown);
+  clearPublicationStateCaches();
+  const bundle = await buildPublicationBundle({ repoRoot, items: [{ file: path.relative(repoRoot, entryPath) }] });
+  const git = payload.commit ? await commitAndMaybePush(bundle.files.map((file) => path.join(repoRoot, file)), `Add gallery: ${payload.title}`, Boolean(payload.push)) : null;
+  const indexWarning = await refreshLocalIndexes("create_image_gallery", { file: path.relative(repoRoot, entryPath), draft: Boolean(payload.draft) });
+  return { ok: true, file: path.relative(repoRoot, entryPath), images: prepared.images, publicImagePath: prepared.image,
+    previewUrl: previewContentUrl("image", payload.contentId), contentSha256: contentSha256(markdown),
+    quality, git, indexWarning };
+}
+
+async function createGalleryReview(data, { file = "", version = "" } = {}) {
+  const job = data.galleryAiJobId ? await galleryAiJobs.inspect(data.galleryAiJobId, data.images) : null;
+  let existing = {};
+  if (file) {
+    const markdown = await readFile(resolveManagedFile("image", file), "utf8");
+    assertExpectedContentVersion(version, contentSha256(markdown));
+    existing = parseFrontmatter(markdown).data;
+  }
+  const prepared = await prepareGallery(data, existing);
+  const quality = await checkGalleryQuality({ ...data, ...prepared, ...(file ? { excludeFile: file } : {}) });
+  if (!quality.ok) return { quality, review: null };
+  const warnings = quality.issues.filter((issue) => issue.level === "warning").map((issue) => issue.message);
+  for (const [index, item] of (job?.items || []).entries()) {
+    if (item.state !== "done") warnings.push(`第 ${index + 1} 张${item.error ? `：${item.error}` : "尚未完成 AI 识别，请手动检查。"}`);
+    for (const warning of item.result?.warnings || []) warnings.push(`第 ${index + 1} 张：${warning}`);
+  }
+  if (job && !job.summary) warnings.push("整套 AI 资料尚未生成，请核对当前手动填写的标题、描述和标签。");
+  warnings.push(...(job?.summary?.warnings || []));
+  for (const [index, image] of data.images.entries()) if (!String(image.altText || "").trim()) warnings.push(`第 ${index + 1} 张缺少替代文本，请手动补充或确认使用图集标题作为后备描述。`);
+  const contentId = existing.contentId || await allocateContentId(data.pubDate || todayIso());
+  const markdown = buildImageMarkdown(normalizeImageAttribution({ ...existing, ...data, ...prepared, contentId }));
+  const assetHashes = [];
+  const backedUpUrls = new Set((await readJsonLines(target.r2AssetLedger)).map((row) => row.publicUrl));
+  for (const [index, image] of prepared.images.entries()) {
+    if (image.src.startsWith("/images/") || backedUpUrls.has(image.src)) {
+      assetHashes.push({ src: image.src, sha256: (await readGalleryAsset(image.src, { preserved: true })).sha256 });
+    } else warnings.push(`第 ${index + 1} 张为旧外链，无法核验字节；请核对当前图片，外部资源可能发生变化。`);
+  }
+  const receipt = await galleryReviews.create(data, { job, file, version, contentId, markdownHash: contentSha256(markdown), warnings, assetHashes });
+  return { quality, review: { id: receipt.id, warnings }, job };
+}
+
+async function publishReviewedGallery(data, { file = "", version = "" } = {}) {
+  const job = data.galleryAiJobId ? await galleryAiJobs.inspect(data.galleryAiJobId, data.images) : null;
+  const receipt = await galleryReviews.authorize(data, { file, version, job });
+  if (receipt.result) return receipt.result;
+  for (const asset of receipt.assetHashes || []) {
+    if ((await readGalleryAsset(asset.src, { preserved: true })).sha256 !== asset.sha256) throw imageValidationError("预览后的图片文件已改变，请重新预览确认。", 409);
+  }
+  const targetFile = file || path.relative(repoRoot, path.join(target.imageEntries, `${receipt.contentId}.md`));
+  const filePath = resolveManagedFile("image", targetFile);
+  let current = "";
+  try { current = await readFile(filePath, "utf8"); } catch (error) { if (error.code !== "ENOENT") throw error; }
+  if (current && contentSha256(current) === receipt.markdownHash) {
+    // Recovery after Markdown was saved but the receipt write/process was interrupted.
+    const indexWarning = await refreshLocalIndexes("recover_gallery_save", { file: targetFile });
+    return galleryReviews.complete(receipt, { ok: true, file: targetFile, contentSha256: contentSha256(current),
+      previewUrl: previewContentUrl("image", receipt.contentId), recovered: true, indexWarning });
+  }
+  if (!file && current) throw imageValidationError("预览对应的内容位置已被占用，请重新预览。", 409);
+  const result = file
+    ? await updateManagedContent("image", file, { ...data, contentId: receipt.contentId }, { expectedContentSha256: version })
+    : await publishGallery(data, { contentId: receipt.contentId });
+  return galleryReviews.complete(receipt, result);
 }
 
 function sanitizeImageSuggestion(value) {
@@ -2147,6 +2342,15 @@ function buildLegacyImageMarkdown(payload) {
 }
 
 function buildImageMarkdown(payload) {
+  if (payload.images !== undefined) {
+    const images = validateGalleryImages(payload.images);
+    const cover = images[0];
+    payload = { ...payload, image: cover.src, width: cover.width, height: cover.height,
+      ratio: cover.width && cover.height ? suggestedImageRatio(cover.width, cover.height) : payload.ratio };
+    const { images: ignored, ...single } = payload;
+    return buildImageMarkdown(single).replace("\nimage: ", `\nimages: ${JSON.stringify(images)}\nimage: `);
+  }
+
   const sourceLine = "\nsource: " + yamlString(payload.source || "本地上传") + "\n";
   const sourceKind = payload.sourceKind || "original";
   const attributionLines = sourceLine
@@ -2232,8 +2436,18 @@ async function updateManagedContent(
       image: payload.image || existing.data.image,
       excludeFile: file,
     });
+    if (imagePayload.images !== undefined) {
+      const prepared = await prepareGallery(imagePayload, existing.data);
+      Object.assign(imagePayload, prepared);
+      quality = await checkGalleryQuality({ ...imagePayload, excludeFile: file });
+      assertGalleryQuality(quality, payload);
+      const authorizedImages = existing.data.sourceKind === "user_provided"
+        ? prepared.images.filter((image) => !galleryImages(existing.data).some((saved) => saved.src === image.src))
+        : prepared.images;
+      await recordGalleryAuthorization(authorizedImages, imagePayload, filePath);
+    }
     validateRequired(imagePayload, ["title", "description"]);
-    if (!imagePayload.draft && imagePayload.public !== false) {
+    if (!quality && !imagePayload.draft && imagePayload.public !== false) {
       quality = await checkImageQuality(imagePayload);
       const errors = quality.issues.filter((item) => item.level === "error");
       if (errors.length) {
@@ -3716,6 +3930,8 @@ async function buildPublisherStatusPayload() {
       baseUrl: safeDisplayUrl(aiConfig.baseUrl),
       configurationError: aiConfig.configurationError || "",
     },
+    galleryAi: { available: imageAiConfig.available, model: imageAiConfig.model, baseUrl: imageAiConfig.baseUrl,
+      configurationError: imageAiConfig.configurationError },
     deploymentPreviewUrl: safeDisplayUrl(process.env.XGIF_DEPLOY_PREVIEW_URL),
     imageStorage: r2Storage.enabled
       ? { provider: "cloudflare-r2", bucket: r2Storage.bucket, publicBaseUrl: r2Storage.publicBaseUrl }
@@ -3886,6 +4102,7 @@ async function handleApi(req, res) {
   if (pathname === "/api/assets/upload" && req.method === "POST") {
     const payload = await readJson(req);
     const asset = inspectImageUpload(payload.fileData);
+    const isGallery = payload.purpose === "image-gallery";
     let url = "";
     let storage = "local";
     let ledger = "";
@@ -3894,13 +4111,14 @@ async function handleApi(req, res) {
       url = upload.publicUrl;
       storage = "cloudflare-r2";
       ledger = path.relative(repoRoot, await recordR2Asset({ asset, entryPath: null, upload }));
+      await saveR2PrivateBackup({ asset, objectKey: upload.objectKey, directory: target.r2PrivateAssets });
     } else {
       const fileName = `${asset.sha256.slice(0, 24)}${asset.extension}`;
-      const filePath = path.join(target.articleAssets, fileName);
+      const filePath = path.join(isGallery ? target.memeAssets : target.articleAssets, fileName);
       if (!await pathExists(filePath)) await writeBufferAtomic(filePath, asset.buffer);
-      url = `/images/articles/${fileName}`;
+      url = `/images/${isGallery ? "memes" : "articles"}/${fileName}`;
     }
-    const indexWarning = await refreshLocalIndexes("upload_article_asset", {
+    const indexWarning = await refreshLocalIndexes(isGallery ? "upload_gallery_asset" : "upload_article_asset", {
       storage,
       url,
       sha256: asset.sha256,
@@ -3913,6 +4131,7 @@ async function handleApi(req, res) {
       width: asset.width,
       height: asset.height,
       byteLength: asset.byteLength,
+      sha256: asset.sha256,
       indexWarning,
     });
     return;
@@ -4146,6 +4365,12 @@ async function handleApi(req, res) {
       error.statusCode = 400;
       throw error;
     }
+    if (payload.type === "image" && payload.data?.galleryReviewId) {
+      await assertGitAutomationAllowed(payload.data);
+      sendJson(res, 200, await publishReviewedGallery(payload.data, { file: payload.file, version: payload.expectedContentSha256 }));
+      return;
+    }
+    if (payload.type === "image" && payload.data?.galleryAiJobId && !payload.data.draft) throw imageValidationError("请先预览并确认图集资料。", 409);
     sendJson(res, 200, await updateManagedContent(
       payload.type,
       payload.file,
@@ -4252,6 +4477,29 @@ async function handleApi(req, res) {
     return;
   }
 
+  if (pathname === "/api/ai/gallery-status" && req.method === "GET") {
+    sendJson(res, 200, { available: imageAiConfig.available, model: imageAiConfig.model, baseUrl: imageAiConfig.baseUrl,
+      configurationError: imageAiConfig.configurationError });
+    return;
+  }
+  if (pathname === "/api/ai/gallery-jobs" && req.method === "POST") {
+    const payload = await readJson(req);
+    sendJson(res, 202, { job: await galleryAiJobs.create(payload.images) });
+    return;
+  }
+  const galleryJobRoute = pathname.match(/^\/api\/ai\/gallery-jobs\/([a-f0-9]{64})(\/retry)?$/u);
+  if (galleryJobRoute && req.method === (galleryJobRoute[2] ? "POST" : "GET")) {
+    const payload = galleryJobRoute[2] ? await readJson(req) : null;
+    if (payload?.hashes !== undefined && (!Array.isArray(payload.hashes) || payload.hashes.some((hash) => !/^[a-f0-9]{64}$/u.test(hash)))) throw imageValidationError("待重试的图片指纹无效。", 400);
+    sendJson(res, 200, { job: galleryJobRoute[2] ? await galleryAiJobs.retry(galleryJobRoute[1], payload?.hashes) : await galleryAiJobs.get(galleryJobRoute[1]) });
+    return;
+  }
+  if (pathname === "/api/image-reviews" && req.method === "POST") {
+    const payload = await readJson(req);
+    sendJson(res, 200, await createGalleryReview(payload.data || {}, { file: payload.file || "", version: payload.expectedContentSha256 || "" }));
+    return;
+  }
+
   if (pathname === "/api/quality/article" && req.method === "POST") {
     const payload = await readJson(req);
     sendJson(res, 200, await checkArticleQuality(payload));
@@ -4326,6 +4574,15 @@ async function handleApi(req, res) {
   if (pathname === "/api/publish/image" && req.method === "POST") {
     let payload = await readJson(req);
     await assertGitAutomationAllowed(payload);
+    if (payload.images !== undefined) {
+      if (payload.galleryReviewId) {
+        sendJson(res, 200, await publishReviewedGallery(payload));
+        return;
+      }
+      if (payload.galleryAiJobId && !payload.draft) throw imageValidationError("请先预览并确认图集资料。", 409);
+      sendJson(res, 200, await publishGallery(payload));
+      return;
+    }
     validateRequired(payload, [
       "title",
       "description",
@@ -4444,6 +4701,14 @@ async function handleApi(req, res) {
 
 async function serveStatic(req, res) {
   const requestedPath = decodeURIComponent(new URL(req.url, `http://localhost:${port}`).pathname);
+  if (requestedPath.startsWith("/images/")) {
+    try {
+      const asset = await readGalleryAsset(requestedPath, { preserved: true });
+      res.writeHead(200, { "content-type": asset.mime, "cache-control": "no-store", "x-content-type-options": "nosniff" });
+      res.end(asset.buffer);
+    } catch { sendText(res, 404, "Image not found"); }
+    return;
+  }
   const safePath = requestedPath === "/" ? "/index.html" : requestedPath;
   const filePath = path.resolve(publicDir, `.${safePath}`);
 
@@ -4580,6 +4845,7 @@ const server = createServer(async (req, res) => {
   }
 });
 
+await galleryAiJobs.ready;
 server.listen(port, "127.0.0.1", () => {
   console.log(`XGIF local publisher: http://127.0.0.1:${port}`);
   console.log(`Repository: ${repoRoot}`);
@@ -4596,6 +4862,7 @@ server.listen(port, "127.0.0.1", () => {
 });
 
 function shutdown() {
+  imageAiTunnel.close();
   server.close(() => {
     localDataStore.close();
     process.exit(0);

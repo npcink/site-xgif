@@ -10,9 +10,14 @@ test("similar images are shown for comparison and require confirmation before pu
   ] };
   let publication = null;
   await page.route("**/api/check/image", (route) => route.fulfill({ json: { duplicates: [], similarity } }));
+  await page.route("**/api/assets/upload", (route) => route.fulfill({ json: { url: "/images/memes/new.png", width: 320, height: 320 } }));
   await page.route("**/api/quality/image", (route) => route.fulfill({ json: {
-    ok: true, asset: { sha256 }, similarity, duplicates: [],
+    ok: true, perImage: [{ src: "/images/memes/new.png", sha256, similarity }], duplicates: [],
     issues: [{ level: "warning", message: "发现疑似相似图片，请比较下方候选后再决定是否继续。" }],
+  } }));
+  await page.route("**/api/image-reviews", (route) => route.fulfill({ json: {
+    quality: { ok: true, issues: [], perImage: [{ src: "/images/memes/new.png", sha256, similarity }] },
+    review: { id: "fixture-review", warnings: ["发现疑似相似图片，请比较后确认。"] },
   } }));
   await page.route("**/api/publish/image", async (route) => {
     publication = route.request().postDataJSON();
@@ -26,13 +31,18 @@ test("similar images are shown for comparison and require confirmation before pu
   await page.locator('#image-form [name="title"]').fill("新的候选图片");
   await page.locator('#image-form [name="description"]').fill("确认保留的不同版本");
   await page.locator('#image-form [name="tags"]').fill("生活");
-  page.once("dialog", (dialog) => dialog.dismiss());
   await page.locator("#image-next-action").click();
+  await expect(page.locator("#image-review-warning-list img")).toHaveCount(2);
+  await page.locator("#image-review-edit").click();
   await expect(page.locator("#image-result")).toContainText("已取消发布");
   expect(publication).toBeNull();
-  page.once("dialog", (dialog) => dialog.accept());
   await page.locator("#image-next-action").click();
+  await page.locator("#image-review-publish").click();
+  await expect(page.locator("#image-review-status")).toContainText("请先逐项检查");
+  expect(publication).toBeNull();
+  await page.locator("#image-review-warnings-confirmed").check();
+  await page.locator("#image-review-publish").click();
   await expect(page.locator("#image-result")).toContainText("测试结束");
-  expect(publication.similarityReviewedSha256).toBe(sha256);
-  expect(publication.fileData).toBe(`data:image/png;base64,${image.toString("base64")}`);
+  expect(publication.similarityReviewedHashes).toEqual([sha256]);
+  expect(publication.images).toEqual([{ src: "/images/memes/new.png", width: 320, height: 320 }]);
 });

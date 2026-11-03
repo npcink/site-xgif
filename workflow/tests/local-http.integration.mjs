@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
 import { mkdtemp, rm, readFile, writeFile } from "node:fs/promises";
-import { request } from "node:http";
+import { createServer, request } from "node:http";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
@@ -13,12 +13,22 @@ import { sampleImage } from "./fixtures/image-sample.mjs";
 const workflowRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const heldFixture = path.join(workflowRoot, "../site/src/content/articles/20990101-hold.md");
 let fixtureCreated = false;
+const galleryCleanup = [];
 let imageFixtureCreated = false;
 let assetFixtureCreated = false;
 const imageFixture = path.join(workflowRoot, "../site/src/content/images/20990101-dupe.md");
 const assetFixture = path.join(workflowRoot, "../site/public/images/xgif-duplicate-fixture.png");
 const port = 18_000 + (process.pid % 10_000);
 const temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), "xgif-http-integration-"));
+const mockImageAi = createServer(async (req, res) => {
+  for await (const _chunk of req) { /* consume the image payload */ }
+  res.writeHead(200, { "content-type": "application/json" });
+  res.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify({
+    title: "图集资料", description: "适合日常回复的图片。", altText: "用于测试的几何图形", tags: ["生活"],
+    category: "表情包", mood: ["开心"], scenes: ["聊天"], warnings: ["请核对图片文字"], coverIndex: 0,
+  }) } }] }));
+});
+await new Promise((resolve) => mockImageAi.listen(0, "127.0.0.1", resolve));
 const child = spawn(process.execPath, ["--disable-warning=ExperimentalWarning", "server.js"], {
   cwd: workflowRoot,
   env: {
@@ -26,6 +36,8 @@ const child = spawn(process.execPath, ["--disable-warning=ExperimentalWarning", 
     PORT: String(port),
     XGIF_PUBLISHER_TEST_MODE: "true",
     XGIF_LOCAL_DATABASE_PATH: path.join(temporaryDirectory, "xgif.sqlite3"),
+    XGIF_IMAGE_AI_MODEL: "integration-vision",
+    XGIF_IMAGE_AI_BASE_URL: `http://127.0.0.1:${mockImageAi.address().port}/v1`,
   },
   stdio: ["ignore", "pipe", "pipe"],
 });
@@ -316,6 +328,127 @@ draft: true
   assert.equal(batchHeld.json().failed.length, 1);
   assert.match(JSON.stringify(batchHeld.json().failed), /禁止公开发布/);
   assert.equal(await readFile(heldFixture, "utf8"), before);
+  // Gallery uploads are durable resources; a content entry appears only after every member is ready.
+  const galleryImages = [];
+  for (let i = 0; i < 12; i += 1) {
+    const buffer = await sharp({ create: { width: 320, height: 320, channels: 3, background: { r: i * 17, g: 60, b: 255 - i * 17 } } }).png().toBuffer();
+    const hash = createHash("sha256").update(buffer).digest("hex");
+    galleryCleanup.push(path.join(workflowRoot, `../site/public/images/memes/${hash.slice(0, 24)}.png`));
+    const upload = await post("/api/assets/upload", { purpose: "image-gallery", fileData: `data:image/png;base64,${buffer.toString("base64")}` });
+    assert.equal(upload.status, 200, upload.body);
+    galleryImages.push({ src: upload.json().url, width: 1, height: 1 });
+  }
+  const localImagePreview = await call({ pathname: galleryImages[0].src });
+  assert.equal(localImagePreview.status, 200);
+  assert.equal(localImagePreview.headers["content-type"], "image/png");
+  const unsafeImagePreview = await call({ pathname: "/images/%2e%2e/%2e%2e/workflow/.env" });
+  assert.equal(unsafeImagePreview.status, 404);
+  const gallery = { title: "十二张图集集成验证", description: "图集展示验证", tags: ["生活"], sourceKind: "unknown", mood: "开心", scenes: "聊天", category: "表情包", images: galleryImages, draft: true, commit: false, push: false };
+  const excess = await post("/api/publish/image", { ...gallery, images: [...galleryImages, galleryImages[0]] });
+  assert.equal(excess.status, 422, excess.body);
+  assert.match(excess.json().error, /1 至 12/);
+  const repeated = await post("/api/publish/image", { ...gallery, images: [galleryImages[0], galleryImages[0]] });
+  assert.equal(repeated.status, 422);
+  const unsafe = await post("/api/publish/image", { ...gallery, images: [{ src: "http://127.0.0.1/private.png" }] });
+  assert.equal(unsafe.status, 422);
+  const quality = (await post("/api/quality/image", gallery)).json();
+  assert.equal(quality.ok, true, JSON.stringify(quality.issues));
+  assert.equal(quality.perImage.length, 12);
+  const published = await post("/api/publish/image", { ...gallery, similarityReviewedHashes: quality.perImage.map((image) => image.sha256) });
+  assert.equal(published.status, 200, published.body);
+  const galleryFile = published.json().file;
+  galleryCleanup.push(path.join(workflowRoot, "..", galleryFile));
+  const saved = await call({ pathname: `/api/content/read?type=image&file=${encodeURIComponent(galleryFile)}` });
+  assert.equal(saved.json().data.images.length, 12);
+  assert.equal(saved.json().data.images[0].width, 320, "dimensions come from bytes, not the client");
+  const reversed = [...saved.json().data.images].reverse();
+  const updated = await post("/api/content/update", { type: "image", file: galleryFile, expectedContentSha256: published.json().contentSha256, data: { ...gallery, draft: false, images: reversed } });
+  assert.equal(updated.status, 200, updated.body);
+  const reopened = await call({ pathname: `/api/content/read?type=image&file=${encodeURIComponent(galleryFile)}` });
+  assert.deepEqual(reopened.json().data.images.map((image) => image.src), reversed.map((image) => image.src));
+  assert.equal(reopened.json().data.image, reversed[0].src);
+  const stale = await post("/api/content/update", { type: "image", file: galleryFile, expectedContentSha256: published.json().contentSha256, data: gallery });
+  assert.equal(stale.status, 409);
+  const duplicateMember = await post("/api/quality/image", { ...gallery, title: "复制非封面图片", images: [galleryImages[11]] });
+  assert.equal(duplicateMember.json().ok, false);
+  assert.match(JSON.stringify(duplicateMember.json().issues), /已存在/);
+  await rm(path.join(workflowRoot, "..", galleryFile), { force: true });
+  const manualData = { ...gallery, draft: false, images: [galleryImages[0]] };
+  const manualReview = await post("/api/image-reviews", { data: manualData });
+  assert.equal(manualReview.status, 200, manualReview.body);
+  const changedImagePath = path.join(workflowRoot, "../site/public", galleryImages[0].src);
+  const originalImageBytes = await readFile(changedImagePath);
+  try {
+    await writeFile(changedImagePath, await sharp({ create: { width: 320, height: 320, channels: 3, background: "#777777" } }).png().toBuffer());
+    const changedAfterReview = await post("/api/publish/image", { ...manualData, galleryReviewId: manualReview.json().review.id, galleryWarningsConfirmed: true });
+    assert.equal(changedAfterReview.status, 409, changedAfterReview.body);
+    assert.match(changedAfterReview.json().error, /图片文件已改变/);
+  } finally { await writeFile(changedImagePath, originalImageBytes); }
+  const unsafeJob = await post("/api/ai/gallery-jobs", { images: [{ src: "https://example.com/private.png" }] });
+  assert.equal(unsafeJob.status, 422, unsafeJob.body);
+  const imageAiStatus = await call({ pathname: "/api/ai/gallery-status" });
+  assert.equal(imageAiStatus.json().model, "integration-vision");
+  const task = await post("/api/ai/gallery-jobs", { images: galleryImages });
+  assert.equal(task.status, 202, task.body);
+  let job;
+  for (let attempt = 0; attempt < 200; attempt++) {
+    job = (await call({ pathname: `/api/ai/gallery-jobs/${task.json().job.id}` })).json().job;
+    if (["done", "attention"].includes(job.state)) break;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  assert.equal(job.state, "done", JSON.stringify(job));
+  const aiGallery = { ...gallery, draft: false, galleryAiJobId: job.id,
+    images: galleryImages.map((image) => ({ ...image, altText: "几何图形" })) };
+  for (const confirmedAt of [undefined, "2026-02-30"]) {
+    const missingAuthorization = await post("/api/image-reviews", { data: { ...aiGallery, sourceKind: "user_provided", confirmedAt } });
+    assert.equal(missingAuthorization.status, 200, missingAuthorization.body);
+    assert.equal(missingAuthorization.json().quality.ok, false);
+    assert.equal(missingAuthorization.json().review, null);
+    assert.match(JSON.stringify(missingAuthorization.json().quality.issues), /公开发布确认日期/);
+  }
+  const missingReview = await post("/api/publish/image", aiGallery);
+  assert.equal(missingReview.status, 409, missingReview.body);
+  const inspection = await post("/api/image-reviews", { data: aiGallery });
+  assert.equal(inspection.status, 200, inspection.body);
+  assert.ok(inspection.json().review.warnings.some((warning) => warning.includes("请核对图片文字")));
+  const reviewedPayload = { ...aiGallery, galleryReviewId: inspection.json().review.id,
+    similarityReviewedHashes: inspection.json().quality.perImage.map((image) => image.sha256) };
+  assert.equal((await post("/api/publish/image", reviewedPayload)).status, 409, "warnings require explicit human confirmation");
+  assert.equal((await post("/api/publish/image", { ...reviewedPayload, title: "预览后改了标题", galleryWarningsConfirmed: true })).status, 409);
+  const confirmed = await post("/api/publish/image", { ...reviewedPayload, galleryWarningsConfirmed: true });
+  assert.equal(confirmed.status, 200, confirmed.body);
+  galleryCleanup.push(path.join(workflowRoot, "..", confirmed.json().file));
+  const retriedSave = await post("/api/publish/image", { ...reviewedPayload, galleryWarningsConfirmed: true });
+  assert.equal(retriedSave.status, 200, retriedSave.body);
+  assert.equal(retriedSave.json().file, confirmed.json().file, "a repeated request cannot create a second gallery");
+  const receiptPath = path.join(temporaryDirectory, "gallery-ai", "reviews", `${reviewedPayload.galleryReviewId}.json`);
+  const receipt = JSON.parse(await readFile(receiptPath, "utf8"));
+  receipt.result = null;
+  await writeFile(receiptPath, JSON.stringify(receipt));
+  const interruptedSave = await post("/api/publish/image", { ...reviewedPayload, galleryWarningsConfirmed: true });
+  assert.equal(interruptedSave.status, 200, interruptedSave.body);
+  assert.equal(interruptedSave.json().recovered, true, "recover the existing Markdown if the receipt completion was interrupted");
+  const reviewedEdit = { ...aiGallery, title: "集中预览后的图集修改", contentId: "ignored-client-id", excludeFile: confirmed.json().file };
+  const editReview = await post("/api/image-reviews", { data: reviewedEdit, file: confirmed.json().file, expectedContentSha256: confirmed.json().contentSha256 });
+  assert.equal(editReview.status, 200, editReview.body);
+  const reviewedUpdate = await post("/api/content/update", { type: "image", file: confirmed.json().file, expectedContentSha256: confirmed.json().contentSha256,
+    data: { ...reviewedEdit, galleryReviewId: editReview.json().review.id, galleryWarningsConfirmed: true,
+      similarityReviewedHashes: editReview.json().quality.perImage.map((image) => image.sha256) } });
+  assert.equal(reviewedUpdate.status, 200, reviewedUpdate.body);
+  const editedGallery = await call({ pathname: `/api/content/read?type=image&file=${encodeURIComponent(confirmed.json().file)}` });
+  assert.equal(editedGallery.json().data.contentId, receipt.contentId, "reviewed edits retain the existing stable content identity");
+  await rm(path.join(workflowRoot, "..", confirmed.json().file));
+  const legacyImage = "/images/xgif-gallery-legacy-small.PNG";
+  const legacyFile = "site/src/content/images/20990101-oldg.md";
+  galleryCleanup.push(path.join(workflowRoot, "../site/public", legacyImage), path.join(workflowRoot, "..", legacyFile));
+  const legacyBytes = await sharp({ create: { width: 64, height: 64, channels: 3, background: "#fff" } }).png().toBuffer();
+  await writeFile(path.join(workflowRoot, "../site/public", legacyImage), legacyBytes, { flag: "wx" });
+  const legacyMarkdown = `---\ncontentId: "20990101-oldg"\ntitle: "旧小图"\ndescription: "旧单图继续可编辑"\nimage: "${legacyImage}"\nsourceKind: "unknown"\ntags: ["生活"]\ndraft: true\n---\n`;
+  await writeFile(path.join(workflowRoot, "..", legacyFile), legacyMarkdown, { flag: "wx" });
+  const legacyEdit = await post("/api/content/update", { type: "image", file: legacyFile, expectedContentSha256: createHash("sha256").update(legacyMarkdown).digest("hex"), data: { title: "旧单图编辑", description: "保持旧图片", tags: ["生活"], sourceKind: "unknown", draft: true, images: [{ src: legacyImage }] } });
+  assert.equal(legacyEdit.status, 200, legacyEdit.body);
+  const legacyRead = (await call({ pathname: `/api/content/read?type=image&file=${encodeURIComponent(legacyFile)}` })).json();
+  assert.equal(legacyRead.data.images[0].width, 64);
   const originalImage = await sampleImage();
   await writeFile(assetFixture, originalImage, { flag: "wx" });
   assetFixtureCreated = true;
@@ -355,11 +488,13 @@ public: false
   assert.match(unreviewed.json().error, /检查相似图片/);
   console.log("本地发布器 HTTP 集成检查通过。");
 } finally {
+  mockImageAi.close();
   child.kill("SIGTERM");
   await Promise.race([
     new Promise((resolve) => child.once("exit", resolve)),
     new Promise((resolve) => setTimeout(resolve, 3_000)),
   ]);
+  for (const file of galleryCleanup) await rm(file, { force: true });
   if (fixtureCreated) await rm(heldFixture, { force: true });
   if (imageFixtureCreated) await rm(imageFixture, { force: true });
   if (assetFixtureCreated) await rm(assetFixture, { force: true });

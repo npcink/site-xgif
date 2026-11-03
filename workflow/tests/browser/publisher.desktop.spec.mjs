@@ -368,6 +368,7 @@ test("system status is a dedicated workspace instead of a floating popover", asy
 });
 
 test("image editor keeps the media central and publishing fields in a desktop inspector", async ({ page }) => {
+  await page.route("**/api/assets/upload", (route) => route.fulfill({ json: { url: "/images/memes/browser-fixture.png", width: 1200, height: 630 } }));
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/#image");
 
@@ -381,7 +382,7 @@ test("image editor keeps the media central and publishing fields in a desktop in
   await expect(page.locator("#image-save-draft")).toBeHidden();
   await expect(page.locator("#image-real-preview")).toBeHidden();
   await expect(page.locator("#image-next-action")).toBeVisible();
-  await expect(page.locator("#image-next-action")).toHaveText("发布");
+  await expect(page.locator("#image-next-action")).toHaveText("预览并发布");
   await expect(page.locator("#image-next-action")).toBeEnabled();
   await expect(page.locator('#image-form [name="publishMode"][value="draft"]')).toBeChecked();
   await expect(page.locator("#image-form-submit")).toBeHidden();

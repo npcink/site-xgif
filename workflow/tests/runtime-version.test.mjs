@@ -6,7 +6,8 @@ import { test } from "node:test";
 import { publisherSourceVersion } from "../runtime-version.js";
 
 test("publisher source version changes when runtime code changes", async () => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "xgif-runtime-version-"));
+  const repository = await mkdtemp(path.join(os.tmpdir(), "xgif-runtime-version-"));
+  const root = path.join(repository, "workflow");
   await mkdir(path.join(root, "db", "migrations"), { recursive: true });
   await writeFile(path.join(root, "server.js"), "export const value = 1;\n");
   await writeFile(path.join(root, "package.json"), "{}\n");
@@ -16,4 +17,10 @@ test("publisher source version changes when runtime code changes", async () => {
   const second = publisherSourceVersion(root);
   assert.match(first, /^[a-f0-9]{16}$/);
   assert.notEqual(first, second);
+  const galleryModel = path.join(root, "../site/src/lib/image-gallery.mjs");
+  await mkdir(path.dirname(galleryModel), { recursive: true });
+  await writeFile(galleryModel, "export const MAX_GALLERY_IMAGES = 12;");
+  const third = publisherSourceVersion(root);
+  await writeFile(galleryModel, "export const MAX_GALLERY_IMAGES = 10;");
+  assert.notEqual(publisherSourceVersion(root), third);
 });

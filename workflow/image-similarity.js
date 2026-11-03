@@ -1,3 +1,4 @@
+import { galleryImages } from "../site/src/lib/image-gallery.mjs";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, readdir, rename, realpath, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -144,22 +145,23 @@ export class ImageSimilarityIndex {
       const relative = `site/src/content/images/${file}`;
       if (relative === excludeFile) continue;
       const { data } = parseContentDocument(await readFile(path.join(directory, file), "utf8"));
-      const image = String(data.image || "");
-      if (!image || images.has(image)) continue;
-      images.add(image);
-      try {
-        const candidate = await this.sourceFingerprint(image, ledger);
-        checked += 1;
-        const comparison = compareImageFingerprints(query, candidate.fingerprint);
-        if (queryHash === candidate.hash || comparison.similar) matches.push({
-          file: relative,
-          title: String(data.title || "未命名图片"),
-          image,
-          kind: queryHash === candidate.hash ? "exact" : "similar",
-          animated: query.animated || candidate.fingerprint.animated,
-          distance: comparison.distance,
-        });
-      } catch { unavailable += 1; }
+      for (const { src: image } of galleryImages(data)) {
+        if (!image || images.has(image)) continue;
+        images.add(image);
+        try {
+          const candidate = await this.sourceFingerprint(image, ledger);
+          checked += 1;
+          const comparison = compareImageFingerprints(query, candidate.fingerprint);
+          if (queryHash === candidate.hash || comparison.similar) matches.push({
+            file: relative,
+            title: String(data.title || "未命名图片"),
+            image,
+            kind: queryHash === candidate.hash ? "exact" : "similar",
+            animated: query.animated || candidate.fingerprint.animated,
+            distance: comparison.distance,
+          });
+        } catch { unavailable += 1; }
+      }
     }
     let cacheSaved = true;
     try { await this.persist(); } catch { cacheSaved = false; }

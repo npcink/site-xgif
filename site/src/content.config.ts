@@ -62,6 +62,12 @@ const images = defineCollection({
     altText: z.string().max(160).optional(),
     description: z.string(),
     image: imagePath,
+    images: z.array(z.object({
+      src: imagePath,
+      width: z.number().int().positive().optional(),
+      height: z.number().int().positive().optional(),
+      altText: z.string().max(160).optional(),
+    })).min(1).max(12).optional(),
     width: z.number().int().positive().optional(),
     height: z.number().int().positive().optional(),
     source: z.string(),
@@ -79,6 +85,11 @@ const images = defineCollection({
     ratio: z.enum(["wide", "tall", "square"]).default("square"),
     draft: z.boolean().default(false),
   }).superRefine((data, context) => {
+    if (data.images) {
+      if (data.images[0].src !== data.image || new Set(data.images.map((image) => image.src)).size !== data.images.length) {
+        context.addIssue({ code: "custom", path: ["images"], message: "图集首张必须为封面，且不能包含重复图片" });
+      }
+    }
     if (data.sourceKind === "user_provided" || data.sourceKind === "unknown") return;
     for (const [name, value] of Object.entries({
       sourceUrl: data.sourceUrl,

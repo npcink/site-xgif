@@ -41,7 +41,7 @@
 
         <footer class="sidebar-footer">
           <span>LOCAL WORKSPACE</span>
-          <small>管理端仅监听本机。AI 与同步只在主动触发时联网。</small>
+          <small>管理端仅监听本机。图片上传后发送到 M4 整理；发布需人工确认。</small>
         </footer>
       </aside>
 
@@ -381,11 +381,11 @@
               <div class="image-stage-heading">
                 <div>
                   <p class="eyebrow">图片 / GIF</p>
-                  <strong>选择图片并检查展示效果</strong>
+                  <strong>选择图片并整理图集</strong>
                 </div>
                 <label class="image-file-trigger">
-                  <span>选择图片</span>
-                  <input name="file" type="file" accept="image/*,.gif" />
+                  <span>添加图片</span>
+                  <input name="file" type="file" accept="image/jpeg,image/png,image/webp,image/gif" multiple aria-describedby="image-gallery-status" />
                 </label>
               </div>
 
@@ -393,9 +393,13 @@
                 <article class="image-card" id="image-preview"></article>
                 <div class="image-empty-state" id="image-empty-state">
                   <strong>把图片放到工作台</strong>
-                  <span>选择 PNG、JPG、WebP 或 GIF；比例会自动识别。</span>
+                  <span>选择或拖入 PNG、JPG、WebP 或 GIF，最多 12 张。</span>
                 </div>
               </div>
+
+              <div class="image-gallery-heading"><span id="image-gallery-status" role="status" aria-live="polite">已选 0 / 12 · 首张为封面</span><small>拖动排序，或使用前移、后移按钮</small></div>
+              <p id="image-gallery-feedback" role="status" aria-live="polite"></p>
+              <ol id="image-gallery-list" class="image-gallery-list" aria-label="图集图片"></ol>
 
               <section id="image-duplicates" class="image-duplicates" aria-labelledby="image-duplicates-heading" hidden>
                 <strong id="image-duplicates-heading">检查已有图片</strong>
@@ -405,11 +409,13 @@
 
               <div class="image-ai-row">
                 <div>
-                  <strong>需要整理标题、描述和标签？</strong>
-                  <small id="image-ai-availability">选择图片后可以使用 AI 整理。</small>
+                  <strong>上传后由 M4 自动整理</strong>
+                  <small id="image-ai-availability" role="status" aria-live="polite">上传后自动逐张识别并整理图集资料。</small>
                 </div>
-                <button class="article-context-ai" type="button" data-ai-fill="image" aria-describedby="image-ai-availability" disabled>AI 整理图片资料</button>
+                <button class="article-context-ai" type="button" data-ai-fill="image" aria-describedby="image-ai-availability" disabled>继续整理 / 重试</button>
               </div>
+              <button type="button" id="image-ai-cover" hidden>采用 AI 建议封面</button>
+              <div id="image-ai-issues" class="image-ai-issues" aria-live="polite"></div>
             </section>
 
             <div class="ai-review-card" id="image-ai-review" aria-live="polite" hidden>
@@ -846,7 +852,7 @@
           </div>
           <section class="network-disclosure" aria-labelledby="network-disclosure-title">
             <strong id="network-disclosure-title">联网边界</strong>
-            <p>管理页面和配置仅在本机打开。只有在你点击 AI、同步、云端核对或 R2 操作时，相关内容才会发送到已配置的外部服务。</p>
+            <p>管理页面和配置仅在本机打开。上传图片后自动发送到已配置的本机 / M4 视觉模型；文章 AI、同步、云端核对或 R2 操作在点击对应动作后联网。</p>
             <dl>
               <div><dt>AI</dt><dd id="network-ai-detail">读取配置中</dd></div>
               <div><dt>相关推荐</dt><dd>正文只在本机通过 SSH 隧道发送到 M4 Ollama，线上页面不调用模型。</dd></div>
@@ -1110,6 +1116,20 @@
       <div class="asset-library-list" id="asset-library-list"></div>
     </dialog>
 
-    <script src="/app.js?v=20260803-editor-closure-1" type="module"></script>
+    <dialog id="image-publication-review" class="trash-dialog image-publication-review" aria-labelledby="image-publication-review-title">
+      <div class="trash-dialog-heading">
+        <div><p class="eyebrow">发布前确认</p><h2 id="image-publication-review-title">图集预览</h2><p>确认后发布到本地；同步上线仍在“同步上线”中完成。</p></div>
+        <button type="button" id="image-review-close" aria-label="关闭图集预览">关闭</button>
+      </div>
+      <div class="image-review-body">
+      <div id="image-review-images" class="image-review-images"></div>
+      <div id="image-review-metadata" class="image-review-metadata"></div>
+      <section id="image-review-warnings"><h3>待检查项目</h3><ul id="image-review-warning-list"></ul></section>
+      <label id="image-review-confirmation" class="image-review-confirmation"><input type="checkbox" id="image-review-warnings-confirmed" />已逐项检查以上提示，并确认保留当前图片与资料</label>
+      </div>
+      <p id="image-review-status" role="status" aria-live="polite"></p>
+      <div class="image-review-actions"><button type="button" id="image-review-edit">返回修改</button><button class="primary" type="button" id="image-review-publish">确认发布</button></div>
+    </dialog>
+    <script src="/app.js?v=20261103-gallery-ai-1" type="module"></script>
   </body>
 </html>

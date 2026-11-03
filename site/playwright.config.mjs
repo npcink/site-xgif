@@ -1,5 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
+const port = Number(process.env.XGIF_SITE_TEST_PORT || (process.env.XGIF_GALLERY_FIXTURE === "true" ? 14322 : 4322));
+
 export default defineConfig({
   testDir: "./tests/visual",
   outputDir: "test-results",
@@ -9,7 +11,7 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
   reporter: process.env.CI ? "github" : "list",
   use: {
-    baseURL: "http://localhost:4322",
+    baseURL: `http://localhost:${port}`,
     colorScheme: "light",
     locale: "zh-CN",
     screenshot: "only-on-failure",
@@ -30,8 +32,8 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "npm run build && npm run preview -- --port 4322",
-    url: "http://localhost:4322",
-    reuseExistingServer: !process.env.CI,
+    command: `npm run build && npm run preview -- --port ${port}`,
+    url: `http://localhost:${port}`,
+    reuseExistingServer: !process.env.CI && !process.env.XGIF_SITE_TEST_PORT && process.env.XGIF_GALLERY_FIXTURE !== "true",
   },
 });

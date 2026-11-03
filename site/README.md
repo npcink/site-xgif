@@ -54,6 +54,8 @@ licenseUrl: "https://unsplash.com/license"
 
 `sourceKind` 的含义：`original` 是原始文章链接；`publication` 是媒体或专题来源页；`editorial` 是本站编辑手记。不要把媒体首页标成原文。
 
+图集使用有序的 `images` 数组（每项为 `{ "src": "...", "width": 640, "height": 480 }`），包含封面在内共 1–12 张；`image` 始终等于首张 `src`。建议通过本地发布助手创建，详情见 [图集操作与接口约定](../workflow/docs/IMAGE_GALLERY_2026-11-03.md)。`npm run test:gallery` 会创建并清理临时样本，验证桌面与手机切图。
+
 ## 构建
 
 ```bash
