@@ -765,11 +765,13 @@ function updateFormSaveState(form, message = "") {
     return;
   }
   if (isFormDirty(form)) {
-    stateNode.textContent = "有未保存到 Markdown 的修改 · 已在浏览器临时暂存";
+    stateNode.textContent = form === imageForm
+      ? "有未保存修改 · 已在浏览器临时暂存"
+      : "有未保存到 Markdown 的修改 · 已在浏览器临时暂存";
   } else if (form.dataset.editFile) {
-    stateNode.textContent = "已保存到 Markdown";
+    stateNode.textContent = form === imageForm ? "本地已保存" : "已保存到 Markdown";
   } else {
-    stateNode.textContent = "";
+    stateNode.textContent = form === imageForm ? "尚未保存到本地" : "";
   }
 }
 
@@ -817,7 +819,9 @@ function restoreLocalDraft(form, stateNode) {
     form.dataset.dirty = "true";
     stateNode.textContent = stored.data.pendingImages
       ? `正在恢复 ${stored.data.pendingImages} 张待上传图片；无法恢复的文件会单独提示重新添加。`
-      : "已恢复浏览器临时暂存 · 尚未保存到 Markdown";
+      : form === imageForm
+        ? "已恢复临时暂存 · 尚未保存到本地"
+        : "已恢复浏览器临时暂存 · 尚未保存到 Markdown";
     if (!scopedValue && legacyValue) {
       localStorage.setItem(scopedKey, legacyValue);
       localStorage.removeItem(legacyKey);
@@ -830,7 +834,7 @@ function restoreLocalDraft(form, stateNode) {
 function setEditing(form, item) {
   form.dataset.editFile = item?.file || "";
   form.dataset.contentSha256 = item?.contentSha256 || "";
-  markFormClean(form, item ? `已保存到 Markdown · ${item.file}` : "");
+  markFormClean(form, item ? form === imageForm ? "本地已保存" : `已保存到 Markdown · ${item.file}` : "");
   if (item) setPublishMode(form, item.draft ? "draft" : "publish");
   if (form === articleForm) {
     form.dataset.originalDraft = item ? String(Boolean(item.draft)) : "";
@@ -1018,10 +1022,8 @@ function syncImageActionState() {
   if (canPreview) imageRealPreview.href = imageForm.dataset.previewUrl;
   else imageRealPreview.removeAttribute("href");
   imageNextAction.disabled = imageForm.dataset.publishing === "true";
-  imageNextAction.dataset.action = alreadyPublished && !dirty ? "sync" : "publish";
-  imageNextAction.textContent = alreadyPublished
-    ? dirty ? "保存修改" : "同步上线"
-    : "预览并发布";
+  imageNextAction.hidden = alreadyPublished && !dirty;
+  imageNextAction.textContent = "保存并预览";
 }
 
 function switchTab(name, { skipRoute = false, systemView = "status" } = {}) {
@@ -1966,7 +1968,7 @@ function renderSyncWorkspace(status, history = []) {
   const pending = Number(counts.pending || 0);
   const unverified = Number(counts.unverified || 0);
   const cloud = Number(counts.cloud || 0);
-  $("#sync-local-count").textContent = `${local} 条可同步`;
+  $("#sync-local-count").textContent = `${local} 条待上线`;
   $("#sync-github-count").textContent = pending ? `${pending} 条已推送` : local ? "等待推送" : "没有待提交内容";
   $("#sync-cloudflare-count").textContent = pending ? "等待 PR 与部署" : "等待 GitHub 更新";
   $("#sync-live-count").textContent = unverified ? `${unverified} 条待核验` : cloud ? `${cloud} 条已上线` : "等待部署";
@@ -1978,24 +1980,24 @@ function renderSyncWorkspace(status, history = []) {
   const button = $("#sync-all-local");
   button.disabled = !local || !status.git?.canPush;
   button.textContent = !local
-    ? "没有可同步内容"
+    ? "没有待上线内容"
     : deletionRetry === local
       ? `重试 ${deletionRetry} 条下架`
       : actionableDeletions
         ? `同步/下架 ${local} 项到 GitHub`
-        : `同步 ${local} 条到 GitHub`;
+        : `批量上线 ${local} 条`;
   const attentionButton = $("#sync-open-attention");
   attentionButton.hidden = !attention;
   attentionButton.textContent = attention ? `查看待处理（${attention}）` : "查看待处理";
   $("#sync-queue-summary").textContent = local
     ? status.git?.canPush
-      ? `${local} 条内容已通过上线体检，可以进入 GitHub。${attention ? `另有 ${attention} 条需要先处理。` : ""}`
-      : `${local} 条内容待同步，但尚未配置 GitHub 远程仓库，请先在系统状态中检查连接。`
+      ? `${local} 条内容已通过上线体检，可批量提交上线。${attention ? `另有 ${attention} 条需要先处理。` : ""}`
+      : `${local} 条内容待上线，但尚未配置 GitHub 远程仓库，请先在系统状态中检查连接。`
     : attention
-      ? `当前没有可同步内容；${attention} 条本地内容需要先处理。`
+      ? `当前没有待上线内容；${attention} 条本地内容需要先处理。`
     : pending
       ? `${pending} 条内容已经进入远程分支，等待 PR 合并与 Cloudflare 部署。`
-      : "当前没有需要同步的本地公开内容。";
+      : "当前没有待上线的本地内容。";
   $("#sync-queue-list").innerHTML = syncQueue.items?.length
     ? syncQueue.items.map((item) => `
         <article class="sync-queue-item">
@@ -2006,10 +2008,10 @@ function renderSyncWorkspace(status, history = []) {
           <span class="workflow-state compact" data-state="local">${
             item.action === "delete"
               ? item.auditStatus === "retry" ? "重试下架" : "待下架"
-              : "待同步"
+              : "待上线"
           }</span>
         </article>`).join("")
-    : '<p class="library-empty">待同步队列为空。</p>';
+    : '<p class="library-empty">待上线队列为空。</p>';
 
   const pendingBatches = Array.isArray(status.pendingPublicationBatches)
     ? status.pendingPublicationBatches
@@ -2032,10 +2034,10 @@ function renderSyncWorkspace(status, history = []) {
 }
 
 async function loadSyncWorkspace() {
-  $("#sync-queue-summary").textContent = "正在读取本地发布状态…";
+  $("#sync-queue-summary").textContent = "正在读取本地保存状态…";
   $("#sync-pending-batches").hidden = true;
   $("#sync-pending-batches").innerHTML = "";
-  $("#sync-queue-list").innerHTML = '<p class="library-empty">正在读取待同步内容…</p>';
+  $("#sync-queue-list").innerHTML = '<p class="library-empty">正在读取待上线内容…</p>';
   $("#sync-history-list").innerHTML = '<p class="library-empty">正在读取同步记录…</p>';
   try {
     const [status, history] = await Promise.all([
@@ -2898,7 +2900,7 @@ imageForm.addEventListener("submit", async (event) => {
     const submittedPayload = JSON.stringify(data);
     const submittedFile = imageForm.dataset.editFile;
     const submittedVersion = imageForm.dataset.contentSha256;
-    showResult(imageResult, data.draft ? "正在保存图片草稿..." : "正在检查并发布图片...");
+    showResult(imageResult, data.draft ? "正在保存图片草稿..." : "正在检查并保存图片...");
     if (!imageForm.dataset.editFile && !selectedImage) throw new Error("请选择图片或 GIF。");
     const inspection = data.draft ? { quality: await api("/api/quality/image", data) }
       : await api("/api/image-reviews", { data, file: submittedFile || "", expectedContentSha256: submittedVersion || "" });
@@ -2919,10 +2921,10 @@ imageForm.addEventListener("submit", async (event) => {
     }
     if (!data.draft) {
       if (!inspection.review || !await confirmGalleryPublication(data, inspection.review, quality)) {
-        showResult(imageResult, "已取消发布，图片与资料已保留，可修改或保存草稿。");
+        showResult(imageResult, "已取消保存，图片与资料已保留，可继续修改或保存草稿。");
         return;
       }
-      if (submittedPayload !== JSON.stringify(imagePayload()) || submittedFile !== imageForm.dataset.editFile) throw new Error("预览期间资料已更新，请重新预览后发布。");
+      if (submittedPayload !== JSON.stringify(imagePayload()) || submittedFile !== imageForm.dataset.editFile) throw new Error("预览期间资料已更新，请重新检查后保存。");
       data.galleryReviewId = inspection.review.id;
       data.galleryWarningsConfirmed = true;
     }
@@ -2949,7 +2951,12 @@ imageForm.addEventListener("submit", async (event) => {
       markFormDirty(imageForm);
       saveLocalDraft(imageForm);
     }
-    showResult(imageResult, `${formatPublish(result)}${changedWhileSaving ? "\n提交的版本已保存；当前新增修改尚未保存。" : ""}`);
+    const saveNotice = [
+      result.indexWarning,
+      changedWhileSaving ? "提交的版本已保存；当前新增修改尚未保存。" : "",
+    ].filter(Boolean).join("\n");
+    if (saveNotice) showResult(imageResult, saveNotice);
+    else { imageResult.hidden = true; imageResult.textContent = ""; }
     await loadLibrary();
   } catch (error) {
     showError(imageResult, error);
@@ -3803,10 +3810,6 @@ for (const button of $$("[data-image-inspector-tab]")) {
   });
 }
 imageNextAction.addEventListener("click", () => {
-  if (imageNextAction.dataset.action === "sync") {
-    switchTab("sync");
-    return;
-  }
   setImageInspectorTab("details");
   if (!imageForm.checkValidity()) {
     imageForm.reportValidity();

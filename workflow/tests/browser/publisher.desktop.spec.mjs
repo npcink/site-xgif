@@ -382,7 +382,7 @@ test("image editor keeps the media central and publishing fields in a desktop in
   await expect(page.locator("#image-save-draft")).toBeHidden();
   await expect(page.locator("#image-real-preview")).toBeHidden();
   await expect(page.locator("#image-next-action")).toBeVisible();
-  await expect(page.locator("#image-next-action")).toHaveText("预览并发布");
+  await expect(page.locator("#image-next-action")).toHaveText("保存并预览");
   await expect(page.locator("#image-next-action")).toBeEnabled();
   await expect(page.locator('#image-form [name="publishMode"][value="draft"]')).toBeChecked();
   await expect(page.locator("#image-form-submit")).toBeHidden();
@@ -514,15 +514,15 @@ test("sync publishing is a dedicated workspace and browser back restores the pre
       json: {
         ...status,
         git: { ...status.git, canPush: true, pushError: "" },
-        publicationCounts: { ...status.publicationCounts, local: 2 },
+        publicationCounts: { ...status.publicationCounts, local: 3 },
         syncQueue: {
-          counts: { total: 2, ready: 1, attention: 1 },
+          counts: { total: 3, ready: 2, attention: 1 },
           items: [{
-            file: "site/src/content/articles/ready.md",
-            type: "article",
-            title: "可以同步的文章",
+            file: "site/src/content/images/ready.md",
+            type: "image",
+            title: "第一份本地保存的图集",
             pubDate: "2026-07-29",
-          }],
+          }, { file: "site/src/content/images/second.md", type: "image", title: "第二份本地保存的图集", pubDate: "2026-07-29" }],
           needsAttention: [{
             file: "site/src/content/articles/review.md",
             type: "article",
@@ -543,7 +543,7 @@ test("sync publishing is a dedicated workspace and browser back restores the pre
         noChange: false,
         branch: "content-sync/automatic-pr",
         branches: ["content-sync/automatic-pr"],
-        synced: [{ type: "article", file: "site/src/content/articles/ready.md" }],
+        synced: [{ type: "image", file: "site/src/content/images/ready.md" }, { type: "image", file: "site/src/content/images/second.md" }],
         deleted: [],
         skipped: [],
         push: { attempted: true, ok: true, error: "" },
@@ -569,9 +569,9 @@ test("sync publishing is a dedicated workspace and browser back restores the pre
   await expect(page).toHaveURL(/#sync$/);
   await expect(page.locator("#sync-panel")).toHaveClass(/active/);
   await expect(page.locator("#workspace-page-title")).toHaveText("同步上线");
-  await expect(page.locator("#sync-all-local")).toHaveText("同步 1 条到 GitHub");
-  await expect(page.locator("#sync-queue-list .sync-queue-item")).toHaveCount(1);
-  await expect(page.locator("#sync-queue-list")).toContainText("可以同步的文章");
+  await expect(page.locator("#sync-all-local")).toHaveText("批量上线 2 条");
+  await expect(page.locator("#sync-queue-list .sync-queue-item")).toHaveCount(2);
+  await expect(page.locator("#sync-queue-list")).toContainText("第一份本地保存的图集");
   await expect(page.locator("#sync-queue-list")).not.toContainText("需要处理的文章");
   await expect(page.locator("#sync-queue-summary")).toContainText("另有 1 条需要先处理");
   await expect(page.locator("#sync-open-attention")).toHaveText("查看待处理（1）");
@@ -580,7 +580,8 @@ test("sync publishing is a dedicated workspace and browser back restores the pre
   page.once("dialog", (dialog) => dialog.accept());
   await page.locator("#sync-all-local").click();
   await expect.poll(() => syncPayload).not.toBeNull();
-  expect(syncPayload.action).toBe("sync");
+  expect(syncPayload).toEqual({ action: "sync", selection: { type: "all", status: "local", query: "", exclude: [] }, includePendingDeletions: true });
+  await expect(page.locator("#sync-workspace-result")).toContainText("已推送 2 条内容更新");
   await expect(page.locator("#sync-workspace-result")).toContainText("已自动创建 GitHub PR #21");
   await expect(page.locator("#sync-workspace-result")).toContainText("PR 不会自动合并");
   await page.locator("#sync-open-attention").click();

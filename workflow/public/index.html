@@ -372,7 +372,7 @@
                   <button type="button" id="image-version-history">版本记录</button>
                 </div>
               </details>
-              <button class="primary" type="button" id="image-next-action">发布</button>
+              <button class="primary" type="button" id="image-next-action">保存并预览</button>
               <button type="submit" id="image-form-submit" hidden>提交图片</button>
             </div>
           </header>
@@ -719,7 +719,7 @@
             </div>
             <div class="library-bulk-actions">
               <button class="primary" type="button" id="library-bulk-publish" disabled>发布到本地</button>
-              <button type="button" id="library-bulk-sync" disabled>同步所选</button>
+              <button type="button" id="library-bulk-sync" disabled>批量上线所选</button>
               <details class="library-more-actions">
                 <summary>更多操作</summary>
                 <div>
@@ -794,16 +794,16 @@
         <header class="sync-page-heading">
           <div>
             <p class="eyebrow">PUBLICATION</p>
-            <h2>GitHub 与 Cloudflare</h2>
-            <p>把本地已发布内容推送到 GitHub；PR 合并后由 Cloudflare Workers Builds 自动部署。</p>
+            <h2>批量上线</h2>
+            <p>多次本地保存后，在这里统一提交最新版本。系统创建 GitHub PR；合并后由 Cloudflare 自动部署，再核验上线效果。</p>
           </div>
-          <button class="primary" type="button" id="sync-all-local">同步到 GitHub</button>
+          <button class="primary" type="button" id="sync-all-local">批量上线</button>
         </header>
 
         <ol class="sync-stage-list" aria-label="上线阶段">
           <li data-sync-stage="local">
             <span>1</span>
-            <div><strong id="sync-local-count">0 条可同步</strong><small>上线体检通过</small></div>
+            <div><strong id="sync-local-count">0 条待上线</strong><small>上线体检通过</small></div>
           </li>
           <li data-sync-stage="github">
             <span>2</span>
@@ -824,8 +824,8 @@
         <section class="sync-queue" aria-labelledby="sync-queue-title">
           <div class="sync-section-heading">
             <div>
-              <h3 id="sync-queue-title">待同步内容</h3>
-              <p id="sync-queue-summary">正在读取本地发布状态…</p>
+              <h3 id="sync-queue-title">待上线内容</h3>
+              <p id="sync-queue-summary">正在读取本地保存状态…</p>
             </div>
             <div class="sync-section-actions">
               <button class="text-action" type="button" id="sync-open-attention" hidden>查看待处理</button>
@@ -1140,7 +1140,7 @@
 
     <dialog id="image-publication-review" class="trash-dialog image-publication-review" aria-labelledby="image-publication-review-title">
       <div class="trash-dialog-heading">
-        <div><p class="eyebrow">发布前确认</p><h2 id="image-publication-review-title">图集预览</h2><p>确认后发布到本地；同步上线仍在“同步上线”中完成。</p></div>
+        <div><p class="eyebrow">保存前确认</p><h2 id="image-publication-review-title">图集预览</h2><p>确认后保存到本地，可查看实际效果；准备好后在“同步上线”中批量上线。</p></div>
         <button type="button" id="image-review-close" aria-label="关闭图集预览">关闭</button>
       </div>
       <div class="image-review-body">
@@ -1150,7 +1150,7 @@
       <label id="image-review-confirmation" class="image-review-confirmation"><input type="checkbox" id="image-review-warnings-confirmed" />已逐项检查以上提示，并确认保留当前图片与资料</label>
       </div>
       <p id="image-review-status" role="status" aria-live="polite"></p>
-      <div class="image-review-actions"><button type="button" id="image-review-edit">返回修改</button><button class="primary" type="button" id="image-review-publish">确认发布</button></div>
+      <div class="image-review-actions"><button type="button" id="image-review-edit">返回修改</button><button class="primary" type="button" id="image-review-publish">保存到本地</button></div>
     </dialog>
     <script src="/app.js?v=20261103-gallery-ai-1" type="module"></script>
   </body>
