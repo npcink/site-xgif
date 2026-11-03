@@ -71,10 +71,10 @@
         <form id="article-form" class="editor article-workspace-form">
           <header class="article-workspace-toolbar" id="article-next-step">
             <div class="article-save-context">
-              <p class="editor-state" id="article-editor-state"></p>
+              <p class="editor-state" id="article-editor-state">尚未保存到本地</p>
             </div>
             <div class="article-toolbar-actions">
-              <button class="article-preview-action" type="button" id="article-real-preview" hidden disabled>预览</button>
+              <button class="article-preview-action" type="button" id="article-real-preview" hidden disabled>查看效果</button>
               <details class="toolbar-more-menu">
                 <summary>更多</summary>
                 <div>
@@ -82,7 +82,7 @@
                   <button type="button" id="article-version-history">版本记录</button>
                 </div>
               </details>
-              <button class="primary" type="button" id="article-next-action" data-action="publish">发布</button>
+              <button class="primary" type="button" id="article-next-action">保存并预览</button>
               <button type="submit" id="article-form-submit" hidden>提交文章</button>
             </div>
           </header>
@@ -586,14 +586,15 @@
           <div class="editor-heading">
             <div>
               <p class="eyebrow">FLOMO HTML EXPORT</p>
-              <h2>导入并发布文章</h2>
+              <h2>导入文章</h2>
             </div>
             <span class="privacy-badge">仅在本机处理</span>
           </div>
-          <p class="form-note">上传 flomo 官方导出的 ZIP，在本机用 AI 整理后直接发布。只有来源不明、内容过短或疑似重复的条目需要补充；原始 ZIP 不会写入仓库或上传 Cloudflare。</p>
+          <p class="form-note">选择 flomo 导出 ZIP，检查重复并整理待导入内容。</p>
+          <details class="import-help"><summary>处理方式与隐私</summary><p>在本机用 AI 整理；来源不明、内容过短或疑似重复的条目需要确认。原始 ZIP 不会写入仓库或上传 Cloudflare。</p></details>
 
           <div class="import-upload">
-            <label class="span-2">
+            <label>
               flomo 导出 ZIP
               <input id="flomo-file" type="file" accept=".zip,application/zip,application/x-zip-compressed" />
             </label>
@@ -653,13 +654,10 @@
             </div>
             <button type="button" id="library-batch-toggle" aria-pressed="false">批量管理</button>
           </header>
-          <section class="library-task-banner" id="library-task-banner" data-state="checking" aria-live="polite">
-            <div>
-              <span id="library-task-kicker">正在检查</span>
-              <strong id="library-task-title">读取发布任务…</strong>
-              <p id="library-task-description">正在核对草稿、本地内容与线上版本。</p>
-            </div>
-          </section>
+          <details class="library-task-banner" id="library-task-banner" data-state="checking">
+            <summary><span id="library-task-kicker">正在检查</span><strong id="library-task-title">读取发布任务…</strong><span class="library-task-hint">查看详情</span></summary>
+            <p id="library-task-description">正在核对草稿、本地内容与线上版本。</p>
+          </details>
           <div class="library-status-tabs" aria-label="按内容位置筛选">
             <button class="active" type="button" data-library-status="all" aria-pressed="true">全部 <span id="library-count-all">0</span></button>
             <button type="button" data-library-status="draft" aria-pressed="false">草稿 <span id="library-count-draft">0</span></button>
@@ -756,7 +754,6 @@
             <p class="eyebrow">当前内容</p>
             <button type="button" id="library-close-detail" aria-label="关闭内容详情">关闭</button>
           </div>
-          <div id="library-detail" class="library-empty">从左侧选择一条内容。</div>
           <div class="library-actions" id="library-actions" hidden>
             <button type="button" id="library-edit">继续处理</button>
             <button type="button" id="library-sync-current" hidden>同步</button>
@@ -771,6 +768,7 @@
               </div>
             </details>
           </div>
+          <div id="library-detail" class="library-empty">从左侧选择一条内容。</div>
         </aside>
       </section>
 
@@ -854,11 +852,6 @@
       </section>
 
       <section class="panel system-panel" id="system-panel">
-        <header class="system-page-heading">
-          <div>
-            <p>查看运行状态和可恢复性。公开内容同步已经集中到“同步上线”。</p>
-          </div>
-        </header>
         <nav class="system-section-tabs" aria-label="系统页面">
           <button class="active" type="button" data-system-view="status" aria-current="page">运行状态</button>
           <button type="button" data-system-view="recovery">恢复与备份</button>
@@ -872,21 +865,18 @@
             </div>
             <button type="button" id="refresh-services">刷新状态</button>
           </div>
-          <div class="service-status">
-            <span class="service-pill" id="publisher-service">管理端检查中</span>
-            <span class="service-pill" id="site-preview-service">站点预览检查中</span>
-            <span class="service-pill" id="content-sync-summary">正在检查内容</span>
+          <div class="system-attention" id="system-attention" role="status" hidden></div>
+          <div class="system-service-overview">
+            <div class="service-status">
+              <span class="service-pill" id="publisher-service">管理端检查中</span>
+              <span class="service-pill" id="site-preview-service">站点预览检查中</span>
+              <span class="service-pill" id="content-sync-summary">正在检查内容</span>
+            </div>
+            <div class="system-actions">
+              <button type="button" id="open-pending-content">查看待同步</button>
+              <button type="button" id="open-site-preview" disabled>打开站点预览</button>
+            </div>
           </div>
-          <section class="network-disclosure" aria-labelledby="network-disclosure-title">
-            <strong id="network-disclosure-title">联网边界</strong>
-            <p>管理页面和配置仅在本机打开。上传图片后自动发送到已配置的本机 / M4 视觉模型；文章 AI、同步、云端核对或 R2 操作在点击对应动作后联网。</p>
-            <dl>
-              <div><dt>AI</dt><dd id="network-ai-detail">读取配置中</dd></div>
-              <div><dt>相关推荐</dt><dd>正文只在本机通过 SSH 隧道发送到 M4 Ollama，线上页面不调用模型。</dd></div>
-              <div><dt>同步</dt><dd>GitHub、Cloudflare 和可选的 R2</dd></div>
-              <div><dt>线上核对</dt><dd>只读取 www.xgif.cn 的公开页面</dd></div>
-            </dl>
-          </section>
           <section class="connection-grid" aria-label="服务连接">
             <article>
               <span>AI 服务</span>
@@ -946,10 +936,16 @@
             </dl>
             <p class="recommendation-result" id="recommendation-result" role="status" aria-live="polite"></p>
           </section>
-          <div class="system-actions">
-            <button type="button" id="open-pending-content">查看待同步</button>
-            <button type="button" id="open-site-preview" disabled>打开站点预览</button>
-          </div>
+          <details class="network-disclosure">
+            <summary id="network-disclosure-title">联网边界与数据去向</summary>
+            <p>管理页面和配置仅在本机打开。上传图片后自动发送到已配置的本机 / M4 视觉模型；文章 AI、同步、云端核对或 R2 操作在点击对应动作后联网。</p>
+            <dl>
+              <div><dt>AI</dt><dd id="network-ai-detail">读取配置中</dd></div>
+              <div><dt>相关推荐</dt><dd>正文只在本机通过 SSH 隧道发送到 M4 Ollama，线上页面不调用模型。</dd></div>
+              <div><dt>同步</dt><dd>GitHub、Cloudflare 和可选的 R2</dd></div>
+              <div><dt>线上核对</dt><dd>只读取 www.xgif.cn 的公开页面</dd></div>
+            </dl>
+          </details>
         </section>
         <section class="system-status-panel system-section" data-system-section="recovery" hidden>
           <div class="system-section-heading">

@@ -487,7 +487,7 @@ async function uploadArticleImage(file) {
     });
     const alt = file.name.replace(/\.[^.]+$/u, "") || "正文图片";
     replaceArticleSelection(`![${alt}](${result.url})`);
-    updateFormSaveState(articleForm, `图片已保存到 ${result.storage === "local" ? "本地站点" : "R2"}，正文尚未保存到 Markdown`);
+    updateFormSaveState(articleForm, `图片已保存到 ${result.storage === "local" ? "本地站点" : "R2"}，正文尚未保存到本地`);
   } catch (error) {
     updateFormSaveState(articleForm, `图片保存失败：${error.message}`);
   }
@@ -557,7 +557,7 @@ function applyArticleTitleSuggestion(title) {
   saveLocalDraft(articleForm);
   syncArticleTitleCandidateSelection();
   articleTitleAiStatus.dataset.state = "applied";
-  articleTitleAiStatus.textContent = "已采用候选标题，尚未保存到 Markdown。";
+  articleTitleAiStatus.textContent = "已采用候选标题，尚未保存到本地。";
 }
 
 function resetArticleTitleSuggestions() {
@@ -763,13 +763,11 @@ function updateFormSaveState(form, message = "") {
     return;
   }
   if (isFormDirty(form)) {
-    stateNode.textContent = form === imageForm
-      ? "有未保存修改 · 已在浏览器临时暂存"
-      : "有未保存到 Markdown 的修改 · 已在浏览器临时暂存";
+    stateNode.textContent = "有未保存修改 · 已在浏览器临时暂存";
   } else if (form.dataset.editFile) {
-    stateNode.textContent = form === imageForm ? "本地已保存" : "已保存到 Markdown";
+    stateNode.textContent = "本地已保存";
   } else {
-    stateNode.textContent = form === imageForm ? "尚未保存到本地" : "";
+    stateNode.textContent = "尚未保存到本地";
   }
 }
 
@@ -817,9 +815,7 @@ function restoreLocalDraft(form, stateNode) {
     form.dataset.dirty = "true";
     stateNode.textContent = stored.data.pendingImages
       ? `正在恢复 ${stored.data.pendingImages} 张待上传图片；无法恢复的文件会单独提示重新添加。`
-      : form === imageForm
-        ? "已恢复临时暂存 · 尚未保存到本地"
-        : "已恢复浏览器临时暂存 · 尚未保存到 Markdown";
+      : "已恢复临时暂存 · 尚未保存到本地";
     if (!scopedValue && legacyValue) {
       localStorage.setItem(scopedKey, legacyValue);
       localStorage.removeItem(legacyKey);
@@ -832,7 +828,7 @@ function restoreLocalDraft(form, stateNode) {
 function setEditing(form, item) {
   form.dataset.editFile = item?.file || "";
   form.dataset.contentSha256 = item?.contentSha256 || "";
-  markFormClean(form, item ? form === imageForm ? "本地已保存" : `已保存到 Markdown · ${item.file}` : "");
+  markFormClean(form, item ? "本地已保存" : "");
   if (item) setPublishMode(form, item.draft ? "draft" : "publish");
   if (form === articleForm) {
     form.dataset.originalDraft = item ? String(Boolean(item.draft)) : "";
@@ -977,17 +973,15 @@ function syncArticleActionState() {
   const alreadyPublished = editing && !originalDraft;
   const canPreview = editing && !dirty && Boolean(articleForm.dataset.previewUrl) && sitePreviewAvailable;
 
-  submit.textContent = alreadyPublished ? "检查并保存修改" : "检查并发布草稿";
+  submit.textContent = "检查并保存到本地";
   articleSaveDraft.hidden = !dirty;
   articleSaveDraft.textContent = alreadyPublished ? "保存修改" : "保存草稿";
   articleSaveDraft.disabled = !dirty;
 
   articleRealPreview.disabled = !canPreview;
   articleRealPreview.hidden = !canPreview;
-  articleNextAction.dataset.action = alreadyPublished && !dirty ? "sync" : "publish";
-  articleNextAction.textContent = alreadyPublished
-    ? dirty ? "保存修改" : "同步上线"
-    : originalDraft ? "发布草稿" : "发布";
+  articleNextAction.hidden = alreadyPublished && !dirty;
+  articleNextAction.textContent = "保存并预览";
   articleNextAction.disabled = articleForm.dataset.publishing === "true";
 
   articlePublishOptions.hidden = !(editing && originalDraft);
@@ -1475,23 +1469,6 @@ function formatQuality(result) {
   return [asset, issues.length ? issues.join("\n") : "质量检查通过。"].filter(Boolean).join("\n");
 }
 
-function formatPublish(result) {
-  if (!result || typeof result !== "object") return result;
-  const lines = [
-    result.file ? `已保存：${result.file}` : "内容已保存。",
-    result.workflow ? `状态：${result.workflow.label}。${result.workflow.description}` : "",
-    result.git?.commitSha ? `本地提交：${result.git.commitSha}` : "",
-    result.storage ? `图片存储：${result.storage}` : "",
-    result.indexWarning || "",
-  ].filter(Boolean);
-  if (result.git?.push?.attempted) {
-    lines.push(result.git.push.ok
-      ? "远程推送成功。"
-      : `远程推送失败：${result.git.push.error || "未配置远程仓库。"}\n可在“内容库”中点击“重新同步”。`);
-  }
-  return lines.join("\n");
-}
-
 function renderLibraryCounts(counts = {}) {
   libraryCounts = {
     all: Number(counts.all || 0),
@@ -1516,7 +1493,7 @@ function renderLibraryCounts(counts = {}) {
   }
   const task = libraryTaskPresentation(libraryCounts);
   $("#library-task-summary").textContent =
-    `${libraryCounts.all} 项内容 · ${libraryCounts.draft} 项草稿 · ${libraryCounts.publishing} 项发布中 · ${libraryCounts.online} 项已上线`;
+    `${libraryCounts.all} 项内容`;
   const filteredStatusLabels = {
     draft: "草稿",
     publishing: "发布中",
@@ -1808,11 +1785,11 @@ function renderContentAuditGroup(report, status, label) {
             <div class="content-audit-item-heading">
               <div><strong>${escapeHtml(item.title)}</strong><span>${item.type === "article" ? "文章" : "图片"} · ${escapeHtml(item.source || "未标注")}</span></div>
             </div>
-            ${issues.length ? `<ul>${issues.map((issue) => `<li>${escapeHtml(issue)}</li>`).join("")}</ul>` : "<p>检查通过</p>"}
-            <code>${escapeHtml(item.file)}</code>`;
-          return item.type === "article" && status !== "ready"
-            ? `<button class="content-audit-item-action" type="button" data-status="${status}" data-audit-open-article="${escapeHtml(item.file)}" aria-label="继续处理：${escapeHtml(item.title)}">${body}</button>`
-            : `<article data-status="${status}">${body}</article>`;
+            ${issues.length ? `<ul>${issues.map((issue) => `<li>${escapeHtml(issue)}</li>`).join("")}</ul>` : "<p>检查通过</p>"}`;
+          const action = item.type === "article" && status !== "ready"
+            ? `<button class="content-audit-item-action" type="button" data-audit-open-article="${escapeHtml(item.file)}" aria-label="继续处理：${escapeHtml(item.title)}">${body}<span class="audit-continue">继续处理 →</span></button>`
+            : `<div class="content-audit-item-copy">${body}</div>`;
+          return `<article data-status="${status}">${action}<details class="audit-technical"><summary>文件信息</summary><code>${escapeHtml(item.file)}</code></details></article>`;
         }).join("") : '<p class="library-empty">无。</p>'}
       </div>
     </details>`;
@@ -1919,15 +1896,16 @@ async function applyTagMerge() {
 }
 
 function renderSyncHistory(items = []) {
+  const renderItem = (item) => `
+    <article class="sync-history-item">
+      <div><strong>${Number(item.details.count || 0)} 条内容 · ${item.details.pushOk ? "推送成功" : "推送未完成"}</strong><time>${escapeHtml(new Date(item.createdAt).toLocaleString("zh-CN"))}</time></div>
+      ${githubLink(item.details.pullRequestUrl, `打开 GitHub PR #${Number(item.details.pullRequestNumber || 0)}`)
+        || githubLink(item.details.compareUrl, "打开 GitHub 比较页")}
+      <details class="sync-history-technical"><summary>分支与提交信息</summary><code>${escapeHtml(item.details.branch || "未知分支")}</code>${item.details.commitSha ? `<code>${escapeHtml(item.details.commitSha)}</code>` : ""}</details>
+    </article>`;
   $("#sync-history-list").innerHTML = items.length
-    ? items.map((item) => `
-        <article class="sync-history-item">
-          <div><strong>${escapeHtml(item.details.branch || "未知分支")}</strong><time>${escapeHtml(new Date(item.createdAt).toLocaleString("zh-CN"))}</time></div>
-          <p>${Number(item.details.count || 0)} 条内容 · ${item.details.pushOk ? "推送成功" : "推送未完成"}</p>
-          ${item.details.commitSha ? `<code>${escapeHtml(item.details.commitSha)}</code>` : ""}
-          ${githubLink(item.details.pullRequestUrl, `打开 GitHub PR #${Number(item.details.pullRequestNumber || 0)}`)
-            || githubLink(item.details.compareUrl, "打开 GitHub 比较页")}
-        </article>`).join("")
+    ? items.slice(0, 3).map(renderItem).join("")
+      + (items.length > 3 ? `<details class="sync-history-older"><summary>更早记录（${items.length - 3} 次）</summary>${items.slice(3).map(renderItem).join("")}</details>` : "")
     : '<p class="library-empty">还没有批量同步记录。</p>';
 }
 
@@ -2498,16 +2476,16 @@ async function selectContent(type, file) {
         : item.data.source || "来源待确认"
       : item.data.source || "未标注来源";
     const syncOpen = presentation.action === "retry" ? " open" : "";
-    const contentState = item.data.draft ? "草稿" : "已发布到本地";
+    const contentState = item.data.draft ? "草稿" : "本地已保存";
     const verificationTime = item.publication?.lastVerifiedAt || item.publication?.checkedAt;
     const publicationDescription = item.publication?.verification === "unknown"
       ? `${item.publication.description} 上次成功核对：${formatDateTime(item.publication.lastVerifiedAt)}`
       : `${item.publication?.description || "等待核对。"} 核对时间：${formatDateTime(verificationTime)}`;
     libraryDetail.innerHTML = `
       <div class="library-detail">
-        ${media}
         <p class="eyebrow">${item.type === "article" ? "文章" : "图片"} · ${escapeHtml(item.data.pubDate || "")}</p>
         <h2>${escapeHtml(item.data.title || "未命名内容")}</h2>
+        ${media}
         <p class="library-detail-summary">${escapeHtml(item.data.summary || item.data.description || "")}</p>
         ${internalNote}
         <div class="tags">${renderTags(item.data.tags)}</div>
@@ -2782,7 +2760,7 @@ articleForm.addEventListener("submit", async (event) => {
   syncArticleActionState();
   try {
     const data = articlePayload();
-    showResult(articleResult, data.draft ? "正在保存文章草稿..." : "正在检查并发布文章...");
+    showResult(articleResult, data.draft ? "正在保存文章草稿..." : "正在检查并保存文章...");
     const originalDraft = articleForm.dataset.originalDraft === "true";
     const isPublishingDraft = Boolean(articleForm.dataset.editFile) && originalDraft && !data.draft;
     const isReturningToDraft = Boolean(articleForm.dataset.editFile) && !originalDraft && data.draft;
@@ -2798,17 +2776,17 @@ articleForm.addEventListener("submit", async (event) => {
       if (!quality.ok) {
         showResult(articleResult, formatQuality(quality));
         articleAuditGuidance.hidden = false;
-        articleAuditGuidance.querySelector("strong").textContent = "发布检查未通过，请处理以下问题";
+        articleAuditGuidance.querySelector("strong").textContent = "保存检查未通过，请处理以下问题";
         articleAuditIssues.innerHTML = quality.issues
           .map((issue) => `<li>${escapeHtml(issue.message)}</li>`)
           .join("");
-        articleAuditNextStep.textContent = "修改后再次点击“发布”，系统会重新保存并检查。";
+        articleAuditNextStep.textContent = "修改后再次点击“保存并预览”，系统会重新检查。";
         articleAuditGuidance.scrollIntoView({ behavior: "smooth", block: "center" });
         return;
       }
       const warnings = quality.issues.filter((item) => item.level === "warning");
-      if (warnings.length && !window.confirm(`发布前请确认：\n${warnings.map((item) => `- ${item.message}`).join("\n")}`)) {
-        showResult(articleResult, "已取消发布，请调整内容后再试。");
+      if (warnings.length && !window.confirm(`保存前请确认：\n${warnings.map((item) => `- ${item.message}`).join("\n")}`)) {
+        showResult(articleResult, "已取消保存，请调整内容后再试。");
         return;
       }
     }
@@ -2834,7 +2812,8 @@ articleForm.addEventListener("submit", async (event) => {
       publicationState: data.draft ? "draft" : "local",
       contentSha256: result.contentSha256,
     });
-    showResult(articleResult, formatPublish(result));
+    if (result.indexWarning) showResult(articleResult, result.indexWarning);
+    else { articleResult.hidden = true; articleResult.textContent = ""; }
     await loadLibrary();
   } catch (error) {
     showError(articleResult, error);
@@ -3770,18 +3749,10 @@ for (const button of $$("[data-article-inspector-open]")) {
   });
 }
 articleNextAction.addEventListener("click", () => {
-  if (articleNextAction.dataset.action === "sync") {
-    switchTab("sync");
-    return;
-  }
   if (!articleForm.checkValidity()) {
     articleForm.reportValidity();
     return;
   }
-  if (
-    articleForm.dataset.previewed !== "true"
-    && !window.confirm("尚未查看最新版本的真实预览。真实预览是建议步骤，不会阻止发布；仍要继续吗？")
-  ) return;
   setPublishMode(articleForm, "publish");
   syncArticleActionState();
   articleForm.requestSubmit();
@@ -4176,6 +4147,16 @@ async function loadStatus({ refreshRemote = false } = {}) {
       ? `查看待处理（${attentionPending}）`
       : "查看发布状态";
     $("#open-pending-content").dataset.targetStatus = attentionPending ? "attention" : "all";
+    const systemIssues = [
+      !sitePreviewAvailable ? "站点预览未运行：检查本机预览服务后刷新状态。" : "",
+      status.localData?.ok === false ? "本地索引异常：重启发布台以恢复索引。" : "",
+      status.ai?.configurationError ? `文章 AI：${status.ai.configurationError}` : "",
+      status.galleryAi?.configurationError ? `图集 AI：${status.galleryAi.configurationError}` : "",
+      !privateGit.ready ? `私有内容备份：${privateGit.detail}` : "",
+    ].filter(Boolean);
+    const systemAttention = $("#system-attention");
+    systemAttention.hidden = !systemIssues.length;
+    systemAttention.innerHTML = `<strong>需要处理</strong><ul>${systemIssues.map((issue) => `<li>${escapeHtml(issue)}</li>`).join("")}</ul>`;
     const health = $("#publisher-health");
     const healthLabel = $("#publisher-health-label");
     const healthDetail = $("#publisher-health-detail");
@@ -4202,6 +4183,8 @@ async function loadStatus({ refreshRemote = false } = {}) {
     updateLibraryActions(activeContent);
     syncArticleActionState();
   } catch {
+    $("#system-attention").hidden = false;
+    $("#system-attention").textContent = "暂时无法读取完整状态，请点击刷新状态重试。";
     $("#status").textContent = "无法读取 Git 状态，但仍可生成本地内容文件。";
     $("#publisher-health").dataset.state = "error";
     $("#publisher-health-label").textContent = "无法读取完整环境状态";
