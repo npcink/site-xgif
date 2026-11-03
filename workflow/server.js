@@ -1,7 +1,8 @@
+import { galleryImages, validateGalleryImages } from "../site/src/lib/image-gallery.mjs";
 import { createHash, randomUUID } from "node:crypto";
 import { createServer } from "node:http";
 import { execFile } from "node:child_process";
-import { appendFile, mkdir, readdir, readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readdir, readFile, realpath, rename, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { brotliCompressSync, gzipSync } from "node:zlib";
@@ -34,7 +35,7 @@ import { reconcileR2Assets } from "./r2-reconciliation.js";
 import { localRequestSecurityError } from "./local-request-security.js";
 import { publisherSourceVersion } from "./runtime-version.js";
 import { calendarDate } from "./calendar-date.js";
-import { saveR2PrivateBackup } from "./r2-private-backup.js";
+import { inspectR2PrivateBackup, saveR2PrivateBackup } from "./r2-private-backup.js";
 import { loadLocalEnv } from "./local-env.js";
 import { listReusableAssets } from "./asset-library.js";
 import { ImageSimilarityIndex } from "./image-similarity.js";
@@ -92,6 +93,7 @@ import {
   buildPublicationBundle,
   publicationVersion,
   verifiablePublicAssetUrls,
+  referencedAssetUrls,
 } from "./publication-bundle.js";
 import { retryPublicationBatch } from "./publication-batch-recovery.js";
 import { validateServiceBaseUrl } from "./service-url-policy.js";
@@ -363,7 +365,7 @@ function readWebpDimensions(buffer) {
   throw imageValidationError("WebP 图片缺少可用的尺寸信息。");
 }
 
-function inspectImageUpload(fileData) {
+function inspectImageUpload(fileData, { preserved = false } = {}) {
   const match = String(fileData || "").match(/^data:([^;]+);base64,([A-Za-z0-9+/]+={0,2})$/);
   if (!match) throw imageValidationError("图片数据格式无效，请重新选择文件。", 400);
   const [, declaredMime, encoded] = match;
@@ -371,7 +373,7 @@ function inspectImageUpload(fileData) {
 
   const buffer = Buffer.from(encoded, "base64");
   if (buffer.length === 0) throw imageValidationError("图片文件为空。");
-  if (buffer.length > maxImageBytes) throw imageValidationError(`图片文件超过 ${Math.floor(maxImageBytes / 1024 / 1024)} MB 限制。`);
+  if (!preserved && buffer.length > maxImageBytes) throw imageValidationError(`图片文件超过 ${Math.floor(maxImageBytes / 1024 / 1024)} MB 限制。`);
 
   let mime = "";
   let dimensions;
@@ -393,10 +395,10 @@ function inspectImageUpload(fileData) {
 
   if (mime !== declaredMime) throw imageValidationError("图片扩展类型与实际文件内容不一致。");
   if (!dimensions.width || !dimensions.height) throw imageValidationError("图片尺寸无效。");
-  if (dimensions.width < minImageDimension || dimensions.height < minImageDimension) {
+  if (!preserved && (dimensions.width < minImageDimension || dimensions.height < minImageDimension)) {
     throw imageValidationError(`图片尺寸至少需要 ${minImageDimension} × ${minImageDimension} 像素。`);
   }
-  if (dimensions.width > maxImageDimension || dimensions.height > maxImageDimension) {
+  if (!preserved && (dimensions.width > maxImageDimension || dimensions.height > maxImageDimension)) {
     throw imageValidationError(`图片单边不能超过 ${maxImageDimension} 像素。`);
   }
 
@@ -594,6 +596,7 @@ async function scanMarkdownFrontmatter(dir) {
       title: extractFrontmatterString(content, "title"),
       sourceUrl: extractFrontmatterString(content, "sourceUrl"),
       image: extractFrontmatterString(content, "image"),
+      imageUrls: referencedAssetUrls(content),
       body: parsed.body,
     });
   }
@@ -1507,8 +1510,12 @@ async function scanDuplicateImage({ title, sha256, excludeFile }) {
       reason: "标题重复",
     }));
 
-  const hashMatches = sha256 ? await findFilesByHash(target.memeAssets, sha256) : [];
-  const r2Matches = sha256 ? await findR2AssetsByHash(sha256) : [];
+  const referenced = new Set(records
+    .filter((record) => !excludedPath || path.resolve(record.file) !== excludedPath)
+    .flatMap((record) => record.imageUrls));
+  const hashMatches = sha256 ? (await findFilesByHash(target.memeAssets, sha256))
+    .filter((file) => referenced.has(`/${path.relative(path.join(siteRoot, "public"), file).split(path.sep).join("/")}`)) : [];
+  const r2Matches = sha256 ? (await findR2AssetsByHash(sha256)).filter((row) => referenced.has(row.publicUrl)) : [];
 
   return [
     ...titleMatches,
@@ -1999,6 +2006,8 @@ async function checkArticleQuality(payload) {
 }
 
 async function checkImageQuality(payload) {
+  if (payload.images !== undefined) return checkGalleryQuality(payload);
+
   const issues = [];
   const tags = normalizeList(payload.tags);
   let asset = null;
@@ -2057,6 +2066,113 @@ async function checkImageQuality(payload) {
       sha256: asset.sha256,
     },
   };
+}
+
+async function readGalleryAsset(src, { preserved = false } = {}) {
+  let buffer;
+  let mime;
+  if (src.startsWith("/images/") && !/[?#%]/u.test(src) && !src.split("/").includes("..")) {
+    const root = await realpath(path.join(siteRoot, "public"));
+    const file = await realpath(path.join(root, src));
+    if (!file.startsWith(`${root}${path.sep}images${path.sep}`)) throw imageValidationError("图片不在站点资源目录。", 422);
+    buffer = await readFile(file);
+    mime = [...imageExtensions].find(([, ext]) => file.toLowerCase().endsWith(ext))?.[0];
+    if (file.toLowerCase().endsWith(".jpeg")) mime = "image/jpeg";
+  } else {
+    const row = (await readJsonLines(target.r2AssetLedger)).find((item) => item.publicUrl === src);
+    if (!row) throw imageValidationError("图集只能使用已上传的图片。", 422);
+    const backup = await inspectR2PrivateBackup({ row, directory: target.r2PrivateAssets });
+    if (!backup.ok) throw imageValidationError("图集图片缺少可核验的原始字节备份。", 422);
+    buffer = await readFile(backup.filePath);
+    mime = row.mime;
+  }
+  return inspectImageUpload(`data:${mime};base64,${buffer.toString("base64")}`, { preserved });
+}
+
+async function prepareGallery(payload, existing = {}) {
+  const images = validateGalleryImages(payload.images);
+  const preserved = new Map(galleryImages(existing).map((image) => [image.src, image]));
+  const prepared = [];
+  const hashes = new Set();
+  for (const image of images) {
+    // Keep legacy external URLs without fetching them. Local and backed-up images
+    // are always read again so dimensions, missing files and byte duplicates stay authoritative.
+    const saved = preserved.get(image.src);
+    const backedUp = saved && (await readJsonLines(target.r2AssetLedger)).some((row) => row.publicUrl === image.src);
+    if (saved && !image.src.startsWith("/images/") && !backedUp) {
+      prepared.push({ src: image.src, width: Number(saved.width) || undefined, height: Number(saved.height) || undefined, altText: image.altText || saved.altText });
+      continue;
+    }
+    const asset = await readGalleryAsset(image.src, { preserved: Boolean(saved) });
+    if (hashes.has(asset.sha256)) throw imageValidationError("图集中不能包含相同字节的重复图片。", 422);
+    hashes.add(asset.sha256);
+    prepared.push({ src: image.src, width: asset.width, height: asset.height, ...(image.altText ? { altText: image.altText } : {}) });
+  }
+  const cover = prepared[0];
+  return { images: prepared, image: cover.src, width: cover.width, height: cover.height,
+    ratio: cover.width && cover.height ? suggestedImageRatio(cover.width, cover.height) : payload.ratio || "square" };
+}
+
+async function checkGalleryQuality(payload) {
+  const { images, fileData, ...metadata } = payload;
+  const base = await checkImageQuality(metadata);
+  const perImage = [];
+  try {
+    let existing = {};
+    if (payload.excludeFile) existing = parseFrontmatter(await readFile(resolveManagedFile("image", payload.excludeFile), "utf8")).data;
+    const prepared = await prepareGallery(payload, existing);
+    const preserved = new Set(galleryImages(existing).map((image) => image.src));
+    for (const [index, image] of prepared.images.entries()) {
+      if (preserved.has(image.src)) continue;
+      const asset = await readGalleryAsset(image.src);
+      const similarity = await imageSimilarityIndex.check({ buffer: asset.buffer, excludeFile: payload.excludeFile });
+      if (similarity.matches.some((match) => match.kind === "exact")) base.issues.push(qualityIssue("error", `第 ${index + 1} 张图片已存在，不能重复发布。`));
+      if (similarity.matches.some((match) => match.kind === "similar")) base.issues.push(qualityIssue("warning", `第 ${index + 1} 张发现疑似相似图片，请对照后确认。`));
+      if (similarity.unavailable) base.issues.push(qualityIssue("warning", `第 ${index + 1} 张相似图检查不完整，有 ${similarity.unavailable} 张暂时无法比对。`));
+      perImage.push({ src: image.src, sha256: asset.sha256, similarity });
+    }
+  } catch (error) { base.issues.push(qualityIssue("error", error.message)); }
+  return { ...base, ok: !base.issues.some((issue) => issue.level === "error"), perImage };
+}
+
+function assertGalleryQuality(quality, payload) {
+  const errors = quality.issues.filter((issue) => issue.level === "error");
+  if (errors.length) throw imageValidationError(errors.map((issue) => issue.message).join("；"), 422);
+  for (const image of quality.perImage) {
+    if ((image.similarity.matches.length || image.similarity.unavailable)
+      && !payload.similarityReviewedHashes?.includes(image.sha256)) {
+      throw imageValidationError("请先检查图集中每张图片的相似候选并确认后再保存。", 422);
+    }
+  }
+}
+
+async function recordGalleryAuthorization(images, payload, entryPath) {
+  if (payload.sourceKind !== "user_provided") return;
+  for (const { src } of images) {
+    const asset = await readGalleryAsset(src, { preserved: true });
+    await recordUserProvidedAsset({ payload, asset, entryPath, assetUrl: src });
+  }
+}
+
+async function publishGallery(input) {
+  const payload = normalizeImageAttribution(input);
+  validateRequired(payload, ["title", "description"]);
+  const prepared = await prepareGallery(payload);
+  const quality = await checkGalleryQuality({ ...payload, ...prepared, excludeFile: undefined });
+  assertGalleryQuality(quality, payload);
+  payload.contentId = await allocateContentId(payload.pubDate || todayIso());
+  const entryPath = path.join(target.imageEntries, `${payload.contentId}.md`);
+  const markdown = buildImageMarkdown({ ...payload, ...prepared });
+  await mkdir(target.imageEntries, { recursive: true });
+  await recordGalleryAuthorization(prepared.images, payload, entryPath);
+  await writeTextAtomic(entryPath, markdown);
+  clearPublicationStateCaches();
+  const bundle = await buildPublicationBundle({ repoRoot, items: [{ file: path.relative(repoRoot, entryPath) }] });
+  const git = payload.commit ? await commitAndMaybePush(bundle.files.map((file) => path.join(repoRoot, file)), `Add gallery: ${payload.title}`, Boolean(payload.push)) : null;
+  const indexWarning = await refreshLocalIndexes("create_image_gallery", { file: path.relative(repoRoot, entryPath), draft: Boolean(payload.draft) });
+  return { ok: true, file: path.relative(repoRoot, entryPath), images: prepared.images, publicImagePath: prepared.image,
+    previewUrl: previewContentUrl("image", payload.contentId), contentSha256: contentSha256(markdown),
+    quality, git, indexWarning };
 }
 
 function sanitizeImageSuggestion(value) {
@@ -2147,6 +2263,15 @@ function buildLegacyImageMarkdown(payload) {
 }
 
 function buildImageMarkdown(payload) {
+  if (payload.images !== undefined) {
+    const images = validateGalleryImages(payload.images);
+    const cover = images[0];
+    payload = { ...payload, image: cover.src, width: cover.width, height: cover.height,
+      ratio: cover.width && cover.height ? suggestedImageRatio(cover.width, cover.height) : payload.ratio };
+    const { images: ignored, ...single } = payload;
+    return buildImageMarkdown(single).replace("\nimage: ", `\nimages: ${JSON.stringify(images)}\nimage: `);
+  }
+
   const sourceLine = "\nsource: " + yamlString(payload.source || "本地上传") + "\n";
   const sourceKind = payload.sourceKind || "original";
   const attributionLines = sourceLine
@@ -2232,8 +2357,18 @@ async function updateManagedContent(
       image: payload.image || existing.data.image,
       excludeFile: file,
     });
+    if (imagePayload.images !== undefined) {
+      const prepared = await prepareGallery(imagePayload, existing.data);
+      Object.assign(imagePayload, prepared);
+      quality = await checkGalleryQuality({ ...imagePayload, excludeFile: file });
+      assertGalleryQuality(quality, payload);
+      const authorizedImages = existing.data.sourceKind === "user_provided"
+        ? prepared.images.filter((image) => !galleryImages(existing.data).some((saved) => saved.src === image.src))
+        : prepared.images;
+      await recordGalleryAuthorization(authorizedImages, imagePayload, filePath);
+    }
     validateRequired(imagePayload, ["title", "description"]);
-    if (!imagePayload.draft && imagePayload.public !== false) {
+    if (!quality && !imagePayload.draft && imagePayload.public !== false) {
       quality = await checkImageQuality(imagePayload);
       const errors = quality.issues.filter((item) => item.level === "error");
       if (errors.length) {
@@ -3886,6 +4021,7 @@ async function handleApi(req, res) {
   if (pathname === "/api/assets/upload" && req.method === "POST") {
     const payload = await readJson(req);
     const asset = inspectImageUpload(payload.fileData);
+    const isGallery = payload.purpose === "image-gallery";
     let url = "";
     let storage = "local";
     let ledger = "";
@@ -3894,13 +4030,14 @@ async function handleApi(req, res) {
       url = upload.publicUrl;
       storage = "cloudflare-r2";
       ledger = path.relative(repoRoot, await recordR2Asset({ asset, entryPath: null, upload }));
+      await saveR2PrivateBackup({ asset, objectKey: upload.objectKey, directory: target.r2PrivateAssets });
     } else {
       const fileName = `${asset.sha256.slice(0, 24)}${asset.extension}`;
-      const filePath = path.join(target.articleAssets, fileName);
+      const filePath = path.join(isGallery ? target.memeAssets : target.articleAssets, fileName);
       if (!await pathExists(filePath)) await writeBufferAtomic(filePath, asset.buffer);
-      url = `/images/articles/${fileName}`;
+      url = `/images/${isGallery ? "memes" : "articles"}/${fileName}`;
     }
-    const indexWarning = await refreshLocalIndexes("upload_article_asset", {
+    const indexWarning = await refreshLocalIndexes(isGallery ? "upload_gallery_asset" : "upload_article_asset", {
       storage,
       url,
       sha256: asset.sha256,
@@ -3913,6 +4050,7 @@ async function handleApi(req, res) {
       width: asset.width,
       height: asset.height,
       byteLength: asset.byteLength,
+      sha256: asset.sha256,
       indexWarning,
     });
     return;
@@ -4326,6 +4464,10 @@ async function handleApi(req, res) {
   if (pathname === "/api/publish/image" && req.method === "POST") {
     let payload = await readJson(req);
     await assertGitAutomationAllowed(payload);
+    if (payload.images !== undefined) {
+      sendJson(res, 200, await publishGallery(payload));
+      return;
+    }
     validateRequired(payload, [
       "title",
       "description",

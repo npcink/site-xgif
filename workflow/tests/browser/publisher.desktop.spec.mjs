@@ -368,6 +368,7 @@ test("system status is a dedicated workspace instead of a floating popover", asy
 });
 
 test("image editor keeps the media central and publishing fields in a desktop inspector", async ({ page }) => {
+  await page.route("**/api/assets/upload", (route) => route.fulfill({ json: { url: "/images/memes/browser-fixture.png", width: 1200, height: 630 } }));
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/#image");
 

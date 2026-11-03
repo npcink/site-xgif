@@ -1,3 +1,4 @@
+import { galleryImages, validateGalleryImages } from "../site/src/lib/image-gallery.mjs";
 import { createHash } from "node:crypto";
 import { access, readdir, readFile } from "node:fs/promises";
 import path from "node:path";
@@ -237,12 +238,17 @@ async function auditImage(item, repoRoot) {
   if (Array.isArray(data.tags) && data.tags.some((tag) => !CANONICAL_TAGS.includes(tag))) {
     item.blockers.push("包含未纳入规范词表的标签。");
   }
-  if (String(data.image || "").startsWith("/")) {
-    const asset = path.join(repoRoot, "site", "public", String(data.image).replace(/^\/+/u, ""));
+  if (data.images !== undefined) {
     try {
-      await access(asset);
-    } catch {
-      item.blockers.push("本地图片文件不存在。");
+      validateGalleryImages(data.images);
+      if (data.images[0].src !== data.image) item.blockers.push("图集封面与首张图片不一致。");
+    } catch (error) { item.blockers.push(error.message); }
+  }
+  for (const { src } of galleryImages(data)) {
+    if (String(src).startsWith("/")) {
+      const asset = path.join(repoRoot, "site", "public", String(src).replace(/^\/+/u, ""));
+      try { await access(asset); }
+      catch { item.blockers.push("本地图片文件不存在。"); }
     }
   }
   if (item.sourceKind === "unknown") {

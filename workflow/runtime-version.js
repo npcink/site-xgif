@@ -1,11 +1,13 @@
 import { createHash } from "node:crypto";
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 function publisherSourceFiles(workflowRoot) {
   const files = readdirSync(workflowRoot, { withFileTypes: true })
     .filter((entry) => entry.isFile() && (entry.name.endsWith(".js") || entry.name === "package.json"))
     .map((entry) => path.join(workflowRoot, entry.name));
+  const galleryModel = path.resolve(workflowRoot, "../site/src/lib/image-gallery.mjs");
+  if (existsSync(galleryModel)) files.push(galleryModel);
   const migrationsDirectory = path.join(workflowRoot, "db", "migrations");
   try {
     files.push(

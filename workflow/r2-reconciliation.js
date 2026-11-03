@@ -1,3 +1,4 @@
+import { galleryImages } from "../site/src/lib/image-gallery.mjs";
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { parseContentDocument } from "./content-audit.js";
@@ -29,12 +30,13 @@ async function imageReferences({ repoRoot, imageDirectory, publicBaseUrl }) {
   for (const file of files) {
     const filePath = path.join(imageDirectory, file);
     const parsed = parseContentDocument(await readFile(filePath, "utf8"));
-    const image = String(parsed?.data?.image || "");
-    if (!image.startsWith(`${publicBaseUrl}/`)) continue;
-    references.push({
-      publicUrl: image,
-      contentFile: path.relative(repoRoot, filePath).split(path.sep).join("/"),
-    });
+    for (const { src: image } of galleryImages(parsed?.data || {})) {
+      if (!image.startsWith(`${publicBaseUrl}/`)) continue;
+      references.push({
+        publicUrl: image,
+        contentFile: path.relative(repoRoot, filePath).split(path.sep).join("/"),
+      });
+    }
   }
   return references;
 }

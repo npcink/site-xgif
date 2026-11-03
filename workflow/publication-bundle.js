@@ -114,6 +114,12 @@ export function referencedAssetUrls(markdown) {
   for (const line of frontmatter.split(/\r?\n/u)) {
     const field = line.match(/^(?:image|coverImage):\s*(.*)$/u);
     if (field) urls.push(parseFrontmatterScalar(field[1]));
+    const gallery = line.match(/^images:\s*(.*)$/u);
+    if (gallery) {
+      const images = JSON.parse(gallery[1]);
+      if (!Array.isArray(images)) throw new Error("图集图片列表无效。");
+      urls.push(...images.map((image) => image.src));
+    }
   }
   for (const match of source.matchAll(/!\[[^\]]*\]\(\s*(?:<([^>]+)>|([^\s)]+))(?:\s+["'][^"']*["'])?\s*\)/gu)) {
     urls.push(match[1] || match[2] || "");

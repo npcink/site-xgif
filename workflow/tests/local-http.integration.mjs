@@ -13,6 +13,7 @@ import { sampleImage } from "./fixtures/image-sample.mjs";
 const workflowRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const heldFixture = path.join(workflowRoot, "../site/src/content/articles/20990101-hold.md");
 let fixtureCreated = false;
+const galleryCleanup = [];
 let imageFixtureCreated = false;
 let assetFixtureCreated = false;
 const imageFixture = path.join(workflowRoot, "../site/src/content/images/20990101-dupe.md");
@@ -316,6 +317,57 @@ draft: true
   assert.equal(batchHeld.json().failed.length, 1);
   assert.match(JSON.stringify(batchHeld.json().failed), /禁止公开发布/);
   assert.equal(await readFile(heldFixture, "utf8"), before);
+  // Gallery uploads are durable resources; a content entry appears only after every member is ready.
+  const galleryImages = [];
+  for (let i = 0; i < 12; i += 1) {
+    const buffer = await sharp({ create: { width: 320, height: 320, channels: 3, background: { r: i * 17, g: 60, b: 255 - i * 17 } } }).png().toBuffer();
+    const hash = createHash("sha256").update(buffer).digest("hex");
+    galleryCleanup.push(path.join(workflowRoot, `../site/public/images/memes/${hash.slice(0, 24)}.png`));
+    const upload = await post("/api/assets/upload", { purpose: "image-gallery", fileData: `data:image/png;base64,${buffer.toString("base64")}` });
+    assert.equal(upload.status, 200, upload.body);
+    galleryImages.push({ src: upload.json().url, width: 1, height: 1 });
+  }
+  const gallery = { title: "十二张图集集成验证", description: "图集展示验证", tags: ["生活"], sourceKind: "unknown", mood: "开心", scenes: "聊天", category: "表情包", images: galleryImages, draft: true, commit: false, push: false };
+  const excess = await post("/api/publish/image", { ...gallery, images: [...galleryImages, galleryImages[0]] });
+  assert.equal(excess.status, 422, excess.body);
+  assert.match(excess.json().error, /1 至 12/);
+  const repeated = await post("/api/publish/image", { ...gallery, images: [galleryImages[0], galleryImages[0]] });
+  assert.equal(repeated.status, 422);
+  const unsafe = await post("/api/publish/image", { ...gallery, images: [{ src: "http://127.0.0.1/private.png" }] });
+  assert.equal(unsafe.status, 422);
+  const quality = (await post("/api/quality/image", gallery)).json();
+  assert.equal(quality.ok, true, JSON.stringify(quality.issues));
+  assert.equal(quality.perImage.length, 12);
+  const published = await post("/api/publish/image", { ...gallery, similarityReviewedHashes: quality.perImage.map((image) => image.sha256) });
+  assert.equal(published.status, 200, published.body);
+  const galleryFile = published.json().file;
+  galleryCleanup.push(path.join(workflowRoot, "..", galleryFile));
+  const saved = await call({ pathname: `/api/content/read?type=image&file=${encodeURIComponent(galleryFile)}` });
+  assert.equal(saved.json().data.images.length, 12);
+  assert.equal(saved.json().data.images[0].width, 320, "dimensions come from bytes, not the client");
+  const reversed = [...saved.json().data.images].reverse();
+  const updated = await post("/api/content/update", { type: "image", file: galleryFile, expectedContentSha256: published.json().contentSha256, data: { ...gallery, draft: false, images: reversed } });
+  assert.equal(updated.status, 200, updated.body);
+  const reopened = await call({ pathname: `/api/content/read?type=image&file=${encodeURIComponent(galleryFile)}` });
+  assert.deepEqual(reopened.json().data.images.map((image) => image.src), reversed.map((image) => image.src));
+  assert.equal(reopened.json().data.image, reversed[0].src);
+  const stale = await post("/api/content/update", { type: "image", file: galleryFile, expectedContentSha256: published.json().contentSha256, data: gallery });
+  assert.equal(stale.status, 409);
+  const duplicateMember = await post("/api/quality/image", { ...gallery, title: "复制非封面图片", images: [galleryImages[11]] });
+  assert.equal(duplicateMember.json().ok, false);
+  assert.match(JSON.stringify(duplicateMember.json().issues), /已存在/);
+  await rm(path.join(workflowRoot, "..", galleryFile), { force: true });
+  const legacyImage = "/images/xgif-gallery-legacy-small.PNG";
+  const legacyFile = "site/src/content/images/20990101-oldg.md";
+  galleryCleanup.push(path.join(workflowRoot, "../site/public", legacyImage), path.join(workflowRoot, "..", legacyFile));
+  const legacyBytes = await sharp({ create: { width: 64, height: 64, channels: 3, background: "#fff" } }).png().toBuffer();
+  await writeFile(path.join(workflowRoot, "../site/public", legacyImage), legacyBytes, { flag: "wx" });
+  const legacyMarkdown = `---\ncontentId: "20990101-oldg"\ntitle: "旧小图"\ndescription: "旧单图继续可编辑"\nimage: "${legacyImage}"\nsourceKind: "unknown"\ntags: ["生活"]\ndraft: true\n---\n`;
+  await writeFile(path.join(workflowRoot, "..", legacyFile), legacyMarkdown, { flag: "wx" });
+  const legacyEdit = await post("/api/content/update", { type: "image", file: legacyFile, expectedContentSha256: createHash("sha256").update(legacyMarkdown).digest("hex"), data: { title: "旧单图编辑", description: "保持旧图片", tags: ["生活"], sourceKind: "unknown", draft: true, images: [{ src: legacyImage }] } });
+  assert.equal(legacyEdit.status, 200, legacyEdit.body);
+  const legacyRead = (await call({ pathname: `/api/content/read?type=image&file=${encodeURIComponent(legacyFile)}` })).json();
+  assert.equal(legacyRead.data.images[0].width, 64);
   const originalImage = await sampleImage();
   await writeFile(assetFixture, originalImage, { flag: "wx" });
   assetFixtureCreated = true;
@@ -360,6 +412,7 @@ public: false
     new Promise((resolve) => child.once("exit", resolve)),
     new Promise((resolve) => setTimeout(resolve, 3_000)),
   ]);
+  for (const file of galleryCleanup) await rm(file, { force: true });
   if (fixtureCreated) await rm(heldFixture, { force: true });
   if (imageFixtureCreated) await rm(imageFixture, { force: true });
   if (assetFixtureCreated) await rm(assetFixture, { force: true });

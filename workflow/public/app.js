@@ -1,3 +1,4 @@
+import { createImageGallery } from "./image-gallery.js";
 import { importItemMatchesFilter, summarizeImportSelection } from "./import-selection.js";
 import {
   clearLibrarySelectionState,
@@ -146,6 +147,26 @@ let tagMergePlan = null;
 let assetLibraryItems = [];
 let assetPickerMode = "insert";
 let versionHistoryForm = articleForm;
+
+const imageGallery = createImageGallery({
+  root: imageForm,
+  api,
+  onChange(item, images, { restored = false, previewOnly = false } = {}) {
+    const previous = selectedImage;
+    selectedImage = item;
+    const cover = images[0];
+    if (cover?.width && cover?.height) $('[name="ratio"]', imageForm).value = suggestRatio(cover.width, cover.height);
+    if (!restored && !previewOnly) {
+      markFormDirty(imageForm);
+      saveLocalDraft(imageForm);
+      if (!imageGallery.ready()) $("#image-editor-state").textContent = "图片尚未全部上传；请保留当前页面，完成后再保存图集。";
+    }
+    syncAiAvailability();
+    syncImageActionState();
+    updateImagePreview();
+    if (previous !== item && item?.dataUrl?.startsWith("data:")) checkSelectedImage(item);
+  },
+});
 
 try {
   const storedTrash = JSON.parse(localStorage.getItem("xgif-last-trashed-items") || "[]");
@@ -467,7 +488,7 @@ function updateImagePreview() {
   if (!image.startsWith("data:")) $("#image-duplicates").hidden = true;
   $("#image-preview-stage").dataset.empty = String(!image);
   $("#image-preview").innerHTML = `
-    ${image ? `<img src="${image}" alt="${escapeHtml(data.title || "图片预览")}" />` : ""}
+    ${image ? `<img src="${escapeHtml(image)}" alt="${escapeHtml(data.title || "图片预览")}" />` : ""}
     <div class="copy"><div class="meta"><span>${escapeHtml(data.category || "表情包")}</span><span>${escapeHtml(data.pubDate || today)}</span></div>
     <h2>${escapeHtml(data.title || "图片标题")}</h2><p class="summary">${escapeHtml(data.description || "图片说明会显示在这里。")}</p>
     <div class="tags">${renderTags(data.tags)}</div></div>`;
@@ -710,6 +731,7 @@ function readDraftRevisions(form) {
 
 function saveLocalDraft(form, { checkpoint = false } = {}) {
   const data = formData(form);
+  if (form === imageForm) { data.images = imageGallery.snapshot(); data.pendingImages = imageGallery.pendingCount(); }
   if (!Object.values(data).some((value) => value && value !== false && value !== today)) return;
   const savedAt = Date.now();
   localStorage.setItem(draftKey(form), JSON.stringify({ savedAt, data }));
@@ -788,9 +810,12 @@ function restoreLocalDraft(form, stateNode) {
       stored.data.sourceKind = "unknown";
     }
     setFormValues(form, stored.data);
+    if (form === imageForm && stored.data.images) imageGallery.restore(stored.data.images);
     setPublishMode(form, stored.data.publishMode || (stored.data.draft ? "draft" : "publish"));
     form.dataset.dirty = "true";
-    stateNode.textContent = "已恢复浏览器临时暂存 · 尚未保存到 Markdown";
+    stateNode.textContent = stored.data.pendingImages
+      ? `已恢复上传成功的图片；另有 ${stored.data.pendingImages} 张未完成上传，请重新添加。`
+      : "已恢复浏览器临时暂存 · 尚未保存到 Markdown";
     if (!scopedValue && legacyValue) {
       localStorage.setItem(scopedKey, legacyValue);
       localStorage.removeItem(legacyKey);
@@ -821,6 +846,7 @@ function setEditing(form, item) {
 
 function restoreFormSnapshot(form, data) {
   setFormValues(form, data);
+  if (form === imageForm && data.images) imageGallery.restore(data.images);
   setPublishMode(form, data.publishMode || (data.draft ? "draft" : "publish"));
   if (form === articleForm) {
     syncArticleAttribution();
@@ -925,6 +951,7 @@ async function restoreSavedVersion(commit) {
         previewUrl: item.previewUrl,
         contentSha256: item.contentSha256,
       });
+      imageGallery.restore(item.data.images || (item.data.image ? [{ src: item.data.image, width: Number(item.data.width) || undefined, height: Number(item.data.height) || undefined }] : []));
       syncImageAttribution();
       updateImagePreview();
     }
@@ -1109,15 +1136,6 @@ async function fileToDataUrl(file) {
   });
 }
 
-async function imageDimensions(dataUrl) {
-  return new Promise((resolve, reject) => {
-    const image = new Image();
-    image.onload = () => resolve({ width: image.naturalWidth, height: image.naturalHeight });
-    image.onerror = () => reject(new Error("浏览器无法读取这张图片。"));
-    image.src = dataUrl;
-  });
-}
-
 function suggestRatio(width, height) {
   if (width / height >= 1.25) return "wide";
   if (width / height <= 0.8) return "tall";
@@ -1129,7 +1147,7 @@ function imagePayload() {
   const data = formData(imageForm);
   data.commit = false;
   data.push = false;
-  if (selectedImage?.dataUrl?.startsWith("data:")) data.fileData = selectedImage.dataUrl;
+  data.images = imageGallery.snapshot();
   if (imageForm.dataset.editFile) data.excludeFile = imageForm.dataset.editFile;
   return data;
 }
@@ -2562,8 +2580,7 @@ function openActiveContent(nextDraft = null) {
     setFormValues(imageForm, { ...data, tags: list(data.tags).join(", "), mood: list(data.mood).join(", "), scenes: list(data.scenes).join(", "), body });
     setPublishMode(imageForm, data.draft || data.public === false ? "draft" : "publish");
     syncImageAttribution();
-    selectedImage = data.image ? { name: "existing-image", dataUrl: data.image } : null;
-    imageForm.dataset.image = data.image || "";
+    imageGallery.restore(data.images || (data.image ? [{ src: data.image, width: Number(data.width) || undefined, height: Number(data.height) || undefined }] : []));
     setImageInspectorTab("details");
     setEditing(imageForm, {
       file,
@@ -2697,36 +2714,6 @@ for (const button of $$("[data-open-details]")) {
   });
 }
 
-$('input[name="file"]', imageForm).addEventListener("change", async (event) => {
-  const file = event.target.files[0];
-  if (!file) return;
-  try {
-    const dataUrl = await fileToDataUrl(file);
-    const dimensions = await imageDimensions(dataUrl);
-    if (event.target.files[0] !== file) return;
-    const ratio = suggestRatio(dimensions.width, dimensions.height);
-    selectedImage = { name: file.name, dataUrl };
-    $('[name="ratio"]', imageForm).value = ratio;
-    const ratioLabels = { square: "方图", wide: "宽图", tall: "长图" };
-    $("#image-editor-state").textContent =
-      `已读取 ${dimensions.width} × ${dimensions.height} 像素，自动识别为${ratioLabels[ratio]}。`;
-    imageForm.dataset.image = "";
-    markFormDirty(imageForm);
-    syncAiAvailability();
-    syncImageActionState();
-    updateImagePreview();
-    saveLocalDraft(imageForm);
-    checkSelectedImage(selectedImage);
-  } catch (error) {
-    if (event.target.files[0] !== file) return;
-    selectedImage = null;
-    updateImagePreview();
-    syncAiAvailability();
-    syncImageActionState();
-    showError(imageResult, error);
-  }
-});
-
 $('[data-ai-fill="article"]').addEventListener("click", async (event) => {
   const button = event.currentTarget;
   button.disabled = true; button.textContent = "AI 整理中..."; showResult(articleResult, "正在生成可编辑建议...");
@@ -2791,10 +2778,13 @@ $('[data-ai-fill="image"]').addEventListener("click", async (event) => {
   button.disabled = true; button.textContent = "AI 整理中..."; showResult(imageResult, "正在识别图片并生成建议...");
   try {
     if (!selectedImage?.dataUrl?.startsWith("data:")) throw new Error("请选择本地图片后再使用 AI 整理。");
-    applyImageSuggestion((await api("/api/ai/image-suggestion", { ...formData(imageForm), fileData: selectedImage.dataUrl })).suggestion);
+    const image = selectedImage;
+    const result = await api("/api/ai/image-suggestion", { ...formData(imageForm), fileData: image.dataUrl });
+    if (selectedImage !== image) throw new Error("当前图片已更换，请重新整理。");
+    applyImageSuggestion(result.suggestion);
     showResult(imageResult, "AI 已填写建议内容。请检查后再发布。");
   } catch (error) { showError(imageResult, error); }
-  finally { button.disabled = false; button.textContent = "AI 整理图片资料"; syncAiAvailability(); }
+  finally { button.disabled = false; button.textContent = "AI 整理当前图片资料"; syncAiAvailability(); }
 });
 
 articleForm.addEventListener("submit", async (event) => {
@@ -2867,16 +2857,28 @@ articleForm.addEventListener("submit", async (event) => {
 
 imageForm.addEventListener("submit", async (event) => {
   event.preventDefault();
+  if (imageForm.dataset.publishing === "true") return;
   imageForm.dataset.publishing = "true";
+  imageGallery.setLocked(true);
   syncImageActionState();
   try {
+    if (!imageGallery.ready()) throw new Error("请添加 1 至 12 张图片，并等待全部上传成功；失败的图片可单独重试或移除。");
     const data = imagePayload();
-    const submittedImage = selectedImage;
+    const submittedPayload = JSON.stringify(data);
+    const submittedFile = imageForm.dataset.editFile;
+    const submittedVersion = imageForm.dataset.contentSha256;
     showResult(imageResult, data.draft ? "正在保存图片草稿..." : "正在检查并发布图片...");
     if (!imageForm.dataset.editFile && !selectedImage) throw new Error("请选择图片或 GIF。");
     const quality = await api("/api/quality/image", data);
-    if (submittedImage !== selectedImage) throw new Error("图片已更换，请重新检查后保存。");
+    if (submittedPayload !== JSON.stringify(imagePayload()) || submittedFile !== imageForm.dataset.editFile) throw new Error("图集资料或图片已更换，请重新检查后保存。");
     if (quality.similarity) renderImageDuplicates(quality.similarity, quality.duplicates);
+    if (quality.perImage) {
+      renderImageDuplicates({
+        checked: quality.perImage.reduce((sum, image) => sum + image.similarity.checked, 0),
+        unavailable: quality.perImage.reduce((sum, image) => sum + image.similarity.unavailable, 0),
+        matches: quality.perImage.flatMap((image) => image.similarity.matches.map((match) => ({ ...match, title: `第 ${data.images.findIndex((member) => member.src === image.src) + 1} 张候选 · ${match.title}` }))),
+      });
+    }
     if (!quality.ok) {
       showResult(imageResult, formatQuality(quality));
       return;
@@ -2887,14 +2889,17 @@ imageForm.addEventListener("submit", async (event) => {
       return;
     }
     if (quality.asset) data.similarityReviewedSha256 = quality.asset.sha256;
-    const result = imageForm.dataset.editFile
+    if (quality.perImage) data.similarityReviewedHashes = quality.perImage.map((image) => image.sha256);
+    const result = submittedFile
       ? await api("/api/content/update", {
           type: "image",
-          file: imageForm.dataset.editFile,
-          expectedContentSha256: imageForm.dataset.contentSha256,
-          data: { ...data, image: imageForm.dataset.image },
+          file: submittedFile,
+          expectedContentSha256: submittedVersion,
+          data,
         })
-      : await api("/api/publish/image", { ...data, fileName: selectedImage?.name, fileData: selectedImage?.dataUrl });
+      : await api("/api/publish/image", data);
+    if (submittedFile !== imageForm.dataset.editFile) { await loadLibrary(); return; }
+    const changedWhileSaving = submittedPayload !== JSON.stringify(imagePayload());
     localStorage.removeItem(draftKey(imageForm));
     setEditing(imageForm, {
       file: result.file || imageForm.dataset.editFile,
@@ -2902,12 +2907,17 @@ imageForm.addEventListener("submit", async (event) => {
       previewUrl: result.previewUrl || imageForm.dataset.previewUrl,
       contentSha256: result.contentSha256,
     });
-    showResult(imageResult, formatPublish(result));
+    if (changedWhileSaving) {
+      markFormDirty(imageForm);
+      saveLocalDraft(imageForm);
+    }
+    showResult(imageResult, `${formatPublish(result)}${changedWhileSaving ? "\n提交的版本已保存；当前新增修改尚未保存。" : ""}`);
     await loadLibrary();
   } catch (error) {
     showError(imageResult, error);
   } finally {
     imageForm.dataset.publishing = "false";
+    imageGallery.setLocked(false);
     syncImageActionState();
   }
 });

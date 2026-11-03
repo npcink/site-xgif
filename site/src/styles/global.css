@@ -955,3 +955,29 @@ body.detail-dialog-open { overflow: hidden; }
   html { scroll-behavior: auto; }
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
+
+/* Galleries retain the same reading surface in routes and fetched detail dialogs. */
+.image-count { position: absolute; top: 18px; left: 18px; padding: 6px 9px; background: var(--paper); color: var(--ink); font-size: 11px; font-weight: 700; border-radius: 2px; }
+.public-image-gallery { min-width: 0; display: flex; flex-direction: column; background: var(--paper-deep); }
+.public-image-gallery:focus-visible { outline: 2px solid var(--ink); outline-offset: 4px; }
+.image-detail .public-image-gallery .gallery-stage { aspect-ratio: auto; height: clamp(280px, 50vw, 600px); min-height: 0; background: var(--ink); }
+.gallery-stage { touch-action: pan-y; }
+.gallery-stage [data-gallery-slide] { height: 100%; width: 100%; display: block; }
+.gallery-stage [data-gallery-slide][hidden] { display: none; }
+.image-detail .gallery-stage img { border: 0; height: 100%; width: 100%; object-fit: contain; }
+.gallery-controls { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 12px; }
+.gallery-controls button { min-height: 44px; padding: 8px; font: inherit; font-size: 12px; border: 0; background: transparent; cursor: pointer; }
+.gallery-controls button:disabled { opacity: .35; cursor: default; }
+.gallery-controls span { font-size: 12px; font-variant-numeric: tabular-nums; }
+.gallery-thumbnails { display: flex; gap: 8px; overflow-x: auto; padding: 0 12px 12px; }
+.gallery-thumbnails a { position: relative; flex: 0 0 60px; height: 60px; border: 2px solid transparent; }
+.gallery-thumbnails a[aria-current="true"] { border-color: var(--ink); }
+.gallery-thumbnails img { width: 100%; height: 100%; object-fit: contain; background: var(--paper); }
+.gallery-thumbnails span { position: absolute; bottom: 0; right: 0; background: var(--paper); font-size: 10px; padding: 1px 4px; }
+.detail-dialog-body .public-image-gallery { height: 100%; overflow: hidden; }
+.detail-dialog-body .image-detail .public-image-gallery .gallery-stage { flex: 1 1 auto; height: 0; min-height: 200px; }
+.detail-dialog-body .gallery-thumbnails { flex-shrink: 0; }
+@media (max-width: 900px) {
+  .detail-dialog-body .public-image-gallery { height: auto; }
+  .detail-dialog-body .image-detail .public-image-gallery .gallery-stage { flex: none; height: min(60svh, 480px); }
+}

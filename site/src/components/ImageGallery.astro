@@ -1,0 +1,30 @@
+---
+interface Props {
+  images: { src: string; width?: number; height?: number; altText?: string }[];
+  title: string;
+}
+const { images, title } = Astro.props;
+---
+
+<section class="public-image-gallery" data-image-gallery data-current="0" tabindex="0" aria-label={`${title}，共 ${images.length} 张图片，使用左右方向键切换`}>
+  <figure class="gallery-stage" data-gallery-stage>
+    {images.map((image, index) => (
+      <a href={image.src} target="_blank" rel="noreferrer" data-gallery-slide hidden={index !== 0} aria-label={`查看第 ${index + 1} 张原图`}>
+        <img src={image.src} alt={image.altText || `${title} · 第 ${index + 1} 张`} width={image.width} height={image.height} loading={index ? "lazy" : "eager"} decoding="async" referrerpolicy="no-referrer" />
+      </a>
+    ))}
+  </figure>
+  <div class="gallery-controls">
+    <button type="button" data-gallery-step="-1" disabled aria-label="上一张图片">← 上一张</button>
+    <span data-gallery-counter role="status" aria-live="polite">1 / {images.length}</span>
+    <button type="button" data-gallery-step="1" aria-label="下一张图片">下一张 →</button>
+  </div>
+  <nav class="gallery-thumbnails" aria-label="选择图集图片">
+    {images.map((image, index) => (
+      <a href={image.src} target="_blank" rel="noreferrer" data-gallery-index={index} aria-current={index === 0 ? "true" : undefined} aria-label={`第 ${index + 1} 张${index === 0 ? "，封面" : ""}`}>
+        <img src={image.src} alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" />
+        <span>{index + 1}</span>
+      </a>
+    ))}
+  </nav>
+</section>

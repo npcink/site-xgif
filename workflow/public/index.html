@@ -381,11 +381,11 @@
               <div class="image-stage-heading">
                 <div>
                   <p class="eyebrow">图片 / GIF</p>
-                  <strong>选择图片并检查展示效果</strong>
+                  <strong>选择图片并整理图集</strong>
                 </div>
                 <label class="image-file-trigger">
-                  <span>选择图片</span>
-                  <input name="file" type="file" accept="image/*,.gif" />
+                  <span>添加图片</span>
+                  <input name="file" type="file" accept="image/jpeg,image/png,image/webp,image/gif" multiple aria-describedby="image-gallery-status" />
                 </label>
               </div>
 
@@ -393,9 +393,13 @@
                 <article class="image-card" id="image-preview"></article>
                 <div class="image-empty-state" id="image-empty-state">
                   <strong>把图片放到工作台</strong>
-                  <span>选择 PNG、JPG、WebP 或 GIF；比例会自动识别。</span>
+                  <span>选择或拖入 PNG、JPG、WebP 或 GIF，最多 12 张。</span>
                 </div>
               </div>
+
+              <div class="image-gallery-heading"><span id="image-gallery-status" role="status" aria-live="polite">已选 0 / 12 · 首张为封面</span><small>拖动排序，或使用前移、后移按钮</small></div>
+              <p id="image-gallery-feedback" role="status" aria-live="polite"></p>
+              <ol id="image-gallery-list" class="image-gallery-list" aria-label="图集图片"></ol>
 
               <section id="image-duplicates" class="image-duplicates" aria-labelledby="image-duplicates-heading" hidden>
                 <strong id="image-duplicates-heading">检查已有图片</strong>
@@ -408,7 +412,7 @@
                   <strong>需要整理标题、描述和标签？</strong>
                   <small id="image-ai-availability">选择图片后可以使用 AI 整理。</small>
                 </div>
-                <button class="article-context-ai" type="button" data-ai-fill="image" aria-describedby="image-ai-availability" disabled>AI 整理图片资料</button>
+                <button class="article-context-ai" type="button" data-ai-fill="image" aria-describedby="image-ai-availability" disabled>AI 整理当前图片资料</button>
               </div>
             </section>
 

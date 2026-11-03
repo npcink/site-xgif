@@ -1,6 +1,8 @@
 ---
 import { getCollection, render, type CollectionEntry } from "astro:content";
 import ArticleRecommendations from "./ArticleRecommendations.astro";
+import ImageGallery from "./ImageGallery.astro";
+import { galleryImages } from "../lib/image-gallery.mjs";
 import ImageRecommendations from "./ImageRecommendations.astro";
 import FavoriteButton from "./FavoriteButton.astro";
 import { contentHref, selectContentRecommendations } from "../lib/content";
@@ -11,6 +13,7 @@ interface Props {
 }
 
 const { item } = Astro.props;
+const images = galleryImages(item.data);
 const canonicalPath = contentHref(item);
 const { Content } = await render(item);
 const allArticles = (await getCollection("articles")).filter((entry) => !entry.data.draft);
@@ -38,6 +41,7 @@ const imageAspectRatio =
 <article class="detail-page image-detail" data-detail-content data-detail-kind="image" data-content-id={item.data.contentId}>
   <a class="back-link" href="/images">← 返回图片库</a>
   <div class="image-detail-grid">
+    {images.length > 1 ? <ImageGallery images={images} title={item.data.title} /> : (
     <figure
       class:list={[`ratio-${item.data.ratio}`]}
       style={imageAspectRatio ? `--image-aspect-ratio: ${imageAspectRatio}` : undefined}
@@ -50,8 +54,9 @@ const imageAspectRatio =
         referrerpolicy="no-referrer"
       />
     </figure>
+    )}
     <div class="image-detail-copy">
-      <p class="section-kicker">REACTION / 图片详情</p>
+      <p class="section-kicker">REACTION / {images.length > 1 ? `图集 · ${images.length} 张` : "图片详情"}</p>
       <h1>{item.data.title}</h1>
       <p class="detail-summary">{item.data.description}</p>
       <dl>
@@ -69,7 +74,7 @@ const imageAspectRatio =
           title={item.data.title}
           href={canonicalPath}
         />
-        <a class="image-original-link" href={item.data.image} target="_blank" rel="noreferrer">查看 / 保存原图 ↗</a>
+        <a class="image-original-link" data-gallery-original href={item.data.image} target="_blank" rel="noreferrer">查看 / 保存原图 ↗</a>
         <button class="copy-link-button" type="button" data-copy-url={canonicalPath}>复制链接</button>
       </div>
       <p class="image-save-hint">打开原图后，可长按或右键保存。</p>
