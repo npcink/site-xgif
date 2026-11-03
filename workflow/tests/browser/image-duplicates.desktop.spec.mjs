@@ -34,7 +34,7 @@ test("similar images are shown for comparison and require confirmation before pu
   await page.locator("#image-next-action").click();
   await expect(page.locator("#image-review-warning-list img")).toHaveCount(2);
   await page.locator("#image-review-edit").click();
-  await expect(page.locator("#image-result")).toContainText("已取消发布");
+  await expect(page.locator("#image-result")).toContainText("已取消保存");
   expect(publication).toBeNull();
   await page.locator("#image-next-action").click();
   await page.locator("#image-review-publish").click();

@@ -218,7 +218,7 @@ test("publisher exposes local public URLs and keeps empty result panels hidden",
   assert.match(html, /class="library-tools-more"/);
   assert.match(html, /class="advanced-settings article-publishing-settings"/);
   assert.match(app, /articleNextAction\.dataset\.action = alreadyPublished && !dirty \? "sync" : "publish"/);
-  assert.match(app, /imageNextAction\.dataset\.action = alreadyPublished && !dirty \? "sync" : "publish"/);
+  assert.match(app, /imageNextAction\.hidden = alreadyPublished && !dirty/);
   assert.doesNotMatch(app, /image-advanced-summary/);
   assert.match(html, /class=\"editor image-workspace-form\"/);
   assert.match(html, /class=\"image-editor-canvas\"/);
@@ -226,7 +226,7 @@ test("publisher exposes local public URLs and keeps empty result panels hidden",
   assert.equal((html.match(/data-image-inspector-tab=/g) || []).length, 3);
   assert.match(html, /id=\"image-save-draft\"/);
   assert.match(html, /<a[^>]+id="image-real-preview"[^>]+hidden>查看效果<\/a>/);
-  assert.match(html, /id=\"image-next-action\"[^>]*>发布<\/button>/);
+  assert.match(html, /id=\"image-next-action\"[^>]*>保存并预览<\/button>/);
   assert.match(html, /id=\"image-ai-review\" aria-live=\"polite\" hidden/);
   assert.match(html, /id=\"image-ai-availability\"/);
   assert.match(html, /name=\"ratio\" type=\"hidden\"/);
@@ -463,7 +463,7 @@ test("draft publishing uses explicit states, protected-branch guards, and mandat
   assert.match(css, /\.workflow-state/);
   assert.match(readme, /全部、草稿、发布中、已上线/);
   assert.match(readme, /“发布到本地”/);
-  assert.match(readme, /“同步所选”/);
+  assert.match(readme, /“批量上线所选”/);
   assert.match(readme, /移至回收站/);
 });
 

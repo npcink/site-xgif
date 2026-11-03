@@ -14,7 +14,7 @@ async function mockChecks(page) {
   await page.route("**/api/image-reviews", (route) => route.fulfill({ json: { quality: { ok: true, issues: [], perImage: [], duplicates: [] }, review: { id: "fixture-review", warnings: [] } } }));
 }
 
-test("publishing a gallery immediately offers its saved page link and hides it for unsaved edits", async ({ page, context }) => {
+test("repeated local gallery saves update one item, offer its preview, and never sync from the editor", async ({ page, context }, testInfo) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await mockChecks(page);
   await page.route("**/api/status", async (route) => {
@@ -26,9 +26,22 @@ test("publishing a gallery immediately offers its saved page link and hides it f
   await page.route("**/api/ai/gallery-status", (route) => route.fulfill({ json: { available: false } }));
   await page.route("**/api/assets/upload", (route) => route.fulfill({ json: { url: "/images/memes/published.png", width: 128, height: 128 } }));
   const previewUrl = "http://127.0.0.1:4321/20990101-link";
-  await page.route("**/api/publish/image", (route) => route.fulfill({ json: {
-    ok: true, file: "site/src/content/images/20990101-link.md", previewUrl, contentSha256: "saved-version",
-  } }));
+  const savedFile = "site/src/content/images/20990101-link.md";
+  let creates = 0;
+  const updates = [];
+  const syncs = [];
+  await page.route("**/api/publish/image", (route) => {
+    creates += 1;
+    return route.fulfill({ json: { ok: true, file: savedFile, previewUrl, contentSha256: "saved-version" } });
+  });
+  await page.route("**/api/content/update", (route) => {
+    updates.push(route.request().postDataJSON());
+    return route.fulfill({ json: { ok: true, file: savedFile, previewUrl, contentSha256: "updated-version" } });
+  });
+  await page.route("**/api/content/batch", (route) => {
+    syncs.push(route.request().postDataJSON());
+    return route.fulfill({ json: { ok: false } });
+  });
   await context.route(previewUrl, (route) => route.fulfill({ contentType: "text/html; charset=utf-8", body: "<h1>发布后的图片页面</h1>" }));
   await page.goto("/#image");
   await page.locator('#image-form input[type="file"]').setInputFiles(await imageFiles(1));
@@ -41,7 +54,10 @@ test("publishing a gallery immediately offers its saved page link and hides it f
   const link = page.getByRole("link", { name: "查看效果", exact: true });
   await expect(link).toBeVisible();
   await expect(link).toHaveAttribute("href", previewUrl);
-  await expect(page.locator("#image-next-action")).toHaveText("同步上线");
+  await expect(page.locator("#image-next-action")).toBeHidden();
+  await expect(page.locator("#image-editor-state")).toHaveText("本地已保存");
+  await expect(page.locator("#image-result")).toBeHidden();
+  await expect(page.locator("#image-form").getByRole("button", { name: /上线|发布/ })).toHaveCount(0);
   const popupReady = context.waitForEvent("page");
   await link.click();
   const popup = await popupReady;
@@ -51,6 +67,19 @@ test("publishing a gallery immediately offers its saved page link and hides it f
   await page.locator('#image-form [name="title"]').fill("尚未保存的修改");
   await expect(link).toBeHidden();
   await expect(page.locator("#image-real-preview")).not.toHaveAttribute("href", previewUrl);
+  await expect(page.locator("#image-editor-state")).toHaveText("有未保存修改 · 已在浏览器临时暂存");
+  await expect(page.locator("#image-next-action")).toHaveText("保存并预览");
+  await page.locator("#image-next-action").click();
+  await expect(page.locator("#image-review-publish")).toHaveText("保存到本地");
+  await page.locator("#image-review-publish").click();
+  await expect(page.locator("#image-editor-state")).toHaveText("本地已保存");
+  await expect(page.locator("#image-next-action")).toBeHidden();
+  await expect(link).toHaveAttribute("href", previewUrl);
+  expect(creates).toBe(1);
+  expect(updates).toHaveLength(1);
+  expect(updates[0]).toMatchObject({ type: "image", file: savedFile, expectedContentSha256: "saved-version", data: { title: "尚未保存的修改" } });
+  expect(syncs).toHaveLength(0);
+  await page.screenshot({ path: testInfo.outputPath("gallery-local-saved.png") });
 });
 
 test("R2 images load after restoring a draft and in publication review without a localhost referrer", async ({ page }) => {
