@@ -21,6 +21,10 @@ test("external process errors return a stable fallback", () => {
   );
 });
 
+test("external process errors strip terminal color and control sequences", () => {
+  assert.equal(safeProcessError({ stderr: "\u001b[31mERROR\u001b[0m upload failed" }), "ERROR upload failed");
+});
+
 test("external process errors are bounded before persistence or API output", () => {
   const result = safeProcessError({ stderr: "x".repeat(5_000) });
   assert.equal(result.length, 2_000);
