@@ -259,6 +259,8 @@ XGIF_R2_PUBLIC_BASE_URL="https://img.xgif.cn"
 
 本机登录会过期。后台发布台不能弹出登录提示；出现“R2 登录已失效”时，在本机 `site/` 重新执行 `npx wrangler login` 并完成授权，再点击失败图片的“重试”，不必重新选择图片。仅完成 M4 识图或本地测试不能证明 R2 上传正常，启用 R2 后还需验证真实上传及公网字节。
 
+重新登录时确认选择拥有 `xgif-memes-prod` 的 Cloudflare 账号。`wrangler whoami` 和 `wrangler r2 bucket list` 可只读核对账号及 Bucket；“Bucket 不存在”也可能是登录了另一个账号，不要为消除报错另建同名 Bucket。多个账号时，在 `workflow/.env` 用 `CLOUDFLARE_ACCOUNT_ID` 固定目标账号，并重启发布台。
+
 长期后台运行也可把仅有目标 Bucket 对象写入权限的 `CLOUDFLARE_API_TOKEN` 放在被 Git 忽略的 `workflow/.env` 中，并重启发布台；不要把令牌写入代码、提交或发到聊天中。不要将 Wrangler OAuth 访问令牌复制为长期 API Token。上传命令最多等待 120 秒，失败时保留浏览器文件，供连接或授权恢复后重试。
 
 远端对象与本机私有原始字节备份：

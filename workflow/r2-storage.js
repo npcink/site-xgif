@@ -109,6 +109,9 @@ export async function ensureR2Asset({ asset, config, siteRoot, fetchImpl = fetch
     if (/CLOUDFLARE_API_TOKEN|not logged in|auth token has expired|authentication error|invalid access token/iu.test(details)) {
       throw Object.assign(new Error("R2 登录已失效或缺少上传凭据。请在本机终端进入 site 目录执行 npx wrangler login，完成 Cloudflare 授权后重试此图片；长期后台使用可在 workflow/.env 配置 CLOUDFLARE_API_TOKEN 并重启发布台。图片已保留，无需重新选择。"), { statusCode: 503 });
     }
+    if (/specified bucket does not exist/iu.test(details)) {
+      throw Object.assign(new Error(`当前 Cloudflare 账号找不到 R2 Bucket「${config.bucket}」。请确认登录的是拥有该 Bucket 的账号，并核对 workflow/.env 中的 XGIF_R2_BUCKET 和 CLOUDFLARE_ACCOUNT_ID 后重试；图片已保留。`), { statusCode: 503 });
+    }
     if (error.killed || error.code === "ETIMEDOUT") throw Object.assign(new Error("R2 上传超时，请检查网络后重试此图片；图片已保留。"), { statusCode: 503 });
     throw new Error(`R2 上传失败：${details}`);
   } finally {

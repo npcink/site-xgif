@@ -86,3 +86,17 @@ test("Wrangler upload timeouts remain retryable", async () => {
     runCommand: async () => { throw Object.assign(new Error("command killed"), { killed: true }); },
   }), { statusCode: 503, message: "R2 上传超时，请检查网络后重试此图片；图片已保留。" });
 });
+
+test("a missing bucket identifies account selection as a recovery step", async () => {
+  await assert.rejects(ensureR2Asset({ asset,
+    config: { enabled: true, bucket: "xgif-memes-prod", publicBaseUrl: "https://img.xgif.cn", wranglerBin: "/tmp/wrangler" },
+    siteRoot: "/tmp/site",
+    runCommand: async () => { throw Object.assign(new Error("failed"), { stderr: "The specified bucket does not exist." }); },
+  }), (error) => {
+    assert.equal(error.statusCode, 503);
+    assert.match(error.message, /当前 Cloudflare 账号/);
+    assert.match(error.message, /xgif-memes-prod/);
+    assert.match(error.message, /CLOUDFLARE_ACCOUNT_ID/);
+    return true;
+  });
+});
