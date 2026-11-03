@@ -5,6 +5,7 @@ const MIME_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"
 
 export function createImageGallery({ root, api, onChange, scope = () => "new" }) {
   const list = root.querySelector("#image-gallery-list");
+  const currentPanel = root.querySelector("#image-gallery-current");
   const status = root.querySelector("#image-gallery-status");
   const feedback = root.querySelector("#image-gallery-feedback");
   const input = root.querySelector('input[name="file"]');
@@ -29,7 +30,10 @@ export function createImageGallery({ root, api, onChange, scope = () => "new" })
   };
 
   function render() {
+    const stripScroll = list.scrollLeft;
     list.replaceChildren();
+    currentPanel.replaceChildren();
+    currentPanel.hidden = !items.length;
     status.textContent = `已选 ${items.length} / ${MAX_IMAGES} · 首张为封面`;
     input.disabled = locked || selecting || items.length >= MAX_IMAGES;
     for (const [index, item] of items.entries()) {
@@ -50,14 +54,23 @@ export function createImageGallery({ root, api, onChange, scope = () => "new" })
       name.textContent = `${index === 0 ? "封面" : index + 1} · ${item.name || "图片"}`;
       const state = document.createElement("small");
       state.textContent = item.error || (item.loading ? "正在恢复本地文件…" : item.uploading ? "上传中…" : item.src ? "已上传" : "等待上传");
+      const aiState = document.createElement("small");
+      aiState.className = "gallery-ai-item-state";
+      aiState.textContent = analysis.get(item.src) || "";
+      row.append(preview, name, state, aiState);
+      list.append(row);
+      if (item !== active()) continue;
+      currentPanel.dataset.id = item.id;
+      const currentHeading = document.createElement("strong");
+      currentHeading.textContent = `第 ${index + 1} 张${index === 0 ? " · 封面" : ""}`;
       const actions = document.createElement("div");
       actions.className = "gallery-item-actions";
       actions.append(button("前移", "previous", index === 0), button("后移", "next", index === items.length - 1), button("移除", "remove"));
       if (index > 0) actions.append(button("设为封面", "cover"));
       if (item.error && item.dataUrl) actions.append(button("重试", "retry"));
-      const aiState = document.createElement("small");
-      aiState.className = "gallery-ai-item-state";
-      aiState.textContent = analysis.get(item.src) || "";
+      const currentHeader = document.createElement("div");
+      currentHeader.className = "gallery-current-heading";
+      currentHeader.append(currentHeading, actions);
       const alt = document.createElement("label");
       alt.className = "gallery-alt-field";
       alt.textContent = "图片描述";
@@ -69,9 +82,15 @@ export function createImageGallery({ root, api, onChange, scope = () => "new" })
       altInput.disabled = locked;
       altInput.placeholder = "AI 自动填写，可修改";
       alt.append(altInput);
-      row.append(preview, name, state, aiState, actions, alt);
-      list.append(row);
+      currentPanel.append(currentHeader, alt);
+      if (item.error) {
+        const error = document.createElement("p");
+        error.className = "gallery-current-error";
+        error.textContent = item.error;
+        currentPanel.append(error);
+      }
     }
+    list.scrollLeft = stripScroll;
   }
 
   function changed(options = {}) {
@@ -159,9 +178,9 @@ export function createImageGallery({ root, api, onChange, scope = () => "new" })
     stage.classList.remove("is-dragging-image");
     if (event.dataTransfer.files.length) { event.preventDefault(); add(event.dataTransfer.files); }
   });
-  list.addEventListener("click", (event) => {
+  function handleAction(event) {
     const action = event.target.closest("[data-gallery-action]")?.dataset.galleryAction;
-    const id = event.target.closest("li")?.dataset.id;
+    const id = event.target.closest("[data-id]")?.dataset.id;
     const index = items.findIndex((item) => item.id === id);
     if (locked || index < 0 || !action) return;
     const item = items[index];
@@ -172,10 +191,14 @@ export function createImageGallery({ root, api, onChange, scope = () => "new" })
     if (destination >= 0 && destination < items.length) items.splice(destination, 0, ...items.splice(index, 1));
     changed({ previewOnly: action === "preview" });
     const focusRow = items.find((item) => item.id === id) || items[Math.min(index, items.length - 1)];
-    const sameAction = list.querySelector(`[data-id="${focusRow?.id}"] [data-gallery-action="${action}"]:not(:disabled)`);
-    (sameAction || list.querySelector(`[data-id="${focusRow?.id}"] [data-gallery-action="preview"]`))?.focus();
-  });
-  list.addEventListener("input", (event) => {
+    const sameAction = action !== "preview" && currentPanel.querySelector(`[data-gallery-action="${action}"]:not(:disabled)`);
+    const target = sameAction || list.querySelector(`[data-id="${focusRow?.id}"] [data-gallery-action="preview"]`);
+    target?.focus({ preventScroll: true });
+    list.querySelector(`[data-id="${active()?.id}"]`)?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }
+  list.addEventListener("click", handleAction);
+  currentPanel.addEventListener("click", handleAction);
+  currentPanel.addEventListener("input", (event) => {
     const item = items.find((item) => item.id === event.target.dataset.galleryAlt);
     if (!item || locked) return;
     item.altText = event.target.value;
@@ -226,7 +249,7 @@ export function createImageGallery({ root, api, onChange, scope = () => "new" })
         if (node) node.querySelector(".gallery-ai-item-state").textContent = analysis.get(row.src);
         if (applySuggestions && !item.altText && !item.altEdited && row.result?.altText) {
           item.altText = row.result.altText.slice(0, 160);
-          const input = node?.querySelector("textarea");
+          const input = currentPanel.dataset.id === item.id ? currentPanel.querySelector("textarea") : null;
           if (input && document.activeElement !== input) input.value = item.altText;
           updated = true;
         }

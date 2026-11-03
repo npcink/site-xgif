@@ -408,7 +408,7 @@
                   <li data-ai-step="summary">整理资料</li>
                   <li data-ai-step="review">人工确认</li>
                 </ol>
-                <small id="image-ai-model">识别模型：正在读取</small>
+                <details class="image-ai-details"><summary>识别详情</summary><small id="image-ai-model">识别模型：正在读取</small></details>
               </section>
 
               <div class="image-preview-stage" id="image-preview-stage" data-empty="true">
@@ -422,10 +422,12 @@
               <div class="image-gallery-heading"><span id="image-gallery-status" role="status" aria-live="polite">已选 0 / 12 · 首张为封面</span><small>拖动排序，或使用前移、后移按钮</small></div>
               <p id="image-gallery-feedback" role="status" aria-live="polite"></p>
               <ol id="image-gallery-list" class="image-gallery-list" aria-label="图集图片"></ol>
+              <section id="image-gallery-current" class="image-gallery-current" aria-label="当前图片编辑" hidden></section>
 
               <section id="image-duplicates" class="image-duplicates" aria-labelledby="image-duplicates-heading" hidden>
                 <strong id="image-duplicates-heading">检查已有图片</strong>
                 <p id="image-duplicates-status" role="status"></p>
+                <details id="image-duplicates-info" hidden><summary>检查说明</summary><p>裁剪、加字可能漏检；GIF 仅比较首帧。</p></details>
                 <div id="image-duplicate-candidates"></div>
               </section>
 
@@ -474,10 +476,6 @@
                   <input name="title" required placeholder="这就很离谱" />
                 </label>
                 <label>
-                  分类
-                  <input name="category" placeholder="表情包" />
-                </label>
-                <label>
                   描述
                   <textarea name="description" required rows="4" placeholder="适合什么场景，用来表达什么"></textarea>
                 </label>
@@ -485,16 +483,23 @@
                   标签
                   <input name="tags" required placeholder="吐槽, 无语, 群聊" />
                 </label>
-                <div class="article-compact-fields">
+                <details class="image-extra-fields">
+                  <summary>分类与使用场景</summary>
                   <label>
-                    情绪
-                    <input name="mood" placeholder="无语, 震惊" />
+                    分类
+                    <input name="category" placeholder="表情包" />
                   </label>
-                  <label>
-                    场景
-                    <input name="scenes" placeholder="回复, 吐槽" />
-                  </label>
-                </div>
+                  <div class="article-compact-fields">
+                    <label>
+                      情绪
+                      <input name="mood" placeholder="无语, 震惊" />
+                    </label>
+                    <label>
+                      场景
+                      <input name="scenes" placeholder="回复, 吐槽" />
+                    </label>
+                  </div>
+                </details>
               </div>
             </section>
 
@@ -1138,6 +1143,11 @@
       <div class="asset-library-list" id="asset-library-list"></div>
     </dialog>
 
+    <dialog id="image-original-preview" class="image-original-preview" aria-labelledby="image-original-title">
+      <header><strong id="image-original-title">查看原图</strong><button type="button" id="image-original-close">关闭</button></header>
+      <img alt="" />
+    </dialog>
+
     <dialog id="image-publication-review" class="trash-dialog image-publication-review" aria-labelledby="image-publication-review-title">
       <div class="trash-dialog-heading">
         <div><p class="eyebrow">保存前确认</p><h2 id="image-publication-review-title">图集预览</h2><p>确认后保存到本地，可查看实际效果；准备好后在“同步上线”中批量上线。</p></div>
@@ -1152,6 +1162,6 @@
       <p id="image-review-status" role="status" aria-live="polite"></p>
       <div class="image-review-actions"><button type="button" id="image-review-edit">返回修改</button><button class="primary" type="button" id="image-review-publish">保存到本地</button></div>
     </dialog>
-    <script src="/app.js?v=20261103-gallery-ai-1" type="module"></script>
+    <script src="/app.js?v=20261103-compact-editor-1" type="module"></script>
   </body>
 </html>

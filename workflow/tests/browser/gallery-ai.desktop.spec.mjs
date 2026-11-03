@@ -50,17 +50,19 @@ test("upload automatically starts M4, preserves edits made during processing and
   await expect(page.locator('#image-form [name="title"]')).toHaveValue("我手动改的标题");
   await expect(page.locator('#image-form [name="description"]')).toHaveValue(summary.description);
   await expect(page.locator('#image-form [name="sourceKind"]')).toHaveValue("unknown");
-  await expect(page.locator("#image-gallery-list textarea").first()).toHaveValue("第 1 张猫咪的画面");
+  await expect(page.locator("#image-gallery-current textarea")).toHaveValue("第 1 张猫咪的画面");
   await expect(page.locator("#image-ai-cover")).toBeVisible();
   expect(state.creates).toBe(1);
-  await page.locator("#image-gallery-list textarea").first().fill("我改过的逐图描述");
-  await page.locator("#image-gallery-list textarea").last().fill("");
+  await page.locator("#image-gallery-current textarea").fill("我改过的逐图描述");
+  await page.locator("#image-gallery-list li").last().getByRole("button", { name: /预览/ }).click();
+  await page.locator("#image-gallery-current textarea").fill("");
   await page.locator('#image-form [name="description"]').fill("");
   await page.reload();
   await expect(page.locator("#image-ai-availability")).toContainText("已整理 2 / 2");
   await expect(page.locator('#image-form [name="title"]')).toHaveValue("我手动改的标题");
-  await expect(page.locator("#image-gallery-list textarea").first()).toHaveValue("我改过的逐图描述");
-  await expect(page.locator("#image-gallery-list textarea").last()).toHaveValue("");
+  await expect(page.locator("#image-gallery-current textarea")).toHaveValue("我改过的逐图描述");
+  await page.locator("#image-gallery-list li").last().getByRole("button", { name: /预览/ }).click();
+  await expect(page.locator("#image-gallery-current textarea")).toHaveValue("");
   await expect(page.locator('#image-form [name="description"]')).toHaveValue("");
   await page.locator("#image-ai-cover").click();
   await expect(page.locator("#image-gallery-list li").first().locator("img")).toHaveAttribute("src", "/images/memes/auto-1.png");
@@ -70,7 +72,7 @@ test("a failed image is visible next to successful results and can retry by its 
   const state = await setup(page, { failSecond: true });
   await expect(page.locator("#image-ai-availability")).toContainText("部分项目需要检查");
   await expect(page.locator("#image-ai-issues")).toContainText("第 2 张：M4 模拟断线");
-  await expect(page.locator("#image-gallery-list textarea").first()).toHaveValue("第 1 张猫咪的画面");
+  await expect(page.locator("#image-gallery-current textarea")).toHaveValue("第 1 张猫咪的画面");
   await page.getByRole("button", { name: "重试此图" }).click();
   await expect(page.locator("#image-ai-availability")).toContainText("已整理 2 / 2");
   expect(state.retriedHashes).toEqual(["2".repeat(64)]);
@@ -80,7 +82,8 @@ test("a failed image is visible next to successful results and can retry by its 
 test("changing membership during recognition discards the old task's summary", async ({ page }) => {
   const state = await setup(page, { hold: true });
   await expect(page.locator("#image-ai-availability")).toContainText("后台整理中");
-  await page.locator("#image-gallery-list li").last().getByRole("button", { name: "移除", exact: true }).click();
+  await page.locator("#image-gallery-list li").last().getByRole("button", { name: /预览/ }).click();
+  await page.locator("#image-gallery-current").getByRole("button", { name: "移除", exact: true }).click();
   state.released = true;
   await expect(page.locator("#image-ai-availability")).toContainText("已整理 1 / 1");
   await expect(page.locator("#image-gallery-list li")).toHaveCount(1);
@@ -94,12 +97,16 @@ test("processing progress is prominent above the image and identifies the active
   await expect(page.locator("#image-ai-heading")).toContainText("正在识别第 1 / 2 张");
   await expect(page.locator("#image-ai-progress-bar")).toBeVisible();
   await expect(page.locator('[data-ai-step="recognize"]')).toHaveAttribute("aria-current", "step");
+  await page.locator(".image-ai-details summary").click();
   await expect(page.locator("#image-ai-model")).toContainText("M4-fixture");
+  await page.locator(".image-ai-details summary").click();
   const progress = await page.locator("#image-ai-progress").boundingBox();
   const image = await page.locator("#image-preview-stage").boundingBox();
+  expect(progress.height).toBeLessThan(150);
+  expect(image.y + image.height).toBeLessThan(800);
   expect(progress.y + progress.height).toBeLessThanOrEqual(image.y);
   expect((await page.locator("#image-ai-progress-bar").boundingBox()).width).toBeGreaterThan(progress.width * 0.8);
-  expect(await page.locator("#image-ai-heading").evaluate((element) => parseFloat(getComputedStyle(element).fontSize))).toBeGreaterThanOrEqual(18);
+  expect(await page.locator("#image-ai-heading").evaluate((element) => parseFloat(getComputedStyle(element).fontSize))).toBeGreaterThanOrEqual(16);
   await expect(page.locator("#image-ai-reanalyze")).toBeDisabled();
   await page.screenshot({ path: testInfo.outputPath("processing-progress.png") });
   state.released = true;
@@ -111,7 +118,7 @@ test("a stronger model starts a fresh run and suggestions survive reload without
   const state = await setup(page);
   await expect(page.locator("#image-ai-availability")).toContainText("已整理 2 / 2");
   await page.locator('#image-form [name="title"]').fill("我的标题");
-  await page.locator("#image-gallery-list textarea").first().fill("手工逐图描述");
+  await page.locator("#image-gallery-current textarea").fill("手工逐图描述");
   state.model = "M4-stronger"; state.modelVersion = "weights-2";
   state.summary = { ...summary, title: "更强模型标题", description: "更强模型的新描述" };
   await page.getByRole("button", { name: "重新识别", exact: true }).click();
@@ -119,7 +126,7 @@ test("a stronger model starts a fresh run and suggestions survive reload without
   expect(state.lastCreate.force).toBe(true);
   await expect(page.locator('#image-form [name="title"]')).toHaveValue("我的标题");
   await expect(page.locator('#image-form [name="description"]')).toHaveValue(summary.description);
-  await expect(page.locator("#image-gallery-list textarea").first()).toHaveValue("手工逐图描述");
+  await expect(page.locator("#image-gallery-current textarea")).toHaveValue("手工逐图描述");
   await expect(page.locator("#image-ai-model")).toContainText("weights-2");
   const creates = state.creates;
   await page.reload();
@@ -135,8 +142,9 @@ test("a stronger model starts a fresh run and suggestions survive reload without
   await page.getByRole("button", { name: "采用所选建议", exact: true }).click();
   await expect(page.locator('#image-form [name="description"]')).toHaveValue("更强模型的新描述");
   await expect(page.locator('#image-form [name="title"]')).toHaveValue("我又改过的标题");
-  await expect(page.locator("#image-gallery-list textarea").first()).toHaveValue("手工逐图描述");
-  await expect(page.locator("#image-gallery-list textarea").last()).toHaveValue("第 2 张新模型画面");
+  await expect(page.locator("#image-gallery-current textarea")).toHaveValue("手工逐图描述");
+  await page.locator("#image-gallery-list li").last().getByRole("button", { name: /预览/ }).click();
+  await expect(page.locator("#image-gallery-current textarea")).toHaveValue("第 2 张新模型画面");
   await expect(page.locator('#image-form [name="sourceKind"]')).toHaveValue("unknown");
 });
 

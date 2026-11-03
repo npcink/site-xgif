@@ -498,11 +498,9 @@ function updateImagePreview() {
   const image = selectedImage?.dataUrl || "";
   if (!image.startsWith("data:")) $("#image-duplicates").hidden = true;
   $("#image-preview-stage").dataset.empty = String(!image);
-  $("#image-preview").innerHTML = `
-    ${image ? `<img src="${escapeHtml(image)}" alt="${escapeHtml(data.title || "图片预览")}" />` : ""}
-    <div class="copy"><div class="meta"><span>${escapeHtml(data.category || "表情包")}</span><span>${escapeHtml(data.pubDate || today)}</span></div>
-    <h2>${escapeHtml(data.title || "图片标题")}</h2><p class="summary">${escapeHtml(data.description || "图片说明会显示在这里。")}</p>
-    <div class="tags">${renderTags(data.tags)}</div></div>`;
+  $("#image-preview").innerHTML = image
+    ? `<button type="button" id="image-enlarge" aria-label="放大查看当前图片"><img src="${escapeHtml(image)}" alt="${escapeHtml(selectedImage?.altText || data.title || "图片预览")}" /></button>`
+    : "";
   updateImageReview(data);
   updateImageInspectorStatus(data);
 }
@@ -1153,10 +1151,14 @@ function renderImageDuplicates(report, duplicates = []) {
   const panel = $("#image-duplicates");
   panel.hidden = false;
   const matches = report?.matches || [];
+  const clear = Boolean(report && !matches.length && !report.unavailable && !duplicates.length);
+  panel.dataset.state = clear ? "clear" : "attention";
+  $("#image-duplicates-info").hidden = !clear;
   const exact = duplicates.some((item) => item.reason === "图片文件重复") || matches.some((item) => item.kind === "exact");
   $("#image-duplicates-status").textContent = report
     ? `${exact ? "已有完全相同的图片，不能重复发布。" : matches.length ? "发现疑似相似图片，请对照当前图片比较。" : "未发现疑似相似图片。"} 已比对 ${report.checked} 张${report.unavailable ? `，另有 ${report.unavailable} 张暂时无法比对` : ""}。裁剪、加字可能漏检；GIF 仅比较首帧。`
     : "暂时无法检查相似图片，保存时会重试。";
+  if (clear) $("#image-duplicates-status").textContent = `相似图检查：未发现疑似相似图片 · 已比对 ${report.checked} 张。`;
   $("#image-duplicate-candidates").innerHTML = matches.map((item) => {
     let url;
     try { url = new URL(item.image, sitePreviewUrl); } catch { return ""; }
@@ -1167,6 +1169,8 @@ function renderImageDuplicates(report, duplicates = []) {
 
 async function checkSelectedImage(image) {
   $("#image-duplicates").hidden = false;
+  $("#image-duplicates").dataset.state = "checking";
+  $("#image-duplicates-info").hidden = true;
   $("#image-duplicates-status").textContent = "正在比对已有图片…";
   $("#image-duplicate-candidates").replaceChildren();
   try {
@@ -3783,6 +3787,15 @@ articleNextAction.addEventListener("click", () => {
   articleForm.requestSubmit();
 });
 
+$("#image-preview").addEventListener("click", (event) => {
+  if (!event.target.closest("#image-enlarge")) return;
+  const image = $("#image-preview img");
+  const original = $("#image-original-preview img");
+  original.src = image.src;
+  original.alt = image.alt;
+  $("#image-original-preview").showModal();
+});
+$("#image-original-close").addEventListener("click", () => $("#image-original-preview").close());
 imageRealPreview.addEventListener("click", () => {
   imageForm.dataset.previewed = "true";
 });
