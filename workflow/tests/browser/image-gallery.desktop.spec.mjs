@@ -140,17 +140,20 @@ test("gallery appends up to twelve images, supports keyboard sorting and cover, 
   await expect(page.locator("#image-gallery-list li small").filter({ hasText: "已上传" })).toHaveCount(2);
   await page.locator("#image-gallery-list li strong").first().dragTo(page.locator("#image-gallery-list li").nth(1));
   await expect(page.locator("#image-gallery-list li strong").first()).toContainText("gallery-1.png");
-  await page.locator("#image-gallery-list li").first().getByRole("button", { name: "后移" }).click();
+  await page.locator("#image-gallery-list li").first().getByRole("button", { name: /预览/ }).click();
+  await page.locator("#image-gallery-current").getByRole("button", { name: "后移" }).click();
   await input.setInputFiles(files.slice(2, 12));
   await expect(page.locator("#image-gallery-list li small").filter({ hasText: "已上传" })).toHaveCount(12);
   await expect(input).toBeDisabled();
-  await page.locator('#image-gallery-list li').nth(1).getByRole("button", { name: "设为封面" }).focus();
+  await page.locator("#image-gallery-list li").nth(1).getByRole("button", { name: /预览/ }).click();
+  await page.locator("#image-gallery-current").getByRole("button", { name: "设为封面" }).focus();
   await page.keyboard.press("Enter");
   await expect(page.locator("#image-gallery-list li strong").first()).toContainText("gallery-1.png");
   await expect(page.locator("#image-gallery-list li").first().getByRole("button", { name: /预览/ })).toBeFocused();
-  await page.locator('#image-gallery-list li').first().getByRole("button", { name: "后移" }).click();
+  await page.locator("#image-gallery-current").getByRole("button", { name: "后移" }).click();
   await expect(page.locator("#image-gallery-list li strong").first()).toContainText("gallery-0.png");
-  await page.locator('#image-gallery-list li').last().getByRole("button", { name: "移除" }).click();
+  await page.locator("#image-gallery-list li").last().getByRole("button", { name: /预览/ }).click();
+  await page.locator("#image-gallery-current").getByRole("button", { name: "移除" }).click();
   await expect(input).toBeEnabled();
   await expect(page.locator("#image-gallery-status")).toContainText("11 / 12");
   await page.reload();
@@ -215,7 +218,8 @@ test("reload resumes a failed middle upload in order and recovers its completed 
   await page.locator('#image-form input[type="file"]').setInputFiles(await imageFiles(3));
   await expect(page.locator("#image-gallery-list")).toContainText("网络中断");
   await expect(page.locator("#image-gallery-list li small").filter({ hasText: "已上传" })).toHaveCount(2);
-  await page.locator("#image-gallery-list textarea").nth(1).fill("我的中间图片描述");
+  await page.locator("#image-gallery-list li").nth(1).getByRole("button", { name: /预览/ }).click();
+  await page.locator("#image-gallery-current textarea").fill("我的中间图片描述");
   // Simulate closing after the upload reference is committed to IndexedDB but
   // before the newer LocalStorage snapshot is written.
   const pendingDraft = await page.evaluate(() => localStorage.getItem("xgif-publisher-draft:image-form:new"));
@@ -225,7 +229,8 @@ test("reload resumes a failed middle upload in order and recovers its completed 
   expect(await page.locator("#image-gallery-list li img").evaluateAll((nodes) => nodes.map((node) => node.getAttribute("src")))).toEqual([
     "/images/memes/gallery-0.png", expect.stringMatching(/^(?:data:image|\/images\/memes\/gallery-1)/u), "/images/memes/gallery-2.png",
   ]);
-  await expect(page.locator("#image-gallery-list textarea").nth(1)).toHaveValue("我的中间图片描述");
+  await page.locator("#image-gallery-list li").nth(1).getByRole("button", { name: /预览/ }).click();
+  await expect(page.locator("#image-gallery-current textarea")).toHaveValue("我的中间图片描述");
   expect([...attempts.values()]).toEqual([1, 2, 1]);
   await page.evaluate((draft) => localStorage.setItem("xgif-publisher-draft:image-form:new", draft), pendingDraft);
   await page.reload();
@@ -242,4 +247,58 @@ test("unavailable browser file storage explicitly warns while allowing uploads",
   await page.locator('#image-form input[type="file"]').setInputFiles(await imageFiles(1));
   await expect(page.locator("#image-gallery-feedback")).toContainText("浏览器无法暂存，请在关闭页面前完成上传");
   await expect(page.locator("#image-gallery-list li small").filter({ hasText: "已上传" })).toHaveCount(1);
+});
+
+test("twelve portraits stay in a horizontal strip with one current editor and a full-image dialog", async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await mockChecks(page);
+  const portrait = await sharp({ create: { width: 400, height: 1600, channels: 3, background: "#547973" } }).png().toBuffer();
+  await page.route("**/images/memes/compact-*.png", (route) => route.fulfill({ contentType: "image/png", body: portrait }));
+  await page.route("**/api/ai/gallery-status", (route) => route.fulfill({ json: { available: false } }));
+  await page.route("**/api/assets/upload", (route) => route.fulfill({ json: { url: `/images/memes/${route.request().postDataJSON().fileName}`, width: 400, height: 1600 } }));
+  await page.goto("/#image");
+  const files = await imageFiles(12);
+  await page.locator('#image-form input[type="file"]').setInputFiles(files.map((file, index) => ({ ...file, name: `compact-${index}.png`, buffer: index === 0 ? portrait : file.buffer })));
+  await expect(page.locator("#image-gallery-list li small").filter({ hasText: "已上传" })).toHaveCount(12);
+  const strip = page.locator("#image-gallery-list");
+  const current = page.locator("#image-gallery-current");
+  await expect(current.locator("textarea")).toHaveCount(1);
+  await current.locator("textarea").fill("第一张的人工描述");
+  await strip.getByRole("button", { name: "预览第 12 张", exact: true }).click();
+  await expect(current.locator("strong")).toHaveText("第 12 张");
+  await expect(current.locator("textarea")).toHaveValue("");
+  await current.locator("textarea").fill("最后一张的人工描述");
+  await strip.getByRole("button", { name: "预览第 1 张，封面", exact: true }).click();
+  await expect(current.locator("textarea")).toHaveValue("第一张的人工描述");
+  await page.reload();
+  await expect(page.locator("#image-gallery-list li small").filter({ hasText: "已上传" })).toHaveCount(12);
+  await expect(current.locator("textarea")).toHaveValue("第一张的人工描述");
+  await strip.getByRole("button", { name: "预览第 12 张", exact: true }).click();
+  await expect(current.locator("textarea")).toHaveValue("最后一张的人工描述");
+  await strip.getByRole("button", { name: "预览第 1 张，封面", exact: true }).click();
+  await page.evaluate(() => window.scrollTo(0, 0));
+  for (const width of [1280, 1920]) {
+    await page.setViewportSize({ width, height: 800 });
+    const stage = await page.locator("#image-preview-stage").boundingBox();
+    const image = await page.locator("#image-preview img").boundingBox();
+    const toolbar = await page.locator(".image-workspace-toolbar").boundingBox();
+    const inspector = await page.locator(".image-inspector").boundingBox();
+    const canvas = await page.locator(".image-editor-canvas").boundingBox();
+    expect(image.y).toBeGreaterThanOrEqual(stage.y);
+    expect(image.y + image.height).toBeLessThanOrEqual(stage.y + stage.height);
+    expect(stage.y + stage.height).toBeLessThan(800);
+    expect(toolbar.y + toolbar.height).toBeLessThan(stage.y);
+    expect(inspector.height).toBeLessThan(canvas.height);
+    expect(inspector.y + inspector.height).toBeLessThanOrEqual(800);
+    expect(await strip.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true);
+    expect((await strip.boundingBox()).height).toBeLessThan(150);
+    expect(await page.locator("#image-panel").evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+    await page.screenshot({ path: testInfo.outputPath(`compact-gallery-${width}.png`) });
+  }
+  await page.getByRole("button", { name: "放大查看当前图片" }).click();
+  await expect(page.getByRole("dialog", { name: "查看原图" })).toBeVisible();
+  await expect(page.locator("#image-original-preview img")).toHaveAttribute("src", /compact-0.png$/);
+  await page.keyboard.press("Escape");
+  await expect(page.locator("#image-original-preview")).toBeHidden();
+  await expect(page.getByRole("button", { name: "放大查看当前图片" })).toBeFocused();
 });
