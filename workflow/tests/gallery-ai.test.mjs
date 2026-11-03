@@ -106,6 +106,26 @@ test("a restarted process keeps completed recognition and resumes only interrupt
   await assert.rejects(restarted.inspect(job.id, job.items.map(({ src }) => ({ src }))), /图片已改变/);
 });
 
+test("fresh recognition bypasses both caches, preserves the old run and separates model weight versions", async (t) => {
+  let calls = 0;
+  const { jobs } = await fixture(t, async () => ({ ...suggestion, title: `第 ${++calls} 次识别` }));
+  const images = [{ src: "/images/one.png" }];
+  const first = await finished(jobs, (await jobs.create(images)).id);
+  const original = structuredClone(first);
+  const fresh = await finished(jobs, (await jobs.create(images, { force: true })).id);
+  assert.notEqual(fresh.id, first.id);
+  assert.equal(calls, 4, "each run performs recognition and summary");
+  assert.notEqual(fresh.items[0].result.title, first.items[0].result.title);
+  assert.deepEqual(await jobs.get(first.id), original, "the prior run remains available unchanged");
+  assert.ok(fresh.createdAt);
+  jobs.config = { ...config, modelVersion: "weights-2" };
+  const upgraded = await finished(jobs, (await jobs.create(images)).id);
+  assert.notEqual(upgraded.id, first.id);
+  assert.equal(upgraded.modelVersion, "weights-2");
+  assert.equal(calls, 6, "same model alias with new weights cannot reuse older recognition");
+  await assert.rejects(jobs.retry(first.id), /模型配置已变化/);
+});
+
 test("a service outage pauses remaining work instead of timing out twelve separate requests", async (t) => {
   let calls = 0;
   const { jobs } = await fixture(t, async () => {

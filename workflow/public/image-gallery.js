@@ -215,7 +215,7 @@ export function createImageGallery({ root, api, onChange, scope = () => "new" })
       items.unshift(...items.splice(index, 1));
       changed();
     },
-    setAnalysis(job) {
+    setAnalysis(job, { applySuggestions = true } = {}) {
       analysis = new Map();
       let updated = false;
       for (const row of job?.items || []) {
@@ -224,7 +224,7 @@ export function createImageGallery({ root, api, onChange, scope = () => "new" })
         analysis.set(row.src, row.state === "done" ? row.result?.warnings?.length ? "AI 已识别 · 需检查" : "AI 已识别" : row.state === "error" ? "AI 识别失败，可重试" : row.state === "running" ? "AI 识别中…" : "等待 AI 识别");
         const node = list.querySelector(`[data-id="${item.id}"]`);
         if (node) node.querySelector(".gallery-ai-item-state").textContent = analysis.get(row.src);
-        if (!item.altText && !item.altEdited && row.result?.altText) {
+        if (applySuggestions && !item.altText && !item.altEdited && row.result?.altText) {
           item.altText = row.result.altText.slice(0, 160);
           const input = node?.querySelector("textarea");
           if (input && document.activeElement !== input) input.value = item.altText;
@@ -232,6 +232,14 @@ export function createImageGallery({ root, api, onChange, scope = () => "new" })
         }
       }
       if (updated) onChange(active(), snapshot(), { analysisOnly: true });
+    },
+    applyAltSuggestions(suggestions) {
+      if (locked) return;
+      for (const { src, altText } of suggestions) {
+        const item = items.find((item) => item.src === src);
+        if (item) { item.altText = altText.slice(0, 160); item.altEdited = true; }
+      }
+      changed({ altOnly: true });
     },
     pendingCount: () => items.filter((item) => !item.src).length,
     ready: () => !selecting && items.length > 0 && items.every((item) => item.src && !item.uploading && !item.error),

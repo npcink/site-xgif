@@ -4662,3 +4662,33 @@ summary:focus-visible {
 .image-review-confirmation input { width: auto; }
 .image-review-actions { display: flex; flex-shrink: 0; justify-content: flex-end; gap: 12px; padding: 16px 24px; border-top: 1px solid var(--line); }
 #image-review-status { flex-shrink: 0; margin: 0 24px; font-size: 13px; color: var(--muted); }
+
+/* Processing belongs next to the upload action, before the image canvas. */
+#image-ai-progress { display: grid; justify-content: stretch; align-items: stretch; gap: 14px; border: 0; border-left: 4px solid var(--accent); padding: 18px 20px; }
+#image-ai-progress .image-ai-progress-heading { display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 14px; }
+#image-ai-progress .image-ai-progress-heading > div:first-child { flex: 1; min-width: 220px; display: grid; gap: 8px; }
+#image-ai-heading { font-size: 18px; line-height: 1.45; }
+#image-ai-availability { margin: 0; font-size: 14px; line-height: 1.6; color: var(--ink); }
+.image-ai-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.image-ai-actions button { font-size: 12px; min-height: 36px; }
+#image-ai-progress-bar { appearance: none; width: 100%; height: 12px; border: 0; border-radius: 4px; background: var(--line); overflow: hidden; accent-color: var(--accent); }
+#image-ai-progress-bar::-webkit-progress-bar { background: var(--line); }
+#image-ai-progress-bar::-webkit-progress-value { background: var(--accent); }
+#image-ai-progress-bar::-moz-progress-bar { background: var(--accent); }
+.image-ai-steps { display: flex; flex-wrap: wrap; gap: 12px 24px; list-style: none; padding: 0; margin: 0; font-size: 13px; counter-reset: processing; }
+.image-ai-steps li { counter-increment: processing; color: var(--muted); }
+.image-ai-steps li::before { content: counter(processing) ". "; }
+.image-ai-steps li[data-state="current"] { color: var(--accent); font-weight: 700; text-decoration: underline; text-underline-offset: 5px; }
+.image-ai-steps li[data-state="done"]::before { content: "✓ "; }
+#image-ai-model { font-size: 12px; overflow-wrap: anywhere; }
+#image-ai-progress[data-state="attention"] { border-left-color: #a46922; }
+.image-gallery-list .gallery-ai-item-state:not(:empty) { font-size: 13px; font-weight: 600; color: var(--accent); }
+.image-ai-candidates { border-top: 1px solid var(--line); padding-top: 18px; }
+.image-ai-candidates > strong { font-size: 16px; }
+.image-ai-candidates > p { color: var(--muted); font-size: 13px; line-height: 1.6; }
+#image-ai-candidate-fields { display: grid; gap: 0; margin-bottom: 16px; }
+#image-ai-candidate-fields > label { display: flex; align-items: flex-start; gap: 12px; padding: 14px 0; border-bottom: 1px solid var(--line); }
+#image-ai-candidate-fields input { margin-top: 4px; flex-shrink: 0; }
+#image-ai-candidate-fields label > span { display: grid; gap: 8px; min-width: 0; font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
+#image-ai-candidate-fields label > span > span:first-of-type { color: var(--muted); }
+#image-ai-apply-status { display: inline-block; font-size: 13px; color: var(--muted); margin: 8px; }

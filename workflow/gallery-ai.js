@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import sharp from "sharp";
@@ -12,6 +12,7 @@ const digest = (value) => createHash("sha256").update(JSON.stringify(value)).dig
 const text = (value, max = 240) => typeof value === "string" ? value.trim().slice(0, max) : "";
 const strings = (value, max = 4) => Array.isArray(value) ? value.map((item) => text(item, 160)).filter(Boolean).slice(0, max) : [];
 const fail = (message, statusCode = 422) => Object.assign(new Error(message), { statusCode });
+const sameModel = (a, b) => a.model === b.model && a.endpoint === b.endpoint && a.prompt === b.prompt && (a.modelVersion || "") === (b.modelVersion || "");
 
 export function galleryAiConfig(env = process.env) {
   let baseUrl = "";
@@ -25,7 +26,7 @@ export function galleryAiConfig(env = process.env) {
       }
     }
   } catch (error) { configurationError = error.message; baseUrl = ""; }
-  return { baseUrl, model, apiKey: env.XGIF_IMAGE_AI_API_KEY || "ollama", available: Boolean(baseUrl && model), configurationError,
+  return { baseUrl, model, modelVersion: String(env.XGIF_IMAGE_AI_VERSION || "").trim().slice(0, 120), apiKey: env.XGIF_IMAGE_AI_API_KEY || "ollama", available: Boolean(baseUrl && model), configurationError,
     timeoutMs: Math.min(300_000, Math.max(1000, Number(env.XGIF_IMAGE_AI_TIMEOUT_MS) || 120_000)) };
 }
 
@@ -137,7 +138,7 @@ export class GalleryAiJobs {
     return structuredClone(job);
   }
 
-  async create(images) {
+  async create(images, { force = false } = {}) {
     await this.ready;
     const members = validateGalleryImages(images);
     const items = [];
@@ -146,15 +147,18 @@ export class GalleryAiJobs {
       items.push({ src, sha256: asset.sha256, state: "pending" });
     }
     const identity = { items: items.map(({ src, sha256 }) => ({ src, sha256 })), model: this.config.model, endpoint: this.config.baseUrl, prompt: PROMPT_VERSION };
+    if (this.config.modelVersion) identity.modelVersion = this.config.modelVersion;
+    if (force) identity.run = randomUUID();
     const id = digest(identity);
     await this.mutations.run(async () => {
       let job = this.jobs.get(id);
       if (!job) {
-        job = { id, model: this.config.model, endpoint: this.config.baseUrl, prompt: PROMPT_VERSION, state: "queued", revision: 0, items, summary: null, error: "" };
+        job = { id, model: this.config.model, modelVersion: this.config.modelVersion || "", endpoint: this.config.baseUrl, prompt: PROMPT_VERSION,
+          fresh: force, createdAt: new Date().toISOString(), state: "queued", revision: 0, items, summary: null, error: "" };
         // Reuse successful byte-identical recognition when an image is added, removed or reordered.
         for (const item of items) {
-          for (const previous of this.jobs.values()) {
-            if (previous.model !== job.model || previous.endpoint !== job.endpoint || previous.prompt !== job.prompt) continue;
+          for (const previous of force ? [] : [...this.jobs.values()].reverse()) {
+            if (!sameModel(previous, job)) continue;
             const cached = previous.items.find((row) => row.sha256 === item.sha256 && row.state === "done");
             if (cached) { item.result = structuredClone(cached.result); item.state = "done"; break; }
           }
@@ -177,7 +181,7 @@ export class GalleryAiJobs {
     await this.mutations.run(async () => {
       const job = this.jobs.get(id);
       if (!job) throw fail("未找到整理任务。", 404);
-      if (job.model !== this.config.model || job.endpoint !== this.config.baseUrl || job.prompt !== PROMPT_VERSION) throw fail("识图模型配置已变化，请重新整理图集。", 409);
+      if (!sameModel(job, { model: this.config.model, modelVersion: this.config.modelVersion, endpoint: this.config.baseUrl, prompt: PROMPT_VERSION })) throw fail("识图模型配置已变化，请重新整理图集。", 409);
       if (this.scheduled.has(id)) {
         if (!["done", "attention", "paused"].includes(job.state)) return;
         await this.scheduled.get(id);
@@ -216,8 +220,8 @@ export class GalleryAiJobs {
         const asset = await this.readAsset(item.src);
         if (asset.sha256 !== item.sha256) throw fail("图片文件已改变，请重新选择图片整理。");
         let cached = null;
-        for (const previous of this.jobs.values()) {
-          if (previous.model === job.model && previous.endpoint === job.endpoint && previous.prompt === job.prompt) {
+        for (const previous of job.fresh ? [] : [...this.jobs.values()].reverse()) {
+          if (sameModel(previous, job)) {
             cached = previous.items.find((row) => row.sha256 === item.sha256 && row.state === "done");
             if (cached) break;
           }
