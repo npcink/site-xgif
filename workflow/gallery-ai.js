@@ -285,7 +285,7 @@ export class GalleryAiJobs {
 
 // Includes editable public metadata and the exact recognition revision; excludes UI-only request flags.
 export function galleryReviewDigest(data, job = null) {
-  const fields = ["title", "description", "tags", "category", "mood", "scenes", "sourceKind", "source", "sourceUrl", "author", "license", "licenseUrl", "confirmedAt", "pubDate", "public", "draft", "body", "excludeFile"];
+  const fields = ["contentId", "title", "description", "tags", "category", "mood", "scenes", "ratio", "sourceKind", "source", "sourceUrl", "author", "license", "licenseUrl", "confirmedAt", "pubDate", "public", "draft", "body", "excludeFile"];
   return digest({ fields: fields.map((key) => [key, data[key] ?? ""]), images: data.images,
     job: job ? [job.id, job.revision] : null });
 }

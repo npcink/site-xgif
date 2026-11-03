@@ -143,6 +143,8 @@ test("review receipts bind metadata, image order, edit version and AI revision; 
   const payload = { ...data, galleryReviewId: receipt.id, galleryWarningsConfirmed: true };
   await assert.rejects(store.authorize({ ...payload, galleryWarningsConfirmed: false }, { job }), /待检查/);
   await assert.rejects(store.authorize({ ...payload, title: "新标题" }, { job }), /资料或编辑版本/);
+  await assert.rejects(store.authorize({ ...payload, ratio: "wide" }, { job }), /资料或编辑版本/);
+  await assert.rejects(store.authorize({ ...payload, contentId: "changed-id" }, { job }), /资料或编辑版本/);
   await assert.rejects(store.authorize(payload, { job: { ...job, revision: 4 } }), /结果已更新/);
   assert.equal((await store.authorize(payload, { job })).id, receipt.id);
   assert.notEqual(galleryReviewDigest(data), galleryReviewDigest({ ...data, images: [{ src: "/images/one.png", altText: "新描述" }] }));

@@ -428,6 +428,15 @@ draft: true
   const interruptedSave = await post("/api/publish/image", { ...reviewedPayload, galleryWarningsConfirmed: true });
   assert.equal(interruptedSave.status, 200, interruptedSave.body);
   assert.equal(interruptedSave.json().recovered, true, "recover the existing Markdown if the receipt completion was interrupted");
+  const reviewedEdit = { ...aiGallery, title: "集中预览后的图集修改", contentId: "ignored-client-id", excludeFile: confirmed.json().file };
+  const editReview = await post("/api/image-reviews", { data: reviewedEdit, file: confirmed.json().file, expectedContentSha256: confirmed.json().contentSha256 });
+  assert.equal(editReview.status, 200, editReview.body);
+  const reviewedUpdate = await post("/api/content/update", { type: "image", file: confirmed.json().file, expectedContentSha256: confirmed.json().contentSha256,
+    data: { ...reviewedEdit, galleryReviewId: editReview.json().review.id, galleryWarningsConfirmed: true,
+      similarityReviewedHashes: editReview.json().quality.perImage.map((image) => image.sha256) } });
+  assert.equal(reviewedUpdate.status, 200, reviewedUpdate.body);
+  const editedGallery = await call({ pathname: `/api/content/read?type=image&file=${encodeURIComponent(confirmed.json().file)}` });
+  assert.equal(editedGallery.json().data.contentId, receipt.contentId, "reviewed edits retain the existing stable content identity");
   await rm(path.join(workflowRoot, "..", confirmed.json().file));
   const legacyImage = "/images/xgif-gallery-legacy-small.PNG";
   const legacyFile = "site/src/content/images/20990101-oldg.md";

@@ -2249,7 +2249,7 @@ async function publishReviewedGallery(data, { file = "", version = "" } = {}) {
   }
   if (!file && current) throw imageValidationError("预览对应的内容位置已被占用，请重新预览。", 409);
   const result = file
-    ? await updateManagedContent("image", file, data, { expectedContentSha256: version })
+    ? await updateManagedContent("image", file, { ...data, contentId: receipt.contentId }, { expectedContentSha256: version })
     : await publishGallery(data, { contentId: receipt.contentId });
   return galleryReviews.complete(receipt, result);
 }
