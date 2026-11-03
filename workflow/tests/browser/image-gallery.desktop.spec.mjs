@@ -14,6 +14,45 @@ async function mockChecks(page) {
   await page.route("**/api/image-reviews", (route) => route.fulfill({ json: { quality: { ok: true, issues: [], perImage: [], duplicates: [] }, review: { id: "fixture-review", warnings: [] } } }));
 }
 
+test("publishing a gallery immediately offers its saved page link and hides it for unsaved edits", async ({ page, context }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await mockChecks(page);
+  await page.route("**/api/status", async (route) => {
+    const response = await route.fetch();
+    const status = await response.json();
+    status.services.sitePreview = { available: true, url: "http://127.0.0.1:4321/" };
+    await route.fulfill({ json: status });
+  });
+  await page.route("**/api/ai/gallery-status", (route) => route.fulfill({ json: { available: false } }));
+  await page.route("**/api/assets/upload", (route) => route.fulfill({ json: { url: "/images/memes/published.png", width: 128, height: 128 } }));
+  const previewUrl = "http://127.0.0.1:4321/20990101-link";
+  await page.route("**/api/publish/image", (route) => route.fulfill({ json: {
+    ok: true, file: "site/src/content/images/20990101-link.md", previewUrl, contentSha256: "saved-version",
+  } }));
+  await context.route(previewUrl, (route) => route.fulfill({ contentType: "text/html; charset=utf-8", body: "<h1>发布后的图片页面</h1>" }));
+  await page.goto("/#image");
+  await page.locator('#image-form input[type="file"]').setInputFiles(await imageFiles(1));
+  await expect(page.locator("#image-gallery-list li small").filter({ hasText: "已上传" })).toHaveCount(1);
+  await page.locator('#image-form [name="title"]').fill("发布后直接查看");
+  await page.locator('#image-form [name="description"]').fill("保存后的实际站点页面");
+  await page.locator('#image-form [name="tags"]').fill("生活");
+  await page.locator("#image-next-action").click();
+  await page.locator("#image-review-publish").click();
+  const link = page.getByRole("link", { name: "查看效果", exact: true });
+  await expect(link).toBeVisible();
+  await expect(link).toHaveAttribute("href", previewUrl);
+  await expect(page.locator("#image-next-action")).toHaveText("同步上线");
+  const popupReady = context.waitForEvent("page");
+  await link.click();
+  const popup = await popupReady;
+  await expect(popup).toHaveURL(previewUrl);
+  await expect(popup.getByRole("heading")).toHaveText("发布后的图片页面");
+  await popup.close();
+  await page.locator('#image-form [name="title"]').fill("尚未保存的修改");
+  await expect(link).toBeHidden();
+  await expect(page.locator("#image-real-preview")).not.toHaveAttribute("href", previewUrl);
+});
+
 test("R2 images load after restoring a draft and in publication review without a localhost referrer", async ({ page }) => {
   const files = await imageFiles(2);
   const sources = ["https://img.xgif.cn/fixtures/preview.png", "https://img.xgif.cn/fixtures/similar.png"];
