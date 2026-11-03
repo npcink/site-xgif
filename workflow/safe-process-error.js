@@ -1,3 +1,5 @@
+import { stripVTControlCharacters } from "node:util";
+
 const tokenPattern = /\b(?:gh[opusr]_[A-Za-z0-9_]+|github_pat_[A-Za-z0-9_]+)\b/gu;
 const credentialUrlPattern = /([a-z][a-z0-9+.-]*:\/\/)[^/@\s]+@/giu;
 
@@ -13,7 +15,7 @@ export function safeProcessError(error, {
     || error
     || fallback,
   );
-  message = message
+  message = stripVTControlCharacters(message)
     .replace(credentialUrlPattern, "$1")
     .replace(tokenPattern, "[redacted]");
   for (const value of redactPaths) {
