@@ -4479,12 +4479,13 @@ async function handleApi(req, res) {
 
   if (pathname === "/api/ai/gallery-status" && req.method === "GET") {
     sendJson(res, 200, { available: imageAiConfig.available, model: imageAiConfig.model, baseUrl: imageAiConfig.baseUrl,
-      configurationError: imageAiConfig.configurationError });
+      modelVersion: imageAiConfig.modelVersion, configurationError: imageAiConfig.configurationError });
     return;
   }
   if (pathname === "/api/ai/gallery-jobs" && req.method === "POST") {
     const payload = await readJson(req);
-    sendJson(res, 202, { job: await galleryAiJobs.create(payload.images) });
+    if (payload.force !== undefined && typeof payload.force !== "boolean") throw imageValidationError("重新识别参数必须为布尔值。", 400);
+    sendJson(res, 202, { job: await galleryAiJobs.create(payload.images, { force: payload.force === true }) });
     return;
   }
   const galleryJobRoute = pathname.match(/^\/api\/ai\/gallery-jobs\/([a-f0-9]{64})(\/retry)?$/u);

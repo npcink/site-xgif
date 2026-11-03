@@ -6,6 +6,15 @@
 
 发布成功后，顶部显示“查看效果”链接，在新标签页打开已保存图片的本地站点页面。重新打开该内容时也保留入口；草稿、非公开图片或存在未保存修改时不显示该链接。
 
+图片预览上方显示处理进度，按上传、逐张识别、整理资料、人工确认四阶段标明当前位置，显示实际完成张数及当前模型；识别单张图片期间不虚构百分比或剩余时间。
+
+## 更换模型与重新识别
+
+- 点击“重新识别”会以当前配置创建独立任务，跳过旧识别缓存，保留原任务和结果。新建议逐项显示当前值与候选值，默认均不勾选；只有点击“采用所选建议”才更新选中的共享资料或逐图描述，之后仍需检查、保存与发布确认。
+- 自动首次整理继续保护手工修改；重新识别及换模型后的整理采用对照模式，来源、作者、授权、日期及发布状态不会由 AI 改写。重新识别任务与对照模式会随浏览器临时暂存恢复。
+- 将 `workflow/.env` 的 `XGIF_IMAGE_AI_MODEL` 改为 M4 上已安装且可用的模型，执行 `npm --prefix workflow run restart`，刷新页面后点击“重新识别”。本功能不会安装、下载或自动切换模型。
+- 如模型名称不变但权重更新，设置新的 `XGIF_IMAGE_AI_VERSION` 标签后重启。缓存同时区分模型名称、权重版本、端点、提示词版本与图片字节指纹，避免把旧结果当成新模型结果。私有任务记录模型、版本、提示词版本与创建/更新时间，不写进公开 Markdown。
+
 ## 自动处理与人工确认
 
 - 发布台按图片 SHA-256 逐张识别，再用逐图结果汇总标题、描述、规范标签、分类、情绪和场景；替代文本独立保存在每张图片中。
@@ -23,6 +32,7 @@
 ```dotenv
 XGIF_IMAGE_AI_BASE_URL="http://127.0.0.1:11436/v1"
 XGIF_IMAGE_AI_MODEL="npcink-vision:qwen35-4b-instruct-16k-v1"
+XGIF_IMAGE_AI_VERSION=""
 XGIF_IMAGE_AI_TIMEOUT_MS="120000"
 XGIF_IMAGE_AI_SSH_HOST="user@m4-host"
 ```
@@ -46,8 +56,8 @@ M4 实机为 16GB Mac mini，已有上述 4B 视觉模型。兼容接口需设�
 
 | 接口 | 契约 |
 | --- | --- |
-| `GET /api/ai/gallery-status` | 返回已配置状态、模型和回环地址，不表示实时模型健康 |
-| `POST /api/ai/gallery-jobs` | `{images}`，只接收已上传的本地图片或有台账与字节备份的 R2 图片；返回 `202 {job}` |
+| `GET /api/ai/gallery-status` | 返回已配置状态、`model`、可选权重标签 `modelVersion` 和回环地址，不表示实时模型健康 |
+| `POST /api/ai/gallery-jobs` | `{images,force?:boolean}`，只接收已上传的本地图片或有台账与字节备份的 R2 图片；`force:true` 创建独立任务且跳过识别缓存。返回 `202 {job}`；新增任务字段含 `modelVersion`、`fresh`、`createdAt`，旧记录缺少这些字段时继续兼容 |
 | `GET /api/ai/gallery-jobs/:id` | 返回逐图状态、结果、错误、整套汇总和版本 |
 | `POST /api/ai/gallery-jobs/:id/retry` | 可选 `{hashes}`，只重试相应失败项，成功项保留 |
 | `POST /api/image-reviews` | `{data,file?,expectedContentSha256?}`，返回质量结果及私有预览凭据 |

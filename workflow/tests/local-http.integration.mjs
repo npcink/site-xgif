@@ -394,6 +394,7 @@ draft: true
   } finally { await writeFile(changedImagePath, originalImageBytes); }
   const unsafeJob = await post("/api/ai/gallery-jobs", { images: [{ src: "https://example.com/private.png" }] });
   assert.equal(unsafeJob.status, 422, unsafeJob.body);
+  assert.equal((await post("/api/ai/gallery-jobs", { images: galleryImages, force: "true" })).status, 400);
   const imageAiStatus = await call({ pathname: "/api/ai/gallery-status" });
   assert.equal(imageAiStatus.json().model, "integration-vision");
   const task = await post("/api/ai/gallery-jobs", { images: galleryImages });

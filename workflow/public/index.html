@@ -390,6 +390,27 @@
                 </label>
               </div>
 
+              <section class="image-ai-row" id="image-ai-progress" aria-labelledby="image-ai-heading" data-state="idle">
+                <div class="image-ai-progress-heading">
+                  <div>
+                    <strong id="image-ai-heading">图片处理进度</strong>
+                    <p id="image-ai-availability" role="status" aria-live="polite">上传后自动逐张识别并整理图集资料。</p>
+                  </div>
+                  <div class="image-ai-actions">
+                    <button class="article-context-ai" type="button" data-ai-fill="image" aria-describedby="image-ai-availability" disabled>继续整理 / 重试</button>
+                    <button type="button" id="image-ai-reanalyze" disabled>重新识别</button>
+                  </div>
+                </div>
+                <progress id="image-ai-progress-bar" aria-label="图集处理进度" max="1" value="0" hidden></progress>
+                <ol class="image-ai-steps" aria-label="图片处理阶段">
+                  <li data-ai-step="upload">上传图片</li>
+                  <li data-ai-step="recognize">逐张识别</li>
+                  <li data-ai-step="summary">整理资料</li>
+                  <li data-ai-step="review">人工确认</li>
+                </ol>
+                <small id="image-ai-model">识别模型：正在读取</small>
+              </section>
+
               <div class="image-preview-stage" id="image-preview-stage" data-empty="true">
                 <article class="image-card" id="image-preview"></article>
                 <div class="image-empty-state" id="image-empty-state">
@@ -408,15 +429,15 @@
                 <div id="image-duplicate-candidates"></div>
               </section>
 
-              <div class="image-ai-row">
-                <div>
-                  <strong>上传后由 M4 自动整理</strong>
-                  <small id="image-ai-availability" role="status" aria-live="polite">上传后自动逐张识别并整理图集资料。</small>
-                </div>
-                <button class="article-context-ai" type="button" data-ai-fill="image" aria-describedby="image-ai-availability" disabled>继续整理 / 重试</button>
-              </div>
               <button type="button" id="image-ai-cover" hidden>采用 AI 建议封面</button>
               <div id="image-ai-issues" class="image-ai-issues" aria-live="polite"></div>
+              <section id="image-ai-candidates" class="image-ai-candidates" aria-labelledby="image-ai-candidates-heading" hidden>
+                <strong id="image-ai-candidates-heading">对照新的识别建议</strong>
+                <p>勾选要采用的建议，再点击“采用所选建议”。当前资料会保留，来源与授权由你确认。</p>
+                <div id="image-ai-candidate-fields"></div>
+                <button type="button" id="image-ai-apply" disabled>采用所选建议</button>
+                <span id="image-ai-apply-status" role="status"></span>
+              </section>
             </section>
 
             <div class="ai-review-card" id="image-ai-review" aria-live="polite" hidden>
