@@ -7,6 +7,7 @@
 
 维护入口：
 
+- [图集阶段交接、问题处理与开发复盘](docs/GALLERY_CLOSEOUT_2026-11-04.md)
 - [最终交接与开发方法](docs/LOCAL_PUBLISHER_FINAL_HANDOFF_2026-07-30.md)
 - [长期工程规范](docs/LOCAL_PUBLISHER_ENGINEERING_STANDARD.md)
 - [真实用户审查复盘](docs/LOCAL_PUBLISHER_REAL_USER_UX_RETROSPECTIVE_2026-08-03.md)
@@ -352,6 +353,6 @@ PUBLISHER_MAX_IMAGE_DIMENSION="6000"
 R2 图片从已有私有字节备份或已生成的指纹缓存比较；缺少可比对内容时明确提示数量，
 不会暗中联网下载，也不会把未检查的图片算作无重复。需要补齐字节时使用已有 `npm run r2:backup`。
 
-当前 11 张图片已完成指纹初始化。相似度计算在本机完成；M4 同时提供图集资料整理与离线推荐。
+相似度计算在本机完成；历史图片可比对范围取决于本机字节备份与指纹缓存，不能把某次初始化数量当成长期保证。M4 同时提供图集资料整理与离线推荐。
 
 图集发布操作与接口约定见 [图片图集发布](docs/IMAGE_GALLERY_2026-11-03.md)。
