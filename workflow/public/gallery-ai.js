@@ -75,6 +75,7 @@ export function createGalleryAi({ root, api, gallery, context, onChange }) {
       const running = job?.items.findIndex((item) => item.state === "running") ?? -1;
       heading = !gallery.ready() ? `正在上传图片 · ${gallery.snapshot().length} / ${total}`
         : starting ? "正在创建识别任务"
+        : !halted && job?.retrying ? `${job.retrying.stage === "summary" ? "汇总" : `第 ${job.retrying.imageIndex + 1} 张识别`}暂时失败 · 正在自动重试`
         : !halted && summaryFailed() ? `图集资料汇总失败 · ${done} 张识别结果已保留`
         : halted || ["attention", "paused"].includes(job?.state) ? `识别需要处理 · 已完成 ${done} / ${total} 张`
         : job?.state === "done" ? reviewMode ? "重新识别完成 · 请对照新建议" : "图片资料已整理 · 请检查确认"
@@ -93,7 +94,10 @@ export function createGalleryAi({ root, api, gallery, context, onChange }) {
     const model = job || config;
     const when = job?.updatedAt ? ` · 本次更新 ${new Date(job.updatedAt).toLocaleString("zh-CN", { hour12: false })}` : "";
     root.querySelector("#image-ai-model").textContent = model?.model
-      ? `${job ? "本次识别模型" : "当前配置模型"}：${model.model}${model.modelVersion ? ` · 版本 ${model.modelVersion}` : ""}${when}` : "识别模型：尚未配置";
+      ? `${job ? "本次识别模型" : "当前配置模型"}：${model.model}${model.modelVersion ? ` · 版本 ${model.modelVersion}` : ""}${model.prompt || model.promptVersion ? ` · 提示词 ${model.prompt || model.promptVersion}` : ""}${when}` : "识别模型：尚未配置";
+    const lastError = job?.diagnostics?.findLast((record) => record.outcome === "error");
+    if (lastError) root.querySelector("#image-ai-model").append(document.createTextNode(
+      ` · 最近异常：${lastError.stage === "summary" ? "图集汇总" : `第 ${lastError.imageIndex + 1} 张识别`}，${lastError.httpStatus ? `HTTP ${lastError.httpStatus}` : lastError.errorCode}，耗时 ${lastError.durationMs}ms，${lastError.startedAt}，请求 ${lastError.requestId}${lastError.upstreamRequestId ? `，上游请求 ${lastError.upstreamRequestId}` : ""}`));
   }
 
   function render() {
@@ -110,8 +114,9 @@ export function createGalleryAi({ root, api, gallery, context, onChange }) {
     else if (job) {
       const done = job.items.filter((item) => item.state === "done").length;
       status.textContent = halted ? "暂时无法读取 M4 进度，已保留任务，点击继续整理即可恢复。"
+        : job.retrying ? `已识别 ${done} / ${job.items.length} 张，自动重试 ${job.retrying.attempt - 1} / ${job.retrying.maxAttempts - 1} 次；已完成结果和手动资料已保留。`
         : summaryFailed() ? `已识别 ${done} / ${job.items.length} 张；重试只汇总资料，也可手动填写标题和描述。`
-        : job.state === "paused" ? `已识别 ${done} / ${job.items.length} 张，连接中断，已保留进度；点击继续整理恢复。`
+        : job.state === "paused" ? `已识别 ${done} / ${job.items.length} 张，M4 暂时不可用，已保留进度；稍后点击继续整理恢复。`
         : job.state === "done" ? `已整理 ${done} / ${job.items.length} 张，请预览确认。`
         : job.state === "summarizing" ? `已识别 ${done} / ${job.items.length} 张，正在汇总图集…`
         : `已识别 ${done} / ${job.items.length} 张${job.state === "attention" ? "，部分项目需要检查或重试。" : "，后台整理中…"}`;
@@ -225,7 +230,8 @@ export function createGalleryAi({ root, api, gallery, context, onChange }) {
       if (!current(generation)) return;
       config = nextConfig;
       if (!job) { await start(generation); return; }
-      if (job.model !== config.model || (job.modelVersion || "") !== (config.modelVersion || "") || (job.endpoint && job.endpoint !== config.baseUrl)) {
+      if (job.model !== config.model || (job.modelVersion || "") !== (config.modelVersion || "") || (job.endpoint && job.endpoint !== config.baseUrl)
+        || (job.prompt && config.promptVersion && job.prompt !== config.promptVersion)) {
         await start(generation, { review: true }); return;
       }
       const result = await api(`/api/ai/gallery-jobs/${job.id}/retry`, { hashes });
