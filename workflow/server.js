@@ -1,5 +1,5 @@
 import { galleryImages, validateGalleryImages } from "../site/src/lib/image-gallery.mjs";
-import { GalleryAiJobs, galleryAiConfig } from "./gallery-ai.js";
+import { GalleryAiJobs, galleryAiConfig, GALLERY_PROMPT_VERSION } from "./gallery-ai.js";
 import { GalleryReviews } from "./gallery-reviews.js";
 import { LocalAiTunnel } from "./local-ai-tunnel.js";
 import { createHash, randomUUID } from "node:crypto";
@@ -4479,7 +4479,7 @@ async function handleApi(req, res) {
 
   if (pathname === "/api/ai/gallery-status" && req.method === "GET") {
     sendJson(res, 200, { available: imageAiConfig.available, model: imageAiConfig.model, baseUrl: imageAiConfig.baseUrl,
-      modelVersion: imageAiConfig.modelVersion, configurationError: imageAiConfig.configurationError });
+      modelVersion: imageAiConfig.modelVersion, promptVersion: GALLERY_PROMPT_VERSION, configurationError: imageAiConfig.configurationError });
     return;
   }
   if (pathname === "/api/ai/gallery-jobs" && req.method === "POST") {

@@ -8,8 +8,8 @@ async function files() {
     buffer: await sharp({ create: { width: 200, height: 200, channels: 3, background } }).png().toBuffer() })));
 }
 async function setup(page, { hold = false, failSecond = false, failSummary = false } = {}) {
-  const state = { released: !hold, retriedHashes: [], creates: 0, job: null, model: "M4-fixture", modelVersion: "", summary, lastCreate: null };
-  await page.route("**/api/ai/gallery-status", (route) => route.fulfill({ json: { available: true, model: state.model, modelVersion: state.modelVersion } }));
+  const state = { released: !hold, retriedHashes: [], creates: 0, job: null, model: "M4-fixture", modelVersion: "", promptVersion: "gallery-v1", summary, lastCreate: null, retrying: null, diagnostics: [] };
+  await page.route("**/api/ai/gallery-status", (route) => route.fulfill({ json: { available: true, model: state.model, modelVersion: state.modelVersion, promptVersion: state.promptVersion } }));
   await page.route("**/api/check/image", (route) => route.fulfill({ json: { duplicates: [], similarity: { checked: 0, unavailable: 0, matches: [] } } }));
   await page.route("**/api/assets/upload", (route) => route.fulfill({ json: { url: `/images/memes/${route.request().postDataJSON().fileName}`, width: 200, height: 200 } }));
   await page.route(/\/api\/ai\/gallery-jobs(?:\/.*)?$/u, async (route) => {
@@ -19,8 +19,8 @@ async function setup(page, { hold = false, failSecond = false, failSummary = fal
       state.creates++;
       const { images, force } = request.postDataJSON();
       state.lastCreate = request.postDataJSON();
-      const id = createHash("sha256").update(JSON.stringify({ images: images.map((image) => image.src), model: state.model, modelVersion: state.modelVersion, run: force ? state.creates : 0 })).digest("hex");
-      if (state.job?.id !== id) state.job = { id, model: state.model, modelVersion: state.modelVersion, revision: 0, items: images.map((image, i) => ({ src: image.src, sha256: String(i + 1).repeat(64) })) };
+      const id = createHash("sha256").update(JSON.stringify({ images: images.map((image) => image.src), model: state.model, modelVersion: state.modelVersion, prompt: state.promptVersion, run: force ? state.creates : 0 })).digest("hex");
+      if (state.job?.id !== id) state.job = { id, model: state.model, modelVersion: state.modelVersion, prompt: state.promptVersion, revision: 0, items: images.map((image, i) => ({ src: image.src, sha256: String(i + 1).repeat(64) })) };
     }
     if (url.pathname.endsWith("/retry")) {
       state.retriedHashes = request.postDataJSON().hashes;
@@ -29,11 +29,13 @@ async function setup(page, { hold = false, failSecond = false, failSummary = fal
     }
     const job = state.job;
     job.items = job.items.map((item, i) => ({ ...item,
-      state: state.released ? failSecond && i === 1 ? "error" : "done" : "running",
+      state: state.released || state.retrying?.stage === "summary" ? failSecond && i === 1 ? "error" : "done" : "running",
       error: failSecond && i === 1 ? "M4 模拟断线" : "",
       result: { ...state.summary, altText: `第 ${i + 1} 张${state.model === "M4-fixture" ? "猫咪的画面" : "新模型画面"}`, warnings: [] },
     }));
-    job.state = !state.released ? "running" : failSecond || failSummary ? "attention" : "done";
+    job.state = !state.released ? state.retrying?.stage === "summary" ? "summarizing" : "running" : failSecond || failSummary ? "attention" : "done";
+    job.retrying = state.released ? null : state.retrying;
+    job.diagnostics = state.diagnostics;
     job.summary = state.released && !failSummary ? { ...state.summary, coverSrc: job.items.at(-1).src } : null;
     job.error = failSummary ? "图集资料汇总失败：M4 请求失败（500）" : "";
     await route.fulfill({ json: { job } });
@@ -98,6 +100,42 @@ test("summary failure identifies the correct stage and retries without losing ma
   await expect(page.locator("#image-gallery-current textarea")).toHaveValue("人工保留描述");
   expect(state.creates).toBe(1);
   expect(state.retriedHashes).toEqual([]);
+});
+
+test("automatic summary retry shows progress and safe request details while preserving edits", async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  const state = await setup(page, { hold: true });
+  await expect(page.locator("#image-ai-availability")).toContainText("后台整理中");
+  await page.locator('#image-form [name="title"]').fill("手改标题不动");
+  state.retrying = { stage: "summary", attempt: 2, maxAttempts: 2, imageIndex: null };
+  state.diagnostics = [{ stage: "summary", outcome: "error", httpStatus: 500, durationMs: 321, startedAt: "2026-11-04T01:00:00Z", requestId: "local-attempt-1", upstreamRequestId: "m4-500" }];
+  await expect(page.locator("#image-ai-heading")).toHaveText("汇总暂时失败 · 正在自动重试");
+  await expect(page.locator("#image-ai-availability")).toContainText("自动重试 1 / 1");
+  await expect(page.locator('[data-ai-step="summary"]')).toHaveAttribute("aria-current", "step");
+  await expect(page.locator('[data-ai-fill="image"]')).toBeDisabled();
+  await page.locator(".image-ai-details summary").click();
+  await expect(page.locator("#image-ai-model")).toContainText("HTTP 500");
+  await expect(page.locator("#image-ai-model")).toContainText("m4-500");
+  await page.screenshot({ path: testInfo.outputPath("automatic-summary-retry.png") });
+  state.released = true;
+  await expect(page.locator("#image-ai-availability")).toContainText("已整理 2 / 2");
+  await expect(page.locator('#image-form [name="title"]')).toHaveValue("手改标题不动");
+});
+
+test("a prompt upgrade creates comparison suggestions and leaves manual fields intact", async ({ page }) => {
+  const state = await setup(page);
+  await expect(page.locator("#image-ai-availability")).toContainText("已整理 2 / 2");
+  const previousId = state.job.id;
+  await page.locator('#image-form [name="title"]').fill("人工标题");
+  await page.locator("#image-gallery-current textarea").fill("人工逐图描述");
+  state.promptVersion = "gallery-v2";
+  state.summary = { ...summary, title: "新版提示词标题" };
+  await page.locator('[data-ai-fill="image"]').click();
+  await expect(page.locator("#image-ai-candidates")).toBeVisible();
+  expect(state.job.id).not.toBe(previousId);
+  await expect(page.locator("#image-ai-model")).toContainText("提示词 gallery-v2");
+  await expect(page.locator('#image-form [name="title"]')).toHaveValue("人工标题");
+  await expect(page.locator("#image-gallery-current textarea")).toHaveValue("人工逐图描述");
 });
 
 test("changing membership during recognition discards the old task's summary", async ({ page }) => {

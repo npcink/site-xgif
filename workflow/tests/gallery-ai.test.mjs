@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -10,12 +10,12 @@ import { GalleryReviews } from "../gallery-reviews.js";
 
 const suggestion = { title: "猫咪反应", description: "一只猫看着镜头，适合表达惊讶。", altText: "看向镜头的猫咪", tags: ["可爱"], mood: ["惊讶"], scenes: ["回复"], warnings: [], coverIndex: 0 };
 const config = { available: true, model: "fixture-vision", baseUrl: "http://127.0.0.1:11436/v1", timeoutMs: 1000 };
-async function fixture(t, request) {
+async function fixture(t, request, options = {}) {
   const directory = await mkdtemp(path.join(os.tmpdir(), "xgif-gallery-ai-"));
   t.after(() => rm(directory, { recursive: true, force: true }));
   const buffer = await sharp({ create: { width: 200, height: 200, channels: 3, background: "#123456" } }).png().toBuffer();
   const readAsset = async (src) => ({ buffer, sha256: createHash("sha256").update(buffer).update(src).digest("hex") });
-  const jobs = new GalleryAiJobs({ directory, config, readAsset, request });
+  const jobs = new GalleryAiJobs({ directory, config, readAsset, request, sleep: async () => {}, ...options });
   await jobs.ready;
   return { jobs, directory, readAsset };
 }
@@ -110,6 +110,108 @@ test("summary failure preserves all twelve image results and retry only requests
   assert.deepEqual(retried.items.map((item) => item.result), results);
 });
 
+test("a transient summary 500 retries once, persists safe diagnostics and preserves twelve completed results", async (t) => {
+  let calls = 0;
+  const ids = [];
+  const { jobs, directory } = await fixture(t, (settings, messages, _fetch, options) => requestGalleryAi(settings, messages, async (_url, init) => {
+    calls++; ids.push(init.headers["x-request-id"]);
+    return calls === 13
+      ? new Response("SECRET upstream body", { status: 500, headers: { "x-request-id": "m4-fixture-13" } })
+      : Response.json({ choices: [{ message: { content: JSON.stringify(suggestion) } }] });
+  }, options));
+  const images = Array.from({ length: 12 }, (_, i) => ({ src: `/images/auto-${i}.png` }));
+  const result = await finished(jobs, (await jobs.create(images)).id);
+  assert.equal(result.state, "done");
+  assert.equal(calls, 14);
+  assert.equal(result.items.filter((item) => item.state === "done").length, 12);
+  assert.equal(result.retrying, null);
+  const [failed, recovered] = result.diagnostics.slice(-2);
+  assert.equal(failed.stage, "summary"); assert.equal(failed.imageIndex, null);
+  assert.equal(failed.httpStatus, 500); assert.equal(failed.attempt, 1);
+  assert.equal(failed.upstreamRequestId, "m4-fixture-13");
+  assert.equal(recovered.outcome, "success"); assert.equal(recovered.attempt, 2);
+  assert.ok(failed.startedAt); assert.ok(failed.durationMs >= 0);
+  assert.equal(new Set(ids).size, 14);
+  assert.equal(failed.requestId, ids[12]);
+  const persisted = await readFile(path.join(directory, `${result.id}.json`), "utf8");
+  assert.doesNotMatch(persisted, /SECRET|Bearer|data:image/u);
+  assert.deepEqual(JSON.parse(persisted).diagnostics, result.diagnostics);
+});
+
+test("rate limits respect Retry-After and lengthy waits pause instead of retrying early", async (t) => {
+  for (const seconds of [3, 90]) {
+    let calls = 0; const delays = [];
+    const { jobs } = await fixture(t, (settings, messages, _fetch, options) => requestGalleryAi(settings, messages, async () => {
+      calls++;
+      return calls === 1 ? new Response("SECRET", { status: 429, headers: { "retry-after": String(seconds) } })
+        : Response.json({ choices: [{ message: { content: JSON.stringify(suggestion) } }] });
+    }, options), { sleep: async (ms) => { delays.push(ms); } });
+    const created = await jobs.create([{ src: "/images/limited.png" }]);
+    await jobs.work.tail;
+    const result = await jobs.get(created.id);
+    assert.equal(result.state, seconds === 3 ? "done" : "paused");
+    assert.equal(calls, seconds === 3 ? 3 : 1);
+    assert.deepEqual(delays, seconds === 3 ? [3000] : []);
+  }
+});
+
+test("repeated HTTP 503 pauses the remaining queue after two attempts", async (t) => {
+  let calls = 0;
+  const { jobs } = await fixture(t, (settings, messages, _fetch, options) => requestGalleryAi(settings, messages, async () => {
+    calls++;
+    return new Response("SECRET outage", { status: 503 });
+  }, options));
+  const created = await jobs.create(Array.from({ length: 12 }, (_, i) => ({ src: `/images/outage-${i}.png` })));
+  await jobs.work.tail;
+  const result = await jobs.get(created.id);
+  assert.equal(result.state, "paused"); assert.equal(calls, 2);
+  assert.equal(result.items.filter((item) => item.state === "pending").length, 11);
+  assert.equal(result.diagnostics.length, 2);
+  assert.doesNotMatch(JSON.stringify(result), /SECRET/u);
+});
+
+test("permanent HTTP and malformed output errors are not automatically retried or leaked", async (t) => {
+  for (const status of [400, 401, 403, 404, 200]) {
+    let calls = 0;
+    const { jobs } = await fixture(t, (settings, messages, _fetch, options) => requestGalleryAi(settings, messages, async () => {
+      calls++;
+      return new Response("SECRET malformed upstream output", { status });
+    }, options));
+    const result = await finished(jobs, (await jobs.create([{ src: "/images/invalid.png" }])).id);
+    assert.equal(result.state, "attention"); assert.equal(calls, 1);
+    assert.equal(result.diagnostics[0].httpStatus, status);
+    assert.doesNotMatch(JSON.stringify(result), /SECRET/u);
+  }
+});
+
+test("HTTP 200 with missing required metadata is diagnosed as invalid output without a retry loop", async (t) => {
+  let calls = 0;
+  const { jobs } = await fixture(t, (settings, messages, _fetch, options) => requestGalleryAi(settings, messages, async () => {
+    calls++;
+    return Response.json({ choices: [{ message: { content: JSON.stringify({ ...suggestion, description: "" }) } }] });
+  }, options));
+  const result = await finished(jobs, (await jobs.create([{ src: "/images/missing-description.png" }])).id);
+  assert.equal(result.state, "attention"); assert.equal(calls, 1);
+  assert.equal(result.diagnostics[0].errorCode, "M4_INVALID_RESPONSE");
+  assert.match(result.items[0].error, /描述为空/u);
+});
+
+test("summary retry exposes its stage while waiting and succeeds without re-recognizing images", async (t) => {
+  let calls = 0, release, waiting;
+  const ready = new Promise((resolve) => { waiting = resolve; });
+  const { jobs } = await fixture(t, async () => {
+    if (++calls === 2) throw Object.assign(new Error("临时 503"), { statusCode: 502, httpStatus: 503, retryable: true });
+    return suggestion;
+  }, { sleep: () => new Promise((resolve) => { release = resolve; waiting(); }) });
+  const created = await jobs.create([{ src: "/images/wait.png" }]);
+  await ready;
+  const waitingJob = await jobs.get(created.id);
+  assert.equal(waitingJob.state, "summarizing"); assert.equal(waitingJob.retrying.stage, "summary");
+  assert.equal(waitingJob.retrying.attempt, 2); assert.equal(waitingJob.items[0].state, "done");
+  release();
+  assert.equal((await finished(jobs, created.id)).state, "done"); assert.equal(calls, 3);
+});
+
 test("a restarted process keeps completed recognition and resumes only interrupted images", async (t) => {
   const { jobs, directory, readAsset } = await fixture(t, async () => suggestion);
   const created = await jobs.create([{ src: "/images/one.png" }, { src: "/images/two.png" }]);
@@ -148,6 +250,25 @@ test("fresh recognition bypasses both caches, preserves the old run and separate
   await assert.rejects(jobs.retry(first.id), /模型配置已变化/);
 });
 
+test("a prompt upgrade retains the old run and avoids reusing its recognition cache", async (t) => {
+  const { jobs, directory, readAsset } = await fixture(t, async () => suggestion);
+  const images = [{ src: "/images/older-prompt.png" }];
+  const original = await finished(jobs, (await jobs.create(images)).id);
+  await jobs.work.tail;
+  // The old identity came from an earlier prompt, so its ID must differ from the current identity.
+  const oldId = "a".repeat(64);
+  const older = { ...original, id: oldId, prompt: "gallery-v1" };
+  await writeFile(path.join(directory, `${oldId}.json`), JSON.stringify(older));
+  await rm(path.join(directory, `${original.id}.json`));
+  let calls = 0;
+  const upgraded = new GalleryAiJobs({ directory, config, readAsset, request: async () => { calls++; return suggestion; } });
+  await upgraded.ready;
+  await assert.rejects(upgraded.retry(oldId), /配置已变化/u);
+  const next = await finished(upgraded, (await upgraded.create(images)).id);
+  assert.equal(next.prompt, "gallery-v2"); assert.equal(calls, 2);
+  assert.deepEqual(await upgraded.get(oldId), { ...older, retrying: null });
+});
+
 test("a service outage pauses remaining work instead of timing out twelve separate requests", async (t) => {
   let calls = 0;
   const { jobs } = await fixture(t, async () => {
@@ -160,11 +281,11 @@ test("a service outage pauses remaining work instead of timing out twelve separa
   assert.equal(job.state, "paused");
   assert.equal(job.items[0].state, "error");
   assert.equal(job.items[1].state, "pending");
-  assert.equal(calls, 1);
+  assert.equal(calls, 2);
   jobs.request = async () => { calls++; return suggestion; };
   await jobs.create([{ src: "/images/one.png" }, { src: "/images/two.png" }]);
   assert.equal((await finished(jobs, job.id)).state, "done");
-  assert.equal(calls, 4);
+  assert.equal(calls, 5);
 });
 
 test("animated GIF sampling includes first, middle and last frames", async () => {
