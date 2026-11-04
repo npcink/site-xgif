@@ -33,6 +33,8 @@ export function createGalleryAi({ root, api, gallery, context, onChange }) {
   const currentSignature = () => JSON.stringify(gallery.snapshot().map((image) => image.src));
   const current = (generation) => generation === epoch && scope === context() && signature === currentSignature();
   const busy = () => starting || (!halted && job && ["queued", "running", "summarizing"].includes(job.state));
+  const summaryFailed = () => job?.state === "attention" && !job.summary && Boolean(job.error)
+    && job.items.length > 0 && job.items.every((item) => item.state === "done");
 
   function renderCandidates() {
     candidates.hidden = !reviewMode || !job?.summary;
@@ -65,7 +67,7 @@ export function createGalleryAi({ root, api, gallery, context, onChange }) {
   function renderProgress() {
     const total = gallery.draftSnapshot().length;
     const done = job?.items.filter((item) => item.state === "done").length || 0;
-    const stage = !gallery.ready() ? 0 : job?.state === "done" || (!job && context() !== "new") ? 3 : job?.state === "summarizing" ? 2 : 1;
+    const stage = !gallery.ready() ? 0 : job?.state === "done" || (!job && context() !== "new") ? 3 : job?.state === "summarizing" || summaryFailed() ? 2 : 1;
     progress.dataset.state = halted || ["attention", "paused"].includes(job?.state) ? "attention" : busy() ? "running" : job?.state || "idle";
     progressBar.setAttribute("aria-busy", String(Boolean(busy())));
     let heading = "图片处理进度";
@@ -73,6 +75,7 @@ export function createGalleryAi({ root, api, gallery, context, onChange }) {
       const running = job?.items.findIndex((item) => item.state === "running") ?? -1;
       heading = !gallery.ready() ? `正在上传图片 · ${gallery.snapshot().length} / ${total}`
         : starting ? "正在创建识别任务"
+        : !halted && summaryFailed() ? `图集资料汇总失败 · ${done} 张识别结果已保留`
         : halted || ["attention", "paused"].includes(job?.state) ? `识别需要处理 · 已完成 ${done} / ${total} 张`
         : job?.state === "done" ? reviewMode ? "重新识别完成 · 请对照新建议" : "图片资料已整理 · 请检查确认"
         : job?.state === "summarizing" ? "逐张识别完成 · 正在整理资料"
@@ -95,7 +98,7 @@ export function createGalleryAi({ root, api, gallery, context, onChange }) {
 
   function render() {
     retry.disabled = locked || !gallery.ready() || Boolean(busy());
-    retry.textContent = busy() ? "正在整理…" : job?.state === "done" ? "重新汇总" : "继续整理 / 重试";
+    retry.textContent = busy() ? "正在整理…" : summaryFailed() ? "重试汇总" : job?.state === "done" ? "重新汇总" : "继续整理 / 重试";
     reanalyze.disabled = locked || !gallery.ready() || Boolean(busy()) || !config?.available;
     cover.hidden = !job?.summary?.coverSrc || job.summary.coverSrc === gallery.snapshot()[0]?.src;
     cover.disabled = locked;
@@ -107,6 +110,7 @@ export function createGalleryAi({ root, api, gallery, context, onChange }) {
     else if (job) {
       const done = job.items.filter((item) => item.state === "done").length;
       status.textContent = halted ? "暂时无法读取 M4 进度，已保留任务，点击继续整理即可恢复。"
+        : summaryFailed() ? `已识别 ${done} / ${job.items.length} 张；重试只汇总资料，也可手动填写标题和描述。`
         : job.state === "paused" ? `已识别 ${done} / ${job.items.length} 张，连接中断，已保留进度；点击继续整理恢复。`
         : job.state === "done" ? `已整理 ${done} / ${job.items.length} 张，请预览确认。`
         : job.state === "summarizing" ? `已识别 ${done} / ${job.items.length} 张，正在汇总图集…`

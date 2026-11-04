@@ -7,7 +7,7 @@ async function files() {
   return Promise.all(["#123456", "#987654"].map(async (background, index) => ({ name: `auto-${index}.png`, mimeType: "image/png",
     buffer: await sharp({ create: { width: 200, height: 200, channels: 3, background } }).png().toBuffer() })));
 }
-async function setup(page, { hold = false, failSecond = false } = {}) {
+async function setup(page, { hold = false, failSecond = false, failSummary = false } = {}) {
   const state = { released: !hold, retriedHashes: [], creates: 0, job: null, model: "M4-fixture", modelVersion: "", summary, lastCreate: null };
   await page.route("**/api/ai/gallery-status", (route) => route.fulfill({ json: { available: true, model: state.model, modelVersion: state.modelVersion } }));
   await page.route("**/api/check/image", (route) => route.fulfill({ json: { duplicates: [], similarity: { checked: 0, unavailable: 0, matches: [] } } }));
@@ -25,6 +25,7 @@ async function setup(page, { hold = false, failSecond = false } = {}) {
     if (url.pathname.endsWith("/retry")) {
       state.retriedHashes = request.postDataJSON().hashes;
       failSecond = false;
+      failSummary = false;
     }
     const job = state.job;
     job.items = job.items.map((item, i) => ({ ...item,
@@ -32,8 +33,9 @@ async function setup(page, { hold = false, failSecond = false } = {}) {
       error: failSecond && i === 1 ? "M4 模拟断线" : "",
       result: { ...state.summary, altText: `第 ${i + 1} 张${state.model === "M4-fixture" ? "猫咪的画面" : "新模型画面"}`, warnings: [] },
     }));
-    job.state = !state.released ? "running" : failSecond ? "attention" : "done";
-    job.summary = state.released ? { ...state.summary, coverSrc: job.items.at(-1).src } : null;
+    job.state = !state.released ? "running" : failSecond || failSummary ? "attention" : "done";
+    job.summary = state.released && !failSummary ? { ...state.summary, coverSrc: job.items.at(-1).src } : null;
+    job.error = failSummary ? "图集资料汇总失败：M4 请求失败（500）" : "";
     await route.fulfill({ json: { job } });
   });
   await page.goto("/#image");
@@ -77,6 +79,25 @@ test("a failed image is visible next to successful results and can retry by its 
   await expect(page.locator("#image-ai-availability")).toContainText("已整理 2 / 2");
   expect(state.retriedHashes).toEqual(["2".repeat(64)]);
   await expect(page.locator('#image-form [name="description"]')).toHaveValue(summary.description);
+});
+
+test("summary failure identifies the correct stage and retries without losing manual edits or image results", async ({ page }, testInfo) => {
+  const state = await setup(page, { failSummary: true });
+  await expect(page.locator("#image-ai-heading")).toHaveText("图集资料汇总失败 · 2 张识别结果已保留");
+  await expect(page.locator('[data-ai-step="recognize"]')).toHaveAttribute("data-state", "done");
+  await expect(page.locator('[data-ai-step="summary"]')).toHaveAttribute("aria-current", "step");
+  await expect(page.locator("#image-ai-availability")).toContainText("重试只汇总资料");
+  await page.screenshot({ path: testInfo.outputPath("summary-recovery.png") });
+  await page.locator('#image-form [name="title"]').fill("人工保留标题");
+  await page.locator("#image-gallery-current textarea").fill("人工保留描述");
+  await page.reload();
+  await expect(page.locator("#image-ai-heading")).toContainText("图集资料汇总失败");
+  await page.getByRole("button", { name: "重试汇总", exact: true }).click();
+  await expect(page.locator("#image-ai-availability")).toContainText("已整理 2 / 2");
+  await expect(page.locator('#image-form [name="title"]')).toHaveValue("人工保留标题");
+  await expect(page.locator("#image-gallery-current textarea")).toHaveValue("人工保留描述");
+  expect(state.creates).toBe(1);
+  expect(state.retriedHashes).toEqual([]);
 });
 
 test("changing membership during recognition discards the old task's summary", async ({ page }) => {

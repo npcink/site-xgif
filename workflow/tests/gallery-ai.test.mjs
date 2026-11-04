@@ -88,6 +88,28 @@ test("twelve images run serially; one failure is isolated and retry does not rep
   await assert.rejects(jobs.inspect(job.id, [...images].reverse()), /顺序已变化/);
 });
 
+test("summary failure preserves all twelve image results and retry only requests one new summary", async (t) => {
+  let calls = 0;
+  const { jobs } = await fixture(t, async () => {
+    calls++;
+    if (calls === 13) throw Object.assign(new Error("M4 请求失败（500）"), { statusCode: 502 });
+    return suggestion;
+  });
+  const images = Array.from({ length: 12 }, (_, i) => ({ src: `/images/summary-${i}.png` }));
+  const failed = await finished(jobs, (await jobs.create(images)).id);
+  assert.equal(failed.state, "attention");
+  assert.equal(failed.summary, null);
+  assert.match(failed.error, /图集资料汇总失败.*500/u);
+  assert.equal(failed.items.filter((item) => item.state === "done").length, 12);
+  const results = failed.items.map((item) => item.result);
+  await jobs.retry(failed.id);
+  const retried = await finished(jobs, failed.id);
+  assert.equal(retried.state, "done");
+  assert.equal(retried.error, "");
+  assert.equal(calls, 14, "twelve image requests, failed summary and one summary retry");
+  assert.deepEqual(retried.items.map((item) => item.result), results);
+});
+
 test("a restarted process keeps completed recognition and resumes only interrupted images", async (t) => {
   const { jobs, directory, readAsset } = await fixture(t, async () => suggestion);
   const created = await jobs.create([{ src: "/images/one.png" }, { src: "/images/two.png" }]);
