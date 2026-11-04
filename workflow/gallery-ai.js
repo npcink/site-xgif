@@ -80,7 +80,7 @@ export async function requestGalleryAi(config, messages, fetchImpl = fetch) {
         response_format: { type: "json_object" }, reasoning_effort: "none", messages, stream: false }),
     });
   } catch { throw unavailable(); }
-  if (!response.ok) throw fail(`M4 未能完成识图（${response.status}）；请检查视觉模型后重试。`, 502);
+  if (!response.ok) throw fail(`M4 请求失败（${response.status}）；请检查 M4 服务后重试。`, 502);
   try {
     const body = await response.json();
     const content = body?.choices?.[0]?.message?.content;
@@ -267,7 +267,7 @@ export class GalleryAiJobs {
         job.summary = sanitizeGallerySuggestion(raw, { summary: true, count: recognized.length });
         job.summary.coverSrc = recognized[job.summary.coverIndex].src;
         job.error = "";
-      } catch (error) { job.error = error.statusCode ? error.message : "整套资料汇总失败，请重试或手动填写。"; }
+      } catch (error) { job.error = error.statusCode ? `图集资料汇总失败：${error.message}` : "图集资料汇总失败，请重试或手动填写。"; }
     }
     job.state = job.items.every((item) => item.state === "done") && job.summary ? "done" : "attention";
     job.revision += 1;
