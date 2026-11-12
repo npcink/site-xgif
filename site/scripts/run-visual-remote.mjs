@@ -10,6 +10,11 @@ const rootFiles = new Set(["package.json", "package-lock.json", ".node-version",
 const privatePart = /^(?:\..*|secrets?(?:\..*)?|credentials(?:\..*)?|id_(?:rsa|ed25519)(?:\..*)?|private(?:-sources)?|backups?|trash|records|node_modules|dist|coverage|test-results|playwright-report)$/iu;
 const digest = (bytes) => createHash("sha256").update(bytes).digest("hex");
 const quote = (value) => `'${String(value).replaceAll("'", "'\\''")}'`;
+const spaceCheck = `XGIF_VISUAL_FREE_KIB=$(df -Pk /tmp | awk 'NR == 2 {print $4}');
+case "$XGIF_VISUAL_FREE_KIB" in ''|*[!0-9]*) printf '%s\\n' 'M4 无法读取宿主 /tmp 可用空间；未启动测试。' >&2; exit 73;; esac;
+if [ "$XGIF_VISUAL_FREE_KIB" -lt 10485760 ]; then
+  printf 'M4 宿主 /tmp 可用空间不足：%s KiB，启动前至少需要 10 GiB（10485760 KiB）；未启动测试。\\n' "$XGIF_VISUAL_FREE_KIB" >&2; exit 73;
+fi;`;
 
 export function runCommand(command, args, { cwd, input, capture = false, signal } = {}) {
   return new Promise((resolve, reject) => {
@@ -87,7 +92,7 @@ export async function runVisual({ siteDir = defaultSite, args = [], env = proces
   let remoteDir, ranTests = false, returned = false, code = 0;
   log(`M4 Linux 视觉测试：${host}，任务 ${runId}；不会启动本机 Docker。`);
   try {
-    const prepared = checked(await ssh(`set -eu; command -v rsync >/dev/null; test "$(docker info --format '{{.OSType}}')" = linux; mktemp -d ${quote(`/tmp/${runId}.XXXXXX`)}`, { capture: true, signal }), "M4 SSH 或远端 Docker 不可用；未回退本机 Docker。");
+    const prepared = checked(await ssh(`set -eu; ${spaceCheck} command -v rsync >/dev/null; test "$(docker info --format '{{.OSType}}')" = linux; mktemp -d ${quote(`/tmp/${runId}.XXXXXX`)}`, { capture: true, signal }), "M4 预检失败（SSH、宿主空间或远端 Docker）；未回退本机 Docker。");
     remoteDir = prepared.stdout.trim();
     if (!new RegExp(`^/tmp/${runId}\\.[a-zA-Z0-9]+$`, "u").test(remoteDir)) throw new Error("M4 返回了非预期的任务目录。");
     const snapshot = async () => {
@@ -100,7 +105,7 @@ export async function runVisual({ siteDir = defaultSite, args = [], env = proces
     log(`已同步 ${initial.size} 个源文件；远端目录 ${remoteDir}`);
     ranTests = true;
     try {
-      code = (await ssh(`cd ${quote(`${remoteDir}/site`)} && sh scripts/run-visual-container.sh ${quote(runId)} ${args.map(quote).join(" ")}`, { signal })).code;
+      code = (await ssh(`set -eu; ${spaceCheck} cd ${quote(`${remoteDir}/site`)} && sh scripts/run-visual-container.sh ${quote(runId)} ${args.map(quote).join(" ")}`, { signal })).code;
     } catch (error) {
       if (error.name !== "AbortError") throw error;
       code = signal?.reason === "SIGTERM" ? 143 : 130;
