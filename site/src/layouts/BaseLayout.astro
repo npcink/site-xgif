@@ -63,5 +63,8 @@ const rssUrl = new URL(siteConfig.rss.path, siteUrl);
     <script is:inline src="/scripts/content-actions.js"></script>
     <script is:inline src="/scripts/image-gallery.js"></script>
     <script is:inline type="module" src="/scripts/favorites.js"></script>
+    {import.meta.env.PROD && !noindex && (
+      <script is:inline defer src="/scripts/analytics.js" data-site-host={siteUrl.hostname}></script>
+    )}
   </body>
 </html>
