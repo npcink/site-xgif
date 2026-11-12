@@ -61,7 +61,7 @@ test("images include attribution and license metadata", async () => {
       continue;
     }
     if (sourceKind === "unknown") {
-      assert.equal(field(image.text, "source"), "群聊转存（来源待核实）", `${path.basename(image.file)} 必须明确标记来源待核实`);
+      assert.match(field(image.text, "source") || "", /（(?:来源|原作者与授权信息)待核实）$/u, `${path.basename(image.file)} 必须如实记录收集来源并明确标记来源待核实`);
       continue;
     }
     for (const name of required) {
