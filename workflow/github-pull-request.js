@@ -88,7 +88,7 @@ export async function ensureGitHubPullRequest({
       "--title",
       String(title || "Publish XGIF content"),
       "--body",
-      String(body || "由 XGIF 本地发布助手创建。合并仍需人工确认。"),
+      String(body || "由 XGIF 内容工具创建。合并仍需人工确认。"),
     ])).trim();
     const url = output.match(/https:\/\/github\.com\/[^\s]+\/pull\/(\d+)/u);
     if (!url) throw new Error("GitHub 未返回可识别的 PR 地址。");

@@ -39,7 +39,7 @@ async function createRepository() {
     path.join(repoRoot, "site", "src", "content", "articles", "existing.md"),
     "base article\n",
   );
-  await writeFile(path.join(repoRoot, "workflow", "server.js"), "base code\n");
+  await writeFile(path.join(repoRoot, "workflow", "content-audit-cli.js"), "base code\n");
   await run(repoRoot, ["add", "."]);
   await run(repoRoot, ["commit", "-m", "Initial main"]);
   await run(repoRoot, ["remote", "add", "origin", remote]);
@@ -53,10 +53,10 @@ test("isolated content sync starts from origin/main and preserves the active dir
   const added = "site/src/content/articles/added.md";
   try {
     await run(dirs.repoRoot, ["switch", "-c", "codex/development"]);
-    await writeFile(path.join(dirs.repoRoot, "workflow", "server.js"), "branch code\n");
-    await run(dirs.repoRoot, ["add", "workflow/server.js"]);
+    await writeFile(path.join(dirs.repoRoot, "workflow", "content-audit-cli.js"), "branch code\n");
+    await run(dirs.repoRoot, ["add", "workflow/content-audit-cli.js"]);
     await run(dirs.repoRoot, ["commit", "-m", "Development code"]);
-    await writeFile(path.join(dirs.repoRoot, "workflow", "server.js"), "dirty development code\n");
+    await writeFile(path.join(dirs.repoRoot, "workflow", "content-audit-cli.js"), "dirty development code\n");
     await writeFile(path.join(dirs.repoRoot, existing), "updated public article\n");
     await writeFile(path.join(dirs.repoRoot, added), "new public article\n");
 
@@ -70,17 +70,17 @@ test("isolated content sync starts from origin/main and preserves the active dir
     assert.equal(result.push.ok, true);
     assert.equal(await run(dirs.repoRoot, ["branch", "--show-current"]), "codex/development");
     assert.equal(
-      await readFile(path.join(dirs.repoRoot, "workflow", "server.js"), "utf8"),
+      await readFile(path.join(dirs.repoRoot, "workflow", "content-audit-cli.js"), "utf8"),
       "dirty development code\n",
     );
-    assert.equal(await run(dirs.repoRoot, ["status", "--short", "--", "workflow/server.js"]), "M workflow/server.js");
+    assert.equal(await run(dirs.repoRoot, ["status", "--short", "--", "workflow/content-audit-cli.js"]), "M workflow/content-audit-cli.js");
     assert.equal(
       await run(dirs.repoRoot, ["branch", "--list", "content-sync/test-isolation"]),
       "content-sync/test-isolation",
     );
 
     const remoteRef = "origin/content-sync/test-isolation";
-    assert.equal(await run(dirs.repoRoot, ["show", `${remoteRef}:workflow/server.js`]), "base code");
+    assert.equal(await run(dirs.repoRoot, ["show", `${remoteRef}:workflow/content-audit-cli.js`]), "base code");
     assert.equal(await run(dirs.repoRoot, ["show", `${remoteRef}:${existing}`]), "updated public article");
     assert.equal(await run(dirs.repoRoot, ["show", `${remoteRef}:${added}`]), "new public article");
     assert.deepEqual(
@@ -107,7 +107,7 @@ test("isolated content sync rejects files outside the public Markdown allowlist"
   await assert.rejects(
     isolatedContentSync({
       repoRoot: "/tmp/not-used",
-      files: ["workflow/server.js"],
+      files: ["workflow/content-audit-cli.js"],
       message: "Must not run",
     }),
     /不在公开(?:内容|资产)白名单/u,
@@ -291,9 +291,15 @@ test("a rejected content sync retries the preserved branch instead of the active
 
     await writeFile(hook, "#!/bin/sh\nexit 0\n");
     await chmod(hook, 0o755);
+    await assert.rejects(retryContentSyncPush({
+      repoRoot: dirs.repoRoot,
+      branch,
+      expectedCommitSha: "0".repeat(40),
+    }), /提交与回执不一致/u);
     const retried = await retryContentSyncPush({
       repoRoot: dirs.repoRoot,
       branch,
+      expectedCommitSha: first.commitSha,
     });
 
     assert.equal(retried.push.ok, true);

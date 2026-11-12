@@ -1,42 +1,32 @@
 # XGIF
 
-这个仓库包含三个相互独立的部分：
+由 AI 协助维护内容的 Astro 静态站点。网站只部署前端静态产物，不运行内容管理后台。
 
-- [`site/`](site/README.md)：Astro 公开站点、内容、资源、站点测试与站点文档。
-- [`workflow/`](workflow/README.md)：仅本机运行的发布台；它将内容写入 `site/`，并从仓库根提交 Git。
-- [`old/`](old/next-design-baseline/README.md)：保留的 Next.js 模板与视觉基线，不参与构建或发布。
+- [`site/`](site/README.md)：公开站点、Markdown 内容、图片、测试与部署配置。
+- [`workflow/`](workflow/README.md)：按需执行的内容检查、图片上传、备份和隔离发布工具，没有管理界面或 HTTP 服务。
+- [`old/`](old/next-design-baseline/README.md)：历史视觉参考，不参与构建与发布。
 
-项目资料：
-
-- 连续浏览与本机推荐验证：[`site/docs/DISCOVERY_IMPROVEMENTS_2026-11-02.md`](site/docs/DISCOVERY_IMPROVEMENTS_2026-11-02.md)
-- 2026-11-02 阶段复盘与收尾：[`site/docs/DISCOVERY_CLOSEOUT_2026-11-02.md`](site/docs/DISCOVERY_CLOSEOUT_2026-11-02.md)
-- 内容链接格式讨论收口：[`site/docs/CONTENT_URL_DISCUSSION_CLOSEOUT_2026-11-02.md`](site/docs/CONTENT_URL_DISCUSSION_CLOSEOUT_2026-11-02.md)
-- 当前交接与运行手册：[`site/docs/PROJECT_HANDOFF.md`](site/docs/PROJECT_HANDOFF.md)
-- 开发与交付规范：[`site/docs/DEVELOPMENT_AND_DELIVERY_STANDARD.md`](site/docs/DEVELOPMENT_AND_DELIVERY_STANDARD.md)
-- 开发历史与经验归纳：[`site/docs/DEVELOPMENT_HISTORY_AND_LESSONS_2026-08-03.md`](site/docs/DEVELOPMENT_HISTORY_AND_LESSONS_2026-08-03.md)
-- 2026-08-03 实施收口：[`site/docs/NEXT_STAGE_IMPLEMENTATION_CLOSEOUT_2026-08-03.md`](site/docs/NEXT_STAGE_IMPLEMENTATION_CLOSEOUT_2026-08-03.md)
-- 最近一次生产闭环复盘：[`site/docs/DEVELOPMENT_RETROSPECTIVE_2026-08-03.md`](site/docs/DEVELOPMENT_RETROSPECTIVE_2026-08-03.md)
-- 发布、恢复与阶段收尾规范：[`site/docs/RELEASE_CLOSURE_STANDARD.md`](site/docs/RELEASE_CLOSURE_STANDARD.md)
-- 仓库收尾与 Git 卫生规范：[`site/docs/REPOSITORY_CLOSEOUT_AND_GIT_HYGIENE_STANDARD.md`](site/docs/REPOSITORY_CLOSEOUT_AND_GIT_HYGIENE_STANDARD.md)
-- 阶段开发复盘与经验：[`site/docs/DEVELOPMENT_RETROSPECTIVE_2026-07-24.md`](site/docs/DEVELOPMENT_RETROSPECTIVE_2026-07-24.md)
-- 本地发布助手最终交接：[`workflow/docs/LOCAL_PUBLISHER_FINAL_HANDOFF_2026-07-30.md`](workflow/docs/LOCAL_PUBLISHER_FINAL_HANDOFF_2026-07-30.md)
-- 本地发布助手产品复盘：[`workflow/docs/LOCAL_PUBLISHER_RETROSPECTIVE_2026-07-24.md`](workflow/docs/LOCAL_PUBLISHER_RETROSPECTIVE_2026-07-24.md)
-- 本地发布助手阶段收尾：[`workflow/docs/LOCAL_PUBLISHER_CLOSURE_2026-07-27.md`](workflow/docs/LOCAL_PUBLISHER_CLOSURE_2026-07-27.md)
-- 历史与长期原则：[`workflow/PROJECT_HISTORY.md`](workflow/PROJECT_HISTORY.md)
-- 架构决策：[`site/docs/decisions/`](site/docs/decisions/)
-
-## 根目录约定
-
-业务目录只保留 `site/`、`workflow/` 与 `old/`。根目录的 `.git/`、`.github/`、`.gitignore` 和本文件属于仓库与 CI 元数据，必须保留；构建产物、依赖目录和部署缓存必须生成在对应业务目录中，不能提交或长期存放在根目录。
-
-## 日常命令
+## 日常使用
 
 ```bash
-cd site && npm run dev
-cd site && npm test
-cd site && npm run test:production
-cd workflow && npm start
-cd workflow && npm test
+cd site
+npm ci
+npm run dev
 ```
 
-`npm start` 会同时启动管理器与 Astro 预览，并自动替换已经过期的本地发布器进程。本地验证站点后，发布台会从最新 `origin/main` 隔离同步公开内容、推送 `content-sync/*` 分支并创建或复用 GitHub PR；它不会自动合并。
+AI 直接编辑 `site/src/content/articles/` 与 `site/src/content/images/` 中的 Markdown。公开前运行内容检查、站点测试并查看前端预览，再通过 GitHub PR 和 Cloudflare Workers Builds 发布。
+
+```bash
+(cd workflow && npm ci && npm run content:audit)
+(cd site && npm test)
+```
+
+详细命令和 AI 操作约定见 [内容工具](workflow/README.md)。当前边界与恢复方式见 [运行手册](site/docs/PROJECT_HANDOFF.md)，迁移原因见 [ADR-019](site/docs/decisions/ADR-019-ai-managed-static-content.md)，开发与交付规则见 [开发规范](site/docs/DEVELOPMENT_AND_DELIVERY_STANDARD.md)。
+
+## 数据与发布
+
+Markdown 是内容权威源；图片保存在公开资源目录或 R2。SQLite 仅供按需运行的工具作为可重建索引，不是网站运行依赖。`workflow/private-sources/`、`backups/`、`trash/`、`.runtime/`、`.env` 与运行回执保持本机私有，不进入公开提交。
+
+内容同步默认只检查指定文件；显式执行后从最新 `origin/main` 建立隔离内容分支，只提交所选公开 Markdown 和其引用的本地图片，并创建 PR。不会自动合并。上传图片、Git 推送、PR 合并和实际部署是不同事实。
+
+根目录只保留项目目录与仓库元数据；依赖、构建产物和缓存存放在对应业务目录。旧发布管理器的历史文档保存在 `workflow/docs/`，只用于追溯，不再作为当前操作入口。

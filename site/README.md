@@ -15,11 +15,12 @@ npm run dev
 
 ## 新增文章
 
-复制 `src/content/articles/` 中任意 Markdown 文件，修改 frontmatter 和正文。原创和外部来源文章都会把完整正文写入公开 Markdown；外部来源文章还会在 `workflow/private-sources/` 保留一份本地备份：
+由 AI 复制 `src/content/articles/` 中任意 Markdown 文件，分配新的不可变 `contentId`，修改 frontmatter 和正文。原创和外部来源文章都把完整正文写入公开 Markdown；外部来源文章还应由 AI 在 `workflow/private-sources/articles/<contentId>.md` 保留私有正文副本，再运行内容备份工具：
 
 ```md
 ---
 title: "文章标题"
+contentId: "20261112-ab12"
 summary: "两三句话摘要"
 source: "来源名称"
 sourceUrl: "https://example.com/original"
@@ -36,7 +37,7 @@ draft: false
 文章完整正文。
 ```
 
-`editorNote` 会显示在文章卡片或详情页，适合解释“为什么值得看”；`internalNote` 仅供本地发布助手复核来源和导入批次。旧 `note` 字段只为兼容历史内容保留，新内容不要继续使用。
+`editorNote` 会显示在文章卡片或详情页，适合解释“为什么值得看”；`internalNote` 仅供 AI 在本地复核来源和导入批次。旧 `note` 字段只为兼容历史内容保留，新内容不要继续使用。
 
 ## 新增图片 / GIF
 
@@ -54,7 +55,7 @@ licenseUrl: "https://unsplash.com/license"
 
 `sourceKind` 的含义：`original` 是原始文章链接；`publication` 是媒体或专题来源页；`editorial` 是本站编辑手记。不要把媒体首页标成原文。
 
-图集使用有序的 `images` 数组（每项为 `{ "src": "...", "width": 640, "height": 480 }`），包含封面在内共 1–12 张；`image` 始终等于首张 `src`。建议通过本地发布助手创建，详情见 [图集操作与接口约定](../workflow/docs/IMAGE_GALLERY_2026-11-03.md)。`npm run test:gallery` 会创建并清理临时样本，验证桌面与手机切图。
+图集使用有序的 `images` 数组（每项为 `{ "src": "...", "width": 640, "height": 480 }`），包含封面在内共 1–12 张；`image` 始终等于首张 `src`。由 AI 按现有 Markdown 与 Schema 创建，图片检查与上传见 [内容工具](../workflow/README.md)。`npm run test:gallery` 会创建并清理临时样本，验证桌面与手机切图。
 
 ## 构建
 
@@ -109,9 +110,9 @@ Node.js 版本由 `site/.node-version` 固定，Wrangler 版本由 `package-lock
 npm run check:deploy
 ```
 
-内容更新只需要修改 `site/` 内的 Markdown 并推送；部署平台按仓库提交重新构建。
+内容更新由 AI 修改 Markdown，经检查和隔离内容 PR 发布；部署平台按主分支提交重新构建。当前不再提供可视化后台，详见 [ADR-019](docs/decisions/ADR-019-ai-managed-static-content.md)。
 
-本地发布助手会在同步前执行内容体检；只有通过的内容才应进入生产分支。体检报告、SQLite 同步记录和本机预览都不是线上成功证据，仍需核对 GitHub 合并提交、Cloudflare 部署结果和 `https://www.xgif.cn` 的实际页面。
+内容 CLI 会在同步前执行体检；只有通过的内容才应进入生产分支。体检报告、发布回执和本机预览都不是线上成功证据，仍需核对 GitHub 合并提交、Cloudflare 部署结果和 `https://www.xgif.cn` 的实际页面。
 
 同一个提交只使用一条生产发布路径：正常情况下等待 Cloudflare Workers Builds 自动构建和部署；不要在该构建运行期间同时执行本机 `wrangler deploy`，否则两个版本可能互相覆盖或让其中一条构建被标记失败。只有自动构建已明确失败、且需要恢复线上服务时，才从 `site/` 目录执行 `npm run build && npx wrangler deploy`，随后仍要单独修复并重新验证 Git 自动部署。
 
