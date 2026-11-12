@@ -15,10 +15,14 @@ import {
 } from "../site/src/lib/recommendations.mjs";
 import { parseContentDocument } from "./local-data-store.js";
 import { validateServiceBaseUrl } from "./service-url-policy.js";
+import { recommendationImages } from "./recommendation-images.js";
 
 const DEFAULT_TIMEOUT_MS = 60_000;
 const DEFAULT_BATCH_SIZE = 16;
 const VECTOR_INPUT_LIMIT = 1_600;
+export const MULTIMODAL_INPUT_VERSION = "qwen3-vl-pixels-v1";
+export const DEFAULT_MULTIMODAL_MODEL = "RizwanMalik/qwen3-vl-embedding-2b:q8_0-q8_0";
+const IMAGE_MIN_SIMILARITY = 0.35;
 
 export function recommendationManifestPath(repoRoot) {
   return path.join(repoRoot, "site", "src", "data", "recommendations.json");
@@ -55,18 +59,29 @@ export function getEmbeddingConfig(env = process.env) {
       { cause: error },
     );
   }
-  const model = String(env.XGIF_EMBEDDING_MODEL || "").trim();
+  const provider = String(env.XGIF_EMBEDDING_PROVIDER || "openai").trim();
+  if (!["openai", "ollama"].includes(provider)) {
+    throw new EmbeddingServiceError("EMBEDDING_CONFIG_INVALID", "Unknown embedding provider.");
+  }
+  const model = String(env.XGIF_EMBEDDING_MODEL || (provider === "ollama" ? DEFAULT_MULTIMODAL_MODEL : "")).trim();
+  if (provider === "ollama" && baseUrl && new URL(baseUrl).pathname !== "/") {
+    throw new EmbeddingServiceError("EMBEDDING_CONFIG_INVALID", "Ollama base URL must be the service root, without /v1.");
+  }
+  if (provider === "ollama" && baseUrl && !["localhost", "127.0.0.1", "[::1]"].includes(new URL(baseUrl).hostname)) {
+    throw new EmbeddingServiceError("EMBEDDING_CONFIG_INVALID", "Multimodal Ollama must use a local loopback endpoint or SSH tunnel.");
+  }
   let endpoint = "";
   if (baseUrl) {
-    endpoint = `${baseUrl}/embeddings`;
+    endpoint = `${baseUrl}${provider === "ollama" ? "/api/embed" : "/embeddings"}`;
   }
   return {
     available: Boolean(endpoint && model),
+    provider,
     endpoint,
     model,
     apiKey: String(env.XGIF_EMBEDDING_API_KEY || "").trim(),
     timeoutMs: positiveInteger(env.XGIF_EMBEDDING_TIMEOUT_MS, DEFAULT_TIMEOUT_MS, 300_000),
-    batchSize: positiveInteger(env.XGIF_EMBEDDING_BATCH_SIZE, DEFAULT_BATCH_SIZE, 128),
+    batchSize: provider === "ollama" ? 1 : positiveInteger(env.XGIF_EMBEDDING_BATCH_SIZE, DEFAULT_BATCH_SIZE, 128),
   };
 }
 
@@ -75,6 +90,7 @@ function validateEmbeddingVector(vector) {
     Array.isArray(vector)
     && vector.length > 0
     && vector.every((value) => Number.isFinite(value))
+    && vector.some((value) => value !== 0)
   );
 }
 
@@ -85,8 +101,11 @@ export async function requestEmbeddings(inputs, config, fetchImpl = globalThis.f
       "Local embedding service is not configured.",
     );
   }
-  if (!Array.isArray(inputs) || !inputs.length || inputs.some((input) => typeof input !== "string")) {
-    throw new TypeError("Embedding inputs must be a non-empty string array.");
+  const isOllama = config.provider === "ollama";
+  if (!Array.isArray(inputs) || !inputs.length || inputs.some((input) => (
+    typeof input !== "string" && !(isOllama && input && typeof input.text === "string" && typeof input.image === "string")
+  ))) {
+    throw new TypeError("Embedding inputs must contain text or Ollama text/image items.");
   }
   if (typeof fetchImpl !== "function") {
     throw new EmbeddingServiceError(
@@ -95,8 +114,6 @@ export async function requestEmbeddings(inputs, config, fetchImpl = globalThis.f
     );
   }
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), config.timeoutMs);
   let response;
   try {
     response = await fetchImpl(config.endpoint, {
@@ -105,12 +122,18 @@ export async function requestEmbeddings(inputs, config, fetchImpl = globalThis.f
         "content-type": "application/json",
         ...(config.apiKey ? { authorization: `Bearer ${config.apiKey}` } : {}),
       },
-      body: JSON.stringify({
+      body: JSON.stringify(isOllama ? {
+        model: config.model,
+        input: inputs,
+        truncate: false,
+        keep_alive: "2m",
+        options: { num_ctx: 4096 },
+      } : {
         model: config.model,
         input: inputs,
         encoding_format: "float",
       }),
-      signal: controller.signal,
+      signal: AbortSignal.timeout(config.timeoutMs),
     });
   } catch (error) {
     throw new EmbeddingServiceError(
@@ -120,8 +143,6 @@ export async function requestEmbeddings(inputs, config, fetchImpl = globalThis.f
         : "Embedding request failed.",
       { cause: error },
     );
-  } finally {
-    clearTimeout(timeout);
   }
 
   if (!response?.ok) {
@@ -140,6 +161,16 @@ export async function requestEmbeddings(inputs, config, fetchImpl = globalThis.f
       "Embedding service returned invalid JSON.",
       { cause: error },
     );
+  }
+
+  if (isOllama) {
+    const vectors = payload?.embeddings;
+    if (!Array.isArray(vectors) || vectors.length !== inputs.length
+      || vectors.some((vector) => !validateEmbeddingVector(vector) || vector.length !== vectors[0].length
+        || (config.model === DEFAULT_MULTIMODAL_MODEL && vector.length !== 2048))) {
+      throw new EmbeddingServiceError("EMBEDDING_RESPONSE_INVALID", "Ollama returned invalid or inconsistent embeddings.");
+    }
+    return vectors;
   }
 
   if (!Array.isArray(payload?.data) || payload.data.length !== inputs.length) {
@@ -205,7 +236,7 @@ function semanticInput(type, data, body) {
   return lines.filter((line) => !line.endsWith("：")).join("\n");
 }
 
-export async function loadPublicRecommendationContent(repoRoot) {
+export async function loadPublicRecommendationContent(repoRoot, { multimodal = false } = {}) {
   const sources = [
     {
       type: "article",
@@ -226,11 +257,24 @@ export async function loadPublicRecommendationContent(repoRoot) {
       const contentId = String(data.contentId || "").trim();
       if (!contentId) continue;
       const input = semanticInput(source.type, data, body);
+      let images = [];
+      if (multimodal && source.type === "image") {
+        try {
+          images = await recommendationImages(repoRoot, data);
+        } catch (error) {
+          throw new EmbeddingServiceError("EMBEDDING_IMAGE_UNAVAILABLE", `Cannot read verified images for ${contentId}: ${error.message}`, { cause: error });
+        }
+      }
+      const fingerprint = multimodal
+        ? JSON.stringify([MULTIMODAL_INPUT_VERSION, input, images.map(({ sha256, altText }) => [sha256, altText])])
+        : input;
       documents.push({
         id: contentId,
         type: source.type,
         input,
-        contentSha256: createHash("sha256").update(input).digest("hex"),
+        // Metadata already contributes to rule ranking; keep visual similarity grounded in pixels.
+        inputs: images.length ? images.map(({ image }) => ({ text: "", image })) : [input],
+        contentSha256: createHash("sha256").update(fingerprint).digest("hex"),
         entry: {
           id: contentId,
           collection: source.type === "article" ? "articles" : "images",
@@ -316,7 +360,7 @@ export async function getRecommendationStatus({
   repoRoot,
   env = process.env,
 } = {}) {
-  const documents = await loadPublicRecommendationContent(repoRoot);
+  let documents = await loadPublicRecommendationContent(repoRoot);
   let manifest = null;
   let manifestError = "";
   try {
@@ -333,6 +377,13 @@ export async function getRecommendationStatus({
   } catch (error) {
     configurationCode = error?.code || "EMBEDDING_CONFIG_INVALID";
   }
+  if (embeddingConfig?.provider === "ollama") {
+    try {
+      documents = await loadPublicRecommendationContent(repoRoot, { multimodal: true });
+    } catch (error) {
+      configurationCode = error?.code || "EMBEDDING_IMAGE_UNAVAILABLE";
+    }
+  }
 
   const recommendations = manifest?.recommendations || {};
   const covered = documents.reduce(
@@ -345,6 +396,12 @@ export async function getRecommendationStatus({
     !manifest
     || manifest.sourceHash !== currentSourceHash
     || covered !== total
+    || Boolean(configurationCode)
+    || (embeddingConfig?.available && manifest?.mode === "hybrid" && (
+      manifest.embedding?.model !== embeddingConfig.model
+      || (manifest.embedding?.provider || "openai") !== embeddingConfig.provider
+      || (embeddingConfig.provider === "ollama" && manifest.embedding?.inputVersion !== MULTIMODAL_INPUT_VERSION)
+    ))
   );
   const mode = manifest?.mode === "hybrid" ? "hybrid" : manifest ? "rules" : "missing";
   const manifestGeneratedAt = Date.parse(manifest?.generatedAt || "");
@@ -480,6 +537,7 @@ export function buildRecommendationManifest(
     model = null,
     generatedAt = new Date().toISOString(),
     generation = {},
+    embeddingDetails = {},
   } = {},
 ) {
   const articles = documents.filter((document) => document.type === "article");
@@ -487,6 +545,7 @@ export function buildRecommendationManifest(
   const recommendations = {};
 
   for (const document of documents) {
+    const multimodal = mode === "hybrid" && embeddingDetails.inputVersion === MULTIMODAL_INPUT_VERSION;
     const source = document.entry;
     const sourceGroup = recommendationDocument(source).recommendationGroup;
     const articleEntries = articles
@@ -506,13 +565,18 @@ export function buildRecommendationManifest(
       preferredIds: rankedArticles.slice(0, 2).map((candidate) => candidate.id),
     });
     recommendations[document.id] = {
-      articles: rulesFor(source, articleEntries, {
+      ...(multimodal ? { sourceType: document.type } : {}),
+      articles: multimodal && document.type === "image"
+        ? rankedArticles.filter((candidate) => candidate.vector >= IMAGE_MIN_SIMILARITY).slice(0, articleLimit).map((candidate) => candidate.id)
+        : rulesFor(source, articleEntries, {
         limit: articleLimit,
         relatedSlots: articleLimit,
         allowSurprise: false,
         preferredIds: [...new Set([...firstArticles, ...rankedArticles.map((candidate) => candidate.id)])],
       }),
-      images: rulesFor(source, imageEntries, {
+      images: multimodal
+        ? rankedImages.filter((candidate) => candidate.vector >= IMAGE_MIN_SIMILARITY).slice(0, 8).map((candidate) => candidate.id)
+        : rulesFor(source, imageEntries, {
         limit: 8,
         relatedSlots: 8,
         allowSurprise: false,
@@ -532,7 +596,10 @@ export function buildRecommendationManifest(
     embedding: {
       model: mode === "hybrid" ? model : null,
       dimensions,
+      ...embeddingDetails,
     },
+    ...(mode === "hybrid" && embeddingDetails.inputVersion === MULTIMODAL_INPUT_VERSION
+      ? { selection: { imageMinSimilarity: IMAGE_MIN_SIMILARITY } } : {}),
     generation: {
       fallbackCode: String(generation.fallbackCode || ""),
       requestedModel: String(generation.requestedModel || model || ""),
@@ -543,16 +610,41 @@ export function buildRecommendationManifest(
 }
 
 async function embeddingVectors(documents, store, config, fetchImpl) {
+  let modelDigest = "";
+  if (config.provider === "ollama") {
+    let response;
+    try {
+      response = await fetchImpl(config.endpoint.replace(/\/api\/embed$/u, "/api/tags"), {
+        headers: config.apiKey ? { authorization: `Bearer ${config.apiKey}` } : {},
+        signal: AbortSignal.timeout(config.timeoutMs),
+      });
+    } catch (error) {
+      throw new EmbeddingServiceError("EMBEDDING_REQUEST_FAILED", "Cannot inspect the Ollama model registry.", { cause: error });
+    }
+    if (!response.ok) throw new EmbeddingServiceError("EMBEDDING_REQUEST_FAILED", "Cannot inspect the Ollama model registry.");
+    const payload = await response.json();
+    const model = Array.isArray(payload?.models)
+      ? payload.models.find((item) => item.name === config.model || item.name === `${config.model}:latest`) : null;
+    if (!/^[a-f0-9]{64}$/u.test(model?.digest || "") || !model?.capabilities?.includes("embedding") || !model?.capabilities?.includes("vision")) {
+      throw new EmbeddingServiceError("EMBEDDING_MODEL_INVALID", "The configured model must support vision and embeddings and have a valid digest.");
+    }
+    modelDigest = model.digest;
+  }
+  const cacheHash = (document) => config.provider === "ollama"
+    ? createHash("sha256").update(`${config.provider}:${modelDigest}:${document.contentSha256}`).digest("hex")
+    : document.contentSha256;
   const cache = new Map(
     store.listRecommendationEmbeddings({ model: config.model })
       .map((record) => [record.contentId, record]),
   );
   const vectors = new Map();
   const pending = [];
+  const updates = [];
   let cacheHits = 0;
   for (const document of documents) {
     const cached = cache.get(document.id);
-    if (cached?.contentSha256 === document.contentSha256) {
+    if (cached?.contentSha256 === cacheHash(document) && validateEmbeddingVector(cached.vector)
+      && (config.model !== DEFAULT_MULTIMODAL_MODEL || cached.vector.length === 2048)) {
       vectors.set(document.id, cached.vector);
       cacheHits += 1;
     } else {
@@ -562,19 +654,35 @@ async function embeddingVectors(documents, store, config, fetchImpl) {
 
   for (let index = 0; index < pending.length; index += config.batchSize) {
     const batch = pending.slice(index, index + config.batchSize);
-    const batchVectors = await requestEmbeddings(
-      batch.map((document) => document.input),
-      config,
-      fetchImpl,
-    );
+    let batchVectors;
+    if (config.provider === "ollama") {
+      batchVectors = [];
+      for (const document of batch) {
+        const members = [];
+        for (const input of document.inputs) members.push((await requestEmbeddings([input], config, fetchImpl))[0]);
+        const dimensions = members[0].length;
+        if (members.some((vector) => vector.length !== dimensions)) {
+          throw new EmbeddingServiceError("EMBEDDING_RESPONSE_INVALID", "Gallery embeddings have inconsistent dimensions.");
+        }
+        const combined = Array(dimensions).fill(0);
+        for (const vector of members) {
+          const norm = Math.hypot(...vector);
+          for (let index = 0; index < dimensions; index += 1) combined[index] += vector[index] / norm / members.length;
+        }
+        if (!validateEmbeddingVector(combined)) throw new EmbeddingServiceError("EMBEDDING_RESPONSE_INVALID", "Gallery embedding is empty.");
+        batchVectors.push(combined);
+      }
+    } else {
+      batchVectors = await requestEmbeddings(batch.map((document) => document.input), config, fetchImpl);
+    }
     for (let itemIndex = 0; itemIndex < batch.length; itemIndex += 1) {
       const document = batch[itemIndex];
       const vector = batchVectors[itemIndex];
       vectors.set(document.id, vector);
-      store.upsertRecommendationEmbedding({
+      updates.push({
         contentId: document.id,
         contentType: document.type,
-        contentSha256: document.contentSha256,
+        contentSha256: cacheHash(document),
         model: config.model,
         vector,
       });
@@ -588,11 +696,12 @@ async function embeddingVectors(documents, store, config, fetchImpl) {
       "Embedding corpus is incomplete or has inconsistent dimensions.",
     );
   }
+  for (const record of updates) store.upsertRecommendationEmbedding(record);
   const pruned = store.pruneRecommendationEmbeddings({
     model: config.model,
     validContentIds: documents.map((document) => document.id),
   });
-  return { vectors, cacheHits, generated: pending.length, pruned };
+  return { vectors, cacheHits, generated: pending.length, pruned, modelDigest };
 }
 
 export async function generateRecommendationManifest({
@@ -604,7 +713,7 @@ export async function generateRecommendationManifest({
   rulesOnly = false,
   generatedAt,
 }) {
-  const documents = await loadPublicRecommendationContent(repoRoot);
+  let documents = await loadPublicRecommendationContent(repoRoot);
   let config;
   try {
     config = getEmbeddingConfig(env);
@@ -655,12 +764,16 @@ export async function generateRecommendationManifest({
   }
 
   try {
+    if (config.provider === "ollama") documents = await loadPublicRecommendationContent(repoRoot, { multimodal: true });
     const result = await embeddingVectors(documents, store, config, fetchImpl);
     return {
       manifest: buildRecommendationManifest(documents, {
         vectors: result.vectors,
         mode: "hybrid",
         model: config.model,
+        embeddingDetails: config.provider === "ollama" ? {
+          provider: "ollama", inputVersion: MULTIMODAL_INPUT_VERSION, modelDigest: result.modelDigest,
+        } : {},
         generatedAt,
         generation: {
           requestedModel: config.model,
@@ -705,6 +818,8 @@ export async function refreshRecommendationManifest({
   env = process.env,
   fetchImpl = globalThis.fetch,
   force = false,
+  requireEmbeddings = false,
+  rulesOnly = false,
 } = {}) {
   const before = await getRecommendationStatus({ repoRoot, env });
   if (!force && before.available && !before.stale && !before.degraded) {
@@ -728,6 +843,8 @@ export async function refreshRecommendationManifest({
     store,
     env,
     fetchImpl,
+    requireEmbeddings,
+    rulesOnly,
   });
   const attempt = {
     attemptedAt: result.manifest.generatedAt,
@@ -741,6 +858,7 @@ export async function refreshRecommendationManifest({
     && before.mode === "hybrid"
     && result.summary.mode === "rules"
     && result.summary.fallbackCode
+    && !rulesOnly
   ) {
     attempt.preservedLastGood = true;
     await writeRecommendationAttempt(repoRoot, attempt);

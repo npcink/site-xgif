@@ -52,6 +52,8 @@ Then inspect and commit only the affected screenshots with the related CSS or co
 
 ## Review rule
 
+2026-11-12：统一多模态推荐后，像素图详情的桌面推荐区只保留达到图片相似度门槛的一张动漫图，移除两张较弱候选。这属于推荐正确性改进，保留原有三列网格、图片尺寸和弹窗布局，仅更新 `image-dialog-desktop.png`；移动端首屏没有受到影响。
+
 Treat a screenshot diff as a design review item, not as a blind snapshot update. The reviewer must classify it as one of:
 
 1. A required baseline match.

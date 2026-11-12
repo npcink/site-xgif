@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   rankRecommendationCandidates,
   selectContentRecommendations,
+  manifestRecommendationOptions,
 } from "../src/lib/recommendations.mjs";
 
 const entry = ({
@@ -140,4 +141,26 @@ test("the surprise slot is deterministic while the first two remain relevance-le
     second.map((item) => item.data.contentId),
   );
   assert.ok(first.slice(0, 2).every((item) => item.data.tags.includes("成长")));
+});
+
+test("a thresholded image manifest can intentionally show fewer or zero results", () => {
+  const source = entry({ id: "source", title: "草莓" });
+  const related = entry({ id: "related", title: "水果" });
+  const weak = entry({ id: "weak", title: "服务器" });
+  const manifest = {
+    mode: "hybrid", selection: { imageMinSimilarity: 0.35 },
+    recommendations: { source: { images: ["related", "deleted"] } },
+  };
+  const options = manifestRecommendationOptions(manifest, "source", "images");
+  assert.deepEqual(selectContentRecommendations(source, [related, weak], { limit: 3, ...options }).map(x => x.data.contentId), ["related"]);
+  manifest.recommendations.source.images = [];
+  assert.deepEqual(selectContentRecommendations(source, [related, weak], {
+    ...manifestRecommendationOptions(manifest, "source", "images"),
+  }), []);
+  assert.equal(manifestRecommendationOptions(manifest, "new-content", "images").preferredOnly, false);
+  assert.equal(manifestRecommendationOptions(manifest, "source", "articles").preferredOnly, false);
+  manifest.recommendations.source.sourceType = "image";
+  manifest.recommendations.source.articles = [];
+  assert.equal(manifestRecommendationOptions(manifest, "source", "articles").preferredOnly, true);
+  assert.equal(manifestRecommendationOptions({ recommendations: manifest.recommendations }, "source", "images").preferredOnly, false);
 });
