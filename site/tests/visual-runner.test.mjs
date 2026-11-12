@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -109,6 +109,26 @@ test("offline M4 fails explicitly without local Docker; failed transfer keeps re
   assert.equal(await failed.run(), 9);
   assert.ok(!failed.calls.at(-1).args.at(-1).includes("rm -rf"));
   assert.ok(failed.messages.some((line) => line.includes("保留 M4 任务目录")));
+});
+
+test("low host space refuses both preparation and container launch before any Docker or task creation", async (t) => {
+  const f = await fixture(t);
+  await f.run();
+  const scripts = f.calls.filter((c) => c.program === "ssh" && (c.args.at(-1).includes("mktemp -d") || c.args.at(-1).includes("sh scripts/run-visual-container.sh"))).map((c) => c.args.at(-1));
+  const bin = path.join(f.siteDir, "fake-bin"), marker = path.join(f.siteDir, "must-not-run");
+  await mkdir(bin);
+  for (const name of ["docker", "mktemp", "sh"]) {
+    await writeFile(path.join(bin, name), `#!/bin/sh\nprintf '%s\\n' forbidden >> '${marker}'\nexit 99\n`, { mode: 0o755 });
+  }
+  for (const free of ["4194304", "unknown"]) {
+    await writeFile(path.join(bin, "df"), `#!/bin/sh\nprintf '%s\\n' 'Filesystem 1024-blocks Used Available Capacity Mounted on' '/dev/disk3 20000000 10000000 ${free} 50% /tmp'\n`, { mode: 0o755 });
+    for (const script of scripts) {
+      const result = spawnSync("/bin/sh", ["-c", script], { env: { ...process.env, PATH: `${bin}:/usr/bin:/bin` }, encoding: "utf8" });
+      assert.equal(result.status, 73);
+      assert.match(result.stderr, free === "unknown" ? /无法读取.*未启动测试/u : /至少需要 10 GiB.*未启动测试/u);
+    }
+  }
+  await assert.rejects(readFile(marker), { code: "ENOENT" });
 });
 
 test("interruption returns diagnostics and cleans only this run while preserving signal status", async (t) => {
