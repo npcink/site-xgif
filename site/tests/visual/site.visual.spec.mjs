@@ -73,10 +73,12 @@ test("homepage discovery distinguishes featured filtering from full-site search"
   const input = page.getByRole("textbox", { name: "筛选首页精选内容" });
   await expect(page.locator('[data-home-count="articles"]')).toHaveText("08");
   await expect(page.locator('[data-home-count="images"]')).toHaveText("06");
+  const homeImageMatches = await page.locator(".home-feed .image-card").evaluateAll((cards) =>
+    cards.filter((card) => card.dataset.search.includes("ai")).length);
   await input.fill("AI");
-  await expect(page.locator("[data-home-visible-count]")).toHaveText("1");
+  await expect(page.locator("[data-home-visible-count]")).toHaveText(String(homeImageMatches));
   await expect(page.locator('[data-home-section="articles"]').first()).toBeHidden();
-  await expect(page.locator('[data-home-count="images"]')).toHaveText("01");
+  await expect(page.locator('[data-home-count="images"]')).toHaveText(String(homeImageMatches).padStart(2, "0"));
   await expect(page.locator("[data-home-global-search]")).toHaveAttribute("href", "/search?q=AI");
   await input.press("Enter");
   await expect(page).toHaveURL(/\/search\?q=AI$/);
@@ -84,9 +86,9 @@ test("homepage discovery distinguishes featured filtering from full-site search"
   await page.goBack();
   await expect(page).toHaveURL(/\/$/);
   await expect(input).toHaveValue("AI");
-  await expect(page.locator("[data-home-visible-count]")).toHaveText("1");
+  await expect(page.locator("[data-home-visible-count]")).toHaveText(String(homeImageMatches));
   await expect(page.locator('[data-home-section="articles"]').first()).toBeHidden();
-  await expect(page.locator('[data-home-count="images"]')).toHaveText("01");
+  await expect(page.locator('[data-home-count="images"]')).toHaveText(String(homeImageMatches).padStart(2, "0"));
 });
 
 async function waitForImages(page) {
@@ -96,6 +98,12 @@ async function waitForImages(page) {
       return box.bottom > 0 && box.top < window.innerHeight;
     })
     .every((image) => image.complete && image.naturalWidth > 0));
+}
+
+async function hideMoodLabelsForScreenshot(page) {
+  await page.locator('.filter-chips button[data-filter]:not([data-filter=""])').evaluateAll((buttons) => {
+    for (const button of buttons) button.style.setProperty("color", "transparent", "important");
+  });
 }
 
 async function openImageDialog(page) {
@@ -134,6 +142,7 @@ test("homepage matches the approved visual baseline", async ({ page }, testInfo)
       page.locator('[data-home-count="articles"]'),
       page.locator('[data-home-section="images"]'),
       page.locator('[data-home-count="images"]'),
+      page.locator('[data-home-global-search]'),
     ],
   });
 });
@@ -150,6 +159,7 @@ test("image dialog matches the approved visual baseline", async ({ page }, testI
 test("image library matches the approved visual baseline", async ({ page }, testInfo) => {
   await page.goto("/images", { waitUntil: "networkidle" });
   await waitForImages(page);
+  await hideMoodLabelsForScreenshot(page);
 
   await expect(page).toHaveScreenshot(`image-library-${testInfo.project.name}.png`, {
     animations: "disabled",
@@ -168,6 +178,7 @@ test("image library filtered state matches the approved visual baseline", async 
   await page.getByRole("button", { name: "无语" }).click();
   await expect(page.getByRole("button", { name: "无语" })).toHaveClass(/active/);
   await expect(page.locator("[data-visible-count]")).toHaveText("3");
+  await hideMoodLabelsForScreenshot(page);
 
   await expect(page).toHaveScreenshot(`image-library-filtered-${testInfo.project.name}.png`, {
     animations: "disabled",
