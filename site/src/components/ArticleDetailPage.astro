@@ -10,7 +10,7 @@ import {
   selectContentRecommendations,
   selectArticleRecommendations,
 } from "../lib/content";
-import { staticRecommendationIds } from "../lib/recommendation-manifest";
+import { staticRecommendationIds, staticRecommendationOptions } from "../lib/recommendation-manifest";
 
 interface Props {
   article: CollectionEntry<"articles">;
@@ -34,7 +34,7 @@ const relatedImages = selectContentRecommendations(article, allImages, {
   limit: 8,
   relatedSlots: 3,
   allowSurprise: false,
-  preferredIds: staticRecommendationIds(article.data.contentId, "images"),
+  ...staticRecommendationOptions(article.data.contentId, "images"),
 });
 const sourceLabel = {
   original: "原创内容",
@@ -73,9 +73,6 @@ const dialogTitleSize = titleLength <= 12
     </div>
     <h1 class:list={["article-title", `dialog-title--${dialogTitleSize}`]}>{article.data.title}</h1>
     <p class="detail-summary">{article.data.summary}</p>
-    <div class="card-tags">
-      {article.data.tags.map((tag) => <a href={`/tags/${encodeURIComponent(tag)}`}>#{tag}</a>)}
-    </div>
     {!preview && (
       <div class="detail-favorite-standalone">
         <FavoriteButton
@@ -143,7 +140,12 @@ const dialogTitleSize = titleLength <= 12
         )}
       </div>
     </aside>}
-    <div class="prose"><Content /></div>
+    <div class="article-reading">
+      <div class="prose"><Content /></div>
+      <nav class="card-tags article-tags" aria-label="文章标签">
+        {article.data.tags.map((tag) => <a href={`/tags/${encodeURIComponent(tag)}`}>#{tag}</a>)}
+      </nav>
+    </div>
   </div>
 
   <span data-reading-end aria-hidden="true"></span>

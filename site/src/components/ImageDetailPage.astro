@@ -6,7 +6,7 @@ import { galleryImages } from "../lib/image-gallery.mjs";
 import ImageRecommendations from "./ImageRecommendations.astro";
 import FavoriteButton from "./FavoriteButton.astro";
 import { contentHref, selectContentRecommendations } from "../lib/content";
-import { staticRecommendationIds } from "../lib/recommendation-manifest";
+import { staticRecommendationOptions } from "../lib/recommendation-manifest";
 
 interface Props {
   item: CollectionEntry<"images">;
@@ -22,19 +22,20 @@ const relatedImages = selectContentRecommendations(item, allImages, {
   limit: 8,
   relatedSlots: 8,
   allowSurprise: false,
-  preferredIds: staticRecommendationIds(item.data.contentId, "images"),
+  ...staticRecommendationOptions(item.data.contentId, "images"),
 });
 const relatedArticles = selectContentRecommendations(item, allArticles, {
   limit: 8,
   relatedSlots: 2,
   allowSurprise: false,
-  preferredIds: staticRecommendationIds(item.data.contentId, "articles"),
+  ...staticRecommendationOptions(item.data.contentId, "articles"),
 });
 const isUserProvided = item.data.sourceKind === "user_provided";
 const isUnknownSource = item.data.sourceKind === "unknown";
-const imageAspectRatio =
+const unknownSourceLabel = item.data.source.replace(/（(?:来源|原作者与授权信息)待核实）$/u, "");
+const imageRatioKey =
   item.data.width && item.data.height
-    ? `${item.data.width} / ${item.data.height}`
+    ? `${item.data.width}x${item.data.height}`
     : undefined;
 ---
 
@@ -44,7 +45,7 @@ const imageAspectRatio =
     {images.length > 1 ? <ImageGallery images={images} title={item.data.title} /> : (
     <figure
       class:list={[`ratio-${item.data.ratio}`]}
-      style={imageAspectRatio ? `--image-aspect-ratio: ${imageAspectRatio}` : undefined}
+      data-image-ratio={imageRatioKey}
     >
       <img
         src={item.data.image}
@@ -85,7 +86,7 @@ const imageAspectRatio =
         {isUserProvided
           ? "图片来源：用户提供 · 已确认可公开发布"
           : isUnknownSource
-            ? <><span>图片来源：群聊转存 · 原作者与授权信息待核实</span> · <a href="/rights">权利人投诉与下架</a></>
+            ? <><span>图片来源：{unknownSourceLabel} · 原作者与授权信息待核实</span> · <a href="/rights">权利人投诉与下架</a></>
             : `图片来源备注：${item.data.source}`}
       </p>
     </div>

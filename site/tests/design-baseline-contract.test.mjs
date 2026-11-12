@@ -19,7 +19,8 @@ test("image detail surfaces keep the two-column layout without cropping source i
   assert.match(page, /referrerpolicy="no-referrer"/);
   assert.match(articlePage, /referrerpolicy="no-referrer"/);
   assert.match(page, /class="image-source"/);
-  assert.match(page, /--image-aspect-ratio: \$\{imageAspectRatio\}/);
+  assert.match(page, /data-image-ratio=\{imageRatioKey\}/);
+  assert.doesNotMatch(page, /style=/);
   assert.match(styles, /grid-template-columns: minmax\(0, 1\.15fr\) minmax\(0, \.85fr\)/);
   assert.match(styles, /\.detail-dialog-body \.image-detail-grid \{[\s\S]*align-items: stretch;/);
   assert.match(styles, /\.detail-dialog-body \.image-detail-grid \{[\s\S]*height: 520px;/);
@@ -168,16 +169,15 @@ test("article dialogs support complete reading while direct pages retain source-
   assert.match(styles, /\[data-detail-kind="article"\] \.detail-grid \{[\s\S]*display: block;/);
   assert.match(styles, /\[data-detail-kind="article"\] \.detail-grid aside \{ display: none; \}/);
   assert.match(styles, /\[data-detail-kind="article"\] \.detail-header \{[\s\S]*display: grid;/);
-  assert.match(styles, /\[data-detail-kind="article"\] \.detail-summary \{[\s\S]*display: block;[\s\S]*grid-column: 1 \/ -1;[\s\S]*-webkit-line-clamp: 2;/);
+  assert.match(styles, /\[data-detail-kind="article"\] \.detail-summary \{[^}]*display: block;[^}]*grid-column: 1 \/ -1;/);
   assert.match(styles, /\[data-detail-kind="article"\] \.detail-header h1 \{[\s\S]*grid-column: 1 \/ -1;[\s\S]*max-width: 900px;/);
   assert.match(styles, /\.dialog-title--short \{[\s\S]*font-size: clamp\(48px, 6\.4vw, 68px\);/);
   assert.match(styles, /\.dialog-title--longest \{[\s\S]*font-size: clamp\(38px, 4\.2vw, 44px\);/);
   assert.match(styles, /\.article-detail \.detail-header h1\.dialog-title--longest,[\s\S]*\.detail-dialog\[data-detail-kind="article"\] \.detail-header h1\.dialog-title--longest/);
-  assert.match(styles, /\[data-detail-kind="article"\] \.card-tags \{[\s\S]*grid-column: 1;/);
   assert.match(styles, /\[data-detail-kind="article"\] \.dialog-article-actions \{[\s\S]*display: flex;/);
   assert.match(styles, /\.article-detail \.detail-header h1 \{[^}]*font-size: clamp\(44px, 4\.4vw, 68px\);[^}]*text-wrap: balance;/);
   assert.match(styles, /\.article-detail \.detail-header \{ max-width: 980px; margin-inline: auto;/);
-  assert.match(styles, /\.article-detail \.detail-summary \{[^}]*border-left: 3px solid var\(--coral\);[^}]*max-width: 900px;[^}]*-webkit-line-clamp: 2;/);
+  assert.match(styles, /\.article-detail \.detail-summary \{[^}]*border-left: 3px solid var\(--coral\);[^}]*max-width: 900px;/);
   assert.match(styles, /\.detail-grid--single \{ grid-template-columns: minmax\(0, 720px\); gap: 0; \}/);
   assert.match(styles, /\.article-recommendations \{[^}]*max-width: 1200px;[^}]*margin: 72px auto 0;/);
   assert.match(styles, /\.article-recommendation h3 \{[^}]*max-width: 820px;/);

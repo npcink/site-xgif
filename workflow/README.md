@@ -18,6 +18,8 @@ Frontmatter 的数组与图集字段使用 JSON 单行形式，例如 `tags: ["�
 
 正文排版只能增加段落空行时，必须验证字符与顺序没有改变；短内容不能靠扩写凑字数。共享格式规则仍由 `shared-content-formatting.js` 提供。标签使用 `content-taxonomy.js` 的规范词表。
 
+摘要单独写入 `summary`，概括文章内容，不用原文开头截断代替摘要。未经明确授权，不改写原文措辞、标点、错字或叙述顺序；排版调整也要与导入原文逐字核对。文章详情将摘要放在标题下，标签放在正文末尾、相关推荐之前。
+
 ## 内容检查与发布
 
 以下路径均相对仓库根目录，命令在 `workflow/` 内执行：
@@ -74,7 +76,32 @@ npm test
 
 改写或删除真实内容前以及发布批次完成后运行 `data:backup`，保存内容、台账、私有正文和回收站的私有 Git 快照；配置了私有远端时同步 `history`。SQLite 备份与私有 Git 快照分别核对结果。备份失败时保留文件和错误事实，不继续批量破坏性操作。
 
-SQLite 是可重建索引和离线推荐缓存，仅由按需脚本打开。`r2:cleanup` 默认观察；完整对象键、连续 30 天无引用、远端可用和私有字节完整等门槛保持不变。推荐使用向量时配置 embedding 服务并使用 `--require-embeddings`，故障时保留现有成功清单；`--rules-only` 是明确选择规则生成。
+SQLite 是可重建索引和离线推荐缓存，仅由按需脚本打开。`r2:cleanup` 默认观察；完整对象键、连续 30 天无引用、远端可用和私有字节完整等门槛保持不变。
+
+### 统一图文推荐
+
+文章与图片统一使用 M4 上的 `RizwanMalik/qwen3-vl-embedding-2b:q8_0-q8_0`（Qwen3-VL-Embedding 2B，2048 维）。在被忽略的 `workflow/.env` 配置原生 Ollama 接口，地址必须是服务根路径，不含 `/v1`：
+
+```dotenv
+XGIF_EMBEDDING_PROVIDER="ollama"
+XGIF_EMBEDDING_BASE_URL="http://127.0.0.1:11435"
+XGIF_EMBEDDING_MODEL="RizwanMalik/qwen3-vl-embedding-2b:q8_0-q8_0"
+XGIF_EMBEDDING_TIMEOUT_MS="120000"
+```
+
+M4 的 Ollama 只监听回环地址；执行前按需建立 SSH 本地回环转发，用完关闭。工具不会启动常驻后台、安装模型或向公网模型上传图片。
+
+```bash
+npm run recommendations:build -- --require-embeddings
+```
+
+文章编码标题、摘要、标签和前 1600 字符正文；图片编码真实画面，标签、描述、情绪和场景留在规则排序层。图集逐张串行编码，归一化后平均为内容向量。仅从 `site/public` 或 R2 台账对应且哈希一致的私有备份读取图片，缺少字节时先补齐备份；不临时下载任意外链。最长边缩至 768 像素用于推理，原图不改动；GIF 和动态 WebP 当前仅分析首帧。
+
+缓存同时绑定模型名、Ollama 模型 digest、输入管线版本、文本及有序图片字节哈希。更新图片、模型权重或管线后重新计算，不复用旧模型的 1024 维向量。涉及图片的推荐候选要求向量余弦相似度至少 0.35，再结合既有标签、文本与新鲜度排序；门槛是当前小样本的保守起点，不代表概率。候选不足可少于展示数量，前端不会再补入未达标内容。
+
+命令行只更新 `site/src/data/recommendations.json` 和本机派生缓存，不修改 Markdown 或发布状态。未指定严格模式时，如果模型或图片读取失败，保留已有的成功 `hybrid` 清单并以非零退出码报告失败；严格模式直接失败且不写清单。只有显式 `--rules-only` 才能用规则覆盖成功向量结果。旧 `openai` 文本接口保留用于兼容回退，当前统一模型使用 `ollama` 模式。
+
+生成后核对 `model`、`dimensions`、公开内容覆盖和真实推荐，再通过 PR 发布静态 ID 清单；前端构建和线上访问都不调用模型。设计取舍与回滚见 [ADR-020](../site/docs/decisions/ADR-020-unified-multimodal-recommendations.md)。
 
 原有来源检查、段落整理与历史迁移命令仍在 `package.json`。迁移默认先预览，只在当前任务确实需要时运行 `:apply`。不要将历史一次性迁移当作日常发布步骤。
 

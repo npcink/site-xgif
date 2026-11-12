@@ -46,3 +46,16 @@ test("production pages include analytics while personal and search pages exclude
     assert.doesNotMatch(await builtPage(path), /src="\/scripts\/analytics\.js"/u);
   }
 });
+
+test("CSP allows only the deployed analytics script and reporting origins without inline execution", async () => {
+  const headers = await readFile(new URL("../public/_headers", import.meta.url), "utf8");
+  const policy = headers.match(/Content-Security-Policy: (.+)/u)[1];
+  const directives = new Map(policy.split(";").map((part) => {
+    const [name, ...sources] = part.trim().split(/\s+/u);
+    return [name, sources];
+  }));
+  assert.deepEqual(directives.get("script-src"), ["'self'", "https://node90.aizhantj.com:21233", "https://static.cloudflareinsights.com"]);
+  assert.deepEqual(directives.get("connect-src"), ["'self'", "https://node90.aizhantj.com:21233", "https://cloudflareinsights.com"]);
+  assert.deepEqual(directives.get("style-src"), ["'self'"]);
+  assert.doesNotMatch(policy, /unsafe-inline|unsafe-eval|\*/u);
+});

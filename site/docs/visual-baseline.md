@@ -6,7 +6,24 @@ The archived Next implementation is the visual reference for the homepage and im
 
 ## Required screenshot baselines
 
-Run `npm run test:visual:linux` before merging changes that affect shared layout, typography, spacing, image treatment, or dialog behavior. This uses the same pinned Linux environment as CI.
+Run `npm run test:visual:linux` before merging changes that affect shared layout, typography, spacing, image treatment, or dialog behavior. On developer machines this syncs the current site source over SSH to the Apple M4 at `muze@100.102.170.79` and runs `mcr.microsoft.com/playwright:v1.61.1-noble` there. It never starts or falls back to local Docker. GitHub Linux CI already runs inside that pinned image and executes Playwright directly through the same entry point.
+
+The developer machine needs Node.js, Git, SSH and rsync; the M4 needs reachable SSH, rsync and an already running Linux Docker engine. An unavailable host or Docker engine is an error. `XGIF_VISUAL_SSH_HOST` can select an SSH config alias for the M4; SSH config handles custom ports and keys. Setting `CI=1` on a developer machine does not select local execution.
+
+The M4 host filesystem backing `/tmp` must have at least **10 GiB free**. The runner checks it before creating the task directory (before any Docker command) and again after source transfer, immediately before launching the container. Insufficient or unreadable space exits with status 73 and a readable error. This checks host space, not just free space inside Docker's VM; it is a preflight check, not a reservation against concurrent disk use.
+
+Each invocation creates a unique remote `/tmp/xgif-visual-…` directory and named container, including a workspace identifier. Dependencies are installed inside that disposable copy; Astro telemetry is disabled there. No shared volumes, host ports, Cloud Compose projects or other containers are changed. The pinned Docker image is retained for reuse; the first run may need to download it. M4 runs Linux ARM64; GitHub currently runs Linux AMD64. Both must pass the committed baselines without relaxing comparison thresholds.
+
+Only Git-visible site source files (including uncommitted and untracked source changes) from the build/test directories and required root config are synchronized. Environment files, hidden/private directories, drafts, non-public image entries, credential key files, symlinks, dependencies and generated output are excluded. The repository's `workflow/` data, backups and private sources are outside the transfer. Git-ignored source fixtures are not transferred.
+
+Playwright arguments pass through unchanged, for example:
+
+```sh
+npm run test:visual:linux -- --project=mobile --grep 'image library'
+npm run test:visual:update:linux -- --project=mobile --grep 'image library'
+```
+
+Every run returns reports, failure artifacts and a copy of the screenshots under `site/test-results/<run-id>/`; the script prints the exact path. An explicit snapshot-update option also copies changed PNG baselines back to `tests/visual/__screenshots__/`. Concurrent source edits block that copy rather than overwrite ongoing work. Test failures keep their original exit code; transfer or cleanup failures also make an otherwise successful run fail. If artifacts cannot be returned, the isolated remote directory is retained and printed for recovery. Cleanup only addresses this invocation's container and directory.
 
 The test suite compares these viewports:
 
@@ -39,7 +56,7 @@ Then inspect and commit only the affected screenshots with the related CSS or co
 - Mobile homepage hero and feature-panel first-screen rhythm uses a 560px minimum height.
 - Image-library search, mood chips, grid rhythm, and filtered result count stay legible at both viewport sizes.
 - Search result groups collapse when empty, while the intentional no-result state remains composed and actionable.
-- Article details preserve their readable direct-page hierarchy, with metadata, summary, and source action above the reading grid.
+- Article details show the complete summary below the title, including on mobile dialogs. Article tags follow the full body, before recommendations; source actions keep their existing direct-page/sidebar and dialog placement. This is an approved reading-order improvement.
 - Tag index and tag-result pages keep their distinct discovery hierarchy, including the tag list, aggregate count, article grid, and related-image grid.
 - The warm paper palette, Geist typography, sharp surfaces, and coral accent remain consistent with the archived baseline.
 
@@ -51,6 +68,10 @@ Then inspect and commit only the affected screenshots with the related CSS or co
 - Viewport-safe sizing using `svh` on mobile.
 
 ## Review rule
+
+2026-11-12：发布四条图片内容暴露了旧测试对首页 AI 入选数量、全站总数和情绪词顺序的固定假设。首页筛选预期改为读取当前精选图片的检索资料；截图额外遮罩全站搜索总数所在链接，并仅在拍照时隐藏数据生成的情绪文字，保留“全部情绪”、搜索框、按钮边界、筛选行为和页面布局检查。只更新首页、图片库默认及筛选态的六张 Linux 截图，不修改产品样式或内容措辞。
+
+2026-11-12：统一多模态推荐后，像素图详情的桌面推荐区只保留达到图片相似度门槛的一张动漫图，移除两张较弱候选。这属于推荐正确性改进，保留原有三列网格、图片尺寸和弹窗布局，仅更新 `image-dialog-desktop.png`；移动端首屏没有受到影响。
 
 Treat a screenshot diff as a design review item, not as a blind snapshot update. The reviewer must classify it as one of:
 

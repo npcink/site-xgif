@@ -12,14 +12,18 @@ test("image dialogs retain both recommendation types and avoid already viewed co
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto("/images");
-  await page.locator('a[data-detail-link][href="/20260725-0e6n"]').click();
+  await page.locator('a[data-detail-link][href="/20260725-gxez"]').click();
   const dialog = page.locator("[data-detail-dialog]");
   await expect(dialog).toHaveAttribute("aria-busy", "false");
   await expect(dialog.getByRole("heading", { name: "接着看图片" })).toBeVisible();
   await expect(dialog.getByRole("heading", { name: "换个口味，读一篇" })).toBeVisible();
-  const viewed = new Set(["/20260725-0e6n"]);
+  const viewed = new Set(["/20260725-gxez"]);
   for (let index = 0; index < 4; index += 1) {
     const next = dialog.locator('[data-detail-kind="image"][data-recommendation-id]:visible').first();
+    if (!(await next.count())) {
+      await expect(dialog.locator(".related-section [data-recommendations-empty]")).toBeVisible();
+      break;
+    }
     const href = await next.getAttribute("href");
     expect(viewed.has(href)).toBe(false);
     viewed.add(href);
@@ -27,6 +31,7 @@ test("image dialogs retain both recommendation types and avoid already viewed co
     await expect(page).toHaveURL(href);
     await expect(dialog).toHaveAttribute("aria-busy", "false");
   }
+  expect(viewed.size).toBeGreaterThan(1);
   await page.goBack();
   await expect(dialog).toHaveAttribute("aria-busy", "false");
   await page.goForward();
@@ -39,14 +44,39 @@ test("image dialogs retain both recommendation types and avoid already viewed co
 
 test("article dialogs retain images and direct navigation preserves seen history", async ({ page }) => {
   await page.goto("/articles");
-  await page.locator('a[data-detail-link][href="/20260722-1x4w"]').first().click();
+  await page.locator('a[data-detail-link][href="/20260722-9c7n"]').first().click();
   const dialog = page.locator("[data-detail-dialog]");
   await expect(dialog).toHaveAttribute("aria-busy", "false");
   await expect(dialog.getByRole("heading", { name: "接着看图片" })).toBeVisible();
   const next = dialog.locator('.article-recommendation:visible').first();
   const href = await next.getAttribute("href");
   await page.goto(href);
-  await expect(page.locator('.article-recommendation:visible[href="/20260722-1x4w"]')).toHaveCount(0);
+  await expect(page.locator('.article-recommendation:visible[href="/20260722-9c7n"]')).toHaveCount(0);
+});
+
+test("articles show the full summary above the body and tags after it", async ({ page }) => {
+  async function checkReadingOrder(article) {
+    const summary = article.locator(".detail-summary");
+    const prose = article.locator(".article-reading .prose");
+    const tags = article.getByRole("navigation", { name: "文章标签" });
+    await expect(summary).toBeVisible();
+    expect(await summary.evaluate((element) => element.scrollHeight - element.clientHeight)).toBeLessThanOrEqual(1);
+    await expect(tags.getByRole("link")).toHaveCount(3);
+    await expect(article.locator(".detail-header .card-tags")).toHaveCount(0);
+    const summaryBottom = await summary.evaluate((element) => element.getBoundingClientRect().bottom);
+    const proseBox = await prose.boundingBox();
+    const tagsBox = await tags.boundingBox();
+    expect(proseBox.y).toBeGreaterThanOrEqual(summaryBottom);
+    expect(tagsBox.y).toBeGreaterThanOrEqual(proseBox.y + proseBox.height);
+  }
+
+  await page.goto("/20260722-1x4w");
+  await checkReadingOrder(page.locator("main .article-detail"));
+  await page.goto("/articles");
+  await page.locator('a[data-detail-link][href="/20260722-1x4w"]').first().click();
+  const dialog = page.locator("[data-detail-dialog]");
+  await expect(dialog).toHaveAttribute("aria-busy", "false");
+  await checkReadingOrder(dialog.locator(".article-detail"));
 });
 
 test("home places a real image near the first screen and alternates text with images", async ({ page }) => {
@@ -107,7 +137,7 @@ test("static navigation and initial recommendations work without JavaScript", as
   const page = await context.newPage();
   await page.route("https://img.xgif.cn/**", (route) => route.abort());
   try {
-    await page.goto(`${baseURL}/20260725-0e6n`);
+    await page.goto(`${baseURL}/20260725-gxez`);
     await expect(page.getByRole("heading", { name: "接着看图片" })).toBeVisible();
     const next = page.locator('main a[data-recommendation-id][data-detail-kind="image"]:visible').first();
     const href = await next.getAttribute("href");
@@ -117,4 +147,16 @@ test("static navigation and initial recommendations work without JavaScript", as
   } finally {
     await context.close();
   }
+});
+
+test("weak image matches stay absent in both a standalone page and a loaded dialog", async ({ page }) => {
+  await page.goto("/20260723-2wfr");
+  await expect(page.locator("main [data-detail-content]")).toHaveAttribute("data-content-id", "20260723-2wfr");
+  await expect(page.locator("main [data-recommendations]")).toHaveCount(0);
+  await page.goto("/images");
+  await page.locator('a[data-detail-link][href="/20260723-2wfr"]').click();
+  const dialog = page.locator("[data-detail-dialog]");
+  await expect(dialog).toHaveAttribute("aria-busy", "false");
+  await expect(dialog.locator("[data-detail-content][data-content-id=\"20260723-2wfr\"]")).toBeVisible();
+  await expect(dialog.locator("[data-recommendations]")).toHaveCount(0);
 });
