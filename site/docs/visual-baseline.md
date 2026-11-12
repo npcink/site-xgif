@@ -58,6 +58,7 @@ Then inspect and commit only the affected screenshots with the related CSS or co
 - Search result groups collapse when empty, while the intentional no-result state remains composed and actionable.
 - Article details show the complete summary below the title, including on mobile dialogs. Article tags follow the full body, before recommendations; source actions keep their existing direct-page/sidebar and dialog placement. This is an approved reading-order improvement.
 - Tag index and tag-result pages keep their distinct discovery hierarchy, including the tag list, aggregate count, article grid, and related-image grid.
+- Homepage feeds and article grids place cards into the shortest column with a 20px gap. Full short-form text stays intact; filtering, pagination, font loading and resizing repack visible cards without changing DOM order. Mobile uses one column; without JavaScript the regular grid remains readable.
 - The warm paper palette, Geist typography, sharp surfaces, and coral accent remain consistent with the archived baseline.
 
 ## What must not be reverted for pixel matching
