@@ -33,9 +33,9 @@ const relatedArticles = selectContentRecommendations(item, allArticles, {
 const isUserProvided = item.data.sourceKind === "user_provided";
 const isUnknownSource = item.data.sourceKind === "unknown";
 const unknownSourceLabel = item.data.source.replace(/（(?:来源|原作者与授权信息)待核实）$/u, "");
-const imageAspectRatio =
+const imageRatioKey =
   item.data.width && item.data.height
-    ? `${item.data.width} / ${item.data.height}`
+    ? `${item.data.width}x${item.data.height}`
     : undefined;
 ---
 
@@ -45,7 +45,7 @@ const imageAspectRatio =
     {images.length > 1 ? <ImageGallery images={images} title={item.data.title} /> : (
     <figure
       class:list={[`ratio-${item.data.ratio}`]}
-      style={imageAspectRatio ? `--image-aspect-ratio: ${imageAspectRatio}` : undefined}
+      data-image-ratio={imageRatioKey}
     >
       <img
         src={item.data.image}

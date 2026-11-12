@@ -84,6 +84,14 @@ npm run test:production
 
 它会核对生产首页、反馈邮箱、sitemap、公开文章正文与来源、构建 commit、R2 站内读取和防盗链。GitHub Actions 每天执行同一巡检，并额外要求裸域名 `xgif.cn` 使用 301/308 跳转到 `www.xgif.cn`。
 
+## 访问统计
+
+正式域名的公开页面使用爱站统计，入口为 `public/scripts/analytics.js`，由公共布局在生产构建中加载。加载器使用站点配置中的域名校验当前主机；本地开发、部署预览和 `noindex` 页面（包括草稿、搜索、收藏与本次浏览）不启用统计。隐私说明同步记录第三方统计的数据处理范围。
+
+`public/_headers` 对爱站脚本和请求放行 `https://node90.aizhantj.com:21233`，并允许部署平台从 `https://static.cloudflareinsights.com` 加载统计脚本、向 `https://cloudflareinsights.com` 上报。保留对内联脚本和动态代码执行的限制。爱站脚本包含动态解析逻辑；该逻辑继续受 CSP 限制，不为其加入 `unsafe-eval`。变更统计服务或启用其额外功能时，应重新验证所需地址和 CSP，而非放行通配域名。
+
+图片的精确宽高比由构建期生成的同源 `/image-ratios.css` 提供，仅包含公开图片的尺寸，不再依赖被 CSP 拦截的内联样式；独立页与弹窗共用该样式。
+
 ## 维护交接
 
 项目目标、架构边界、运行命令与部署前提见 [docs/PROJECT_HANDOFF.md](docs/PROJECT_HANDOFF.md)；技术选型到五批收口的历史脉络见 [docs/DEVELOPMENT_HISTORY_AND_LESSONS_2026-08-03.md](docs/DEVELOPMENT_HISTORY_AND_LESSONS_2026-08-03.md)；长期开发门槛、Git/worktree、验证证据和完成定义见 [docs/DEVELOPMENT_AND_DELIVERY_STANDARD.md](docs/DEVELOPMENT_AND_DELIVERY_STANDARD.md)；完整生产闭环与后续收尾步骤分别见 [docs/DEVELOPMENT_RETROSPECTIVE_2026-08-03.md](docs/DEVELOPMENT_RETROSPECTIVE_2026-08-03.md) 和 [docs/RELEASE_CLOSURE_STANDARD.md](docs/RELEASE_CLOSURE_STANDARD.md)。
