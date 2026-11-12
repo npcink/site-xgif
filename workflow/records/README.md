@@ -1,6 +1,6 @@
 # 用户提供素材台账
 
-`user-provided-assets.jsonl` 是发布台维护的最小授权记录；Astro 不读取它，也不会将其渲染到公开页面。
+`user-provided-assets.jsonl` 是AI 依据实际确认维护的最小授权记录；Astro 不读取它，也不会将其渲染到公开页面。
 
 每一行对应一次以 `sourceKind: "user_provided"` 发布的图片，记录确认日期、公开范围、内容文件、资源文件或 R2 地址与 SHA-256。为保护隐私，台账不得填写真实姓名、联系方式或原始素材链接。
 
@@ -12,7 +12,7 @@
 
 ## R2 图片位置台账
 
-`r2-assets.jsonl` 记录由本地发布台写入 Cloudflare R2 的图片位置。每行只包含 Bucket、对象键、公开 URL、SHA-256、MIME、文件大小、记录时间和对应内容文件，不保存图片字节或任何 Cloudflare 凭据。
+`r2-assets.jsonl` 记录由本机内容工具写入 Cloudflare R2 的图片位置。每行只包含 Bucket、对象键、公开 URL、SHA-256、MIME、文件大小、记录时间和对应内容文件，不保存图片字节或任何 Cloudflare 凭据。
 
 该台账随 Git 提交并参与本地哈希查重；R2 只保存图片字节，不承担标题、来源、授权或发布状态的事实来源。不要手工覆盖已有对象；内容变化应生成新的 SHA-256 对象键。
 
@@ -22,4 +22,4 @@
 
 `publication-events.jsonl` 是本机追加式发布回执，使用 `contentId + Markdown SHA-256` 绑定内容版本，记录同步批次、隔离分支、提交和推送阶段。该文件不保存正文或密钥，由本机私有内容 Git 备份，并被公开仓库忽略；不要把它手工加入公开代码或内容分支。
 
-批量同步的操作摘要还会保存在本机 SQLite 的 `operation_history` 中，并在管理端“同步记录”查看。SQLite 丢失不会影响文章和图片；发布回执可恢复本机同步版本关系，但最终发布证据仍以 GitHub PR、合并提交、Cloudflare 部署和线上页面为准。
+旧管理器留下的批量操作摘要可保留在 SQLite 中；新 CLI 以私有发布回执记录同步批次。SQLite 丢失不会影响文章和图片；发布回执可恢复本机同步版本关系，但最终发布证据仍以 GitHub PR、合并提交、Cloudflare 部署和线上页面为准。

@@ -7,7 +7,6 @@ import { galleryImages, validateGalleryImages } from "../../site/src/lib/image-g
 import { buildPublicationBundle } from "../publication-bundle.js";
 import { ImageSimilarityIndex } from "../image-similarity.js";
 import { reconcileR2Assets } from "../r2-reconciliation.js";
-import { listReusableAssets } from "../asset-library.js";
 import { sampleImage } from "./fixtures/image-sample.mjs";
 
 test("gallery limits include the cover and reject empty, repeated, and unsafe members", () => {
@@ -20,7 +19,7 @@ test("gallery limits include the cover and reject empty, repeated, and unsafe me
   assert.deepEqual(galleryImages({ image: "/images/old.png", width: 320 }), [{ src: "/images/old.png", width: 320, height: undefined, altText: undefined }]);
 });
 
-test("bundles, similarity, asset library and R2 reconciliation include non-cover images", async () => {
+test("bundles, similarity and R2 reconciliation include non-cover images", async () => {
   const repoRoot = await mkdtemp(path.join(os.tmpdir(), "xgif-gallery-"));
   try {
     const directory = path.join(repoRoot, "site/src/content/images");
@@ -42,8 +41,6 @@ test("bundles, similarity, asset library and R2 reconciliation include non-cover
     await writeFile(path.join(publicDir, "two.png"), second);
     const similarity = await new ImageSimilarityIndex({ repoRoot }).check({ buffer: second });
     assert.ok(similarity.matches.some((match) => match.image === images[1].src && match.kind === "exact"));
-    const library = await listReusableAssets({ repoRoot });
-    assert.ok(library.items.some((item) => item.image === images[1].src));
     const remote = [{ src: "https://img.xgif.cn/memes/one.png" }, { src: "https://img.xgif.cn/memes/two.png" }];
     await writeFile(path.join(repoRoot, file), (await readFile(path.join(repoRoot, file), "utf8")).replace(JSON.stringify(images), JSON.stringify(remote)).replace('image: "/images/memes/one.png"', `image: "${remote[0].src}"`));
     await mkdir(path.join(repoRoot, "workflow/records"), { recursive: true });

@@ -4,18 +4,10 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("article schema and publisher preserve optional cover metadata", async () => {
-  const [schema, publisher, form] = await Promise.all([
-    read("src/content.config.ts"),
-    read("../workflow/server.js"),
-    read("../workflow/public/index.html"),
-  ]);
+test("article schema preserves optional cover metadata", async () => {
+  const schema = await read("src/content.config.ts");
   assert.match(schema, /coverImage: imagePath\.optional\(\)/u);
   assert.match(schema, /coverAlt: z\.string\(\)\.optional\(\)/u);
-  assert.match(publisher, /coverImageLine/u);
-  assert.match(publisher, /coverAltLine/u);
-  assert.match(form, /name="coverImage"/u);
-  assert.match(form, /id="article-cover-assets"/u);
 });
 
 test("article pages use the cover for presentation and generate a heading-based table of contents", async () => {

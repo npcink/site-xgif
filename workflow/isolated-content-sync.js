@@ -183,6 +183,7 @@ export async function retryContentSyncPush({
   repoRoot,
   branch,
   remote = "origin",
+  expectedCommitSha = "",
 }) {
   const normalizedBranch = String(branch || "").trim();
   if (!/^content-sync\/[0-9A-Za-z._/-]+$/u.test(normalizedBranch)) {
@@ -192,6 +193,7 @@ export async function retryContentSyncPush({
   }
   await git(repoRoot, ["show-ref", "--verify", `refs/heads/${normalizedBranch}`]);
   const commitSha = (await git(repoRoot, ["rev-parse", normalizedBranch])).stdout.trim();
+  if (expectedCommitSha && commitSha !== expectedCommitSha) throw new Error("原发布分支的提交与回执不一致，已停止重试。");
   const push = { attempted: true, ok: false, error: "" };
   try {
     await git(repoRoot, ["push", "-u", remote, normalizedBranch], { timeoutMs: 60_000 });
