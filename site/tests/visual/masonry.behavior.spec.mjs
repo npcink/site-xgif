@@ -42,6 +42,7 @@ async function expectPacked(grid) {
     }
     return error;
   })).toBeLessThan(1.1);
+  expect(await grid.page().evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1);
 }
 
 test("feeds fill the shortest column under CSP and repack after filtering and resizing", async ({ page }, testInfo) => {
