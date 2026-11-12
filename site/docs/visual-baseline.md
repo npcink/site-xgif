@@ -39,7 +39,7 @@ Then inspect and commit only the affected screenshots with the related CSS or co
 - Mobile homepage hero and feature-panel first-screen rhythm uses a 560px minimum height.
 - Image-library search, mood chips, grid rhythm, and filtered result count stay legible at both viewport sizes.
 - Search result groups collapse when empty, while the intentional no-result state remains composed and actionable.
-- Article details preserve their readable direct-page hierarchy, with metadata, summary, and source action above the reading grid.
+- Article details show the complete summary below the title, including on mobile dialogs. Article tags follow the full body, before recommendations; source actions keep their existing direct-page/sidebar and dialog placement. This is an approved reading-order improvement.
 - Tag index and tag-result pages keep their distinct discovery hierarchy, including the tag list, aggregate count, article grid, and related-image grid.
 - The warm paper palette, Geist typography, sharp surfaces, and coral accent remain consistent with the archived baseline.
 
