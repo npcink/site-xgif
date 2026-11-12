@@ -54,6 +54,31 @@ test("article dialogs retain images and direct navigation preserves seen history
   await expect(page.locator('.article-recommendation:visible[href="/20260722-9c7n"]')).toHaveCount(0);
 });
 
+test("articles show the full summary above the body and tags after it", async ({ page }) => {
+  async function checkReadingOrder(article) {
+    const summary = article.locator(".detail-summary");
+    const prose = article.locator(".article-reading .prose");
+    const tags = article.getByRole("navigation", { name: "文章标签" });
+    await expect(summary).toBeVisible();
+    expect(await summary.evaluate((element) => element.scrollHeight - element.clientHeight)).toBeLessThanOrEqual(1);
+    await expect(tags.getByRole("link")).toHaveCount(3);
+    await expect(article.locator(".detail-header .card-tags")).toHaveCount(0);
+    const summaryBottom = await summary.evaluate((element) => element.getBoundingClientRect().bottom);
+    const proseBox = await prose.boundingBox();
+    const tagsBox = await tags.boundingBox();
+    expect(proseBox.y).toBeGreaterThanOrEqual(summaryBottom);
+    expect(tagsBox.y).toBeGreaterThanOrEqual(proseBox.y + proseBox.height);
+  }
+
+  await page.goto("/20260722-1x4w");
+  await checkReadingOrder(page.locator("main .article-detail"));
+  await page.goto("/articles");
+  await page.locator('a[data-detail-link][href="/20260722-1x4w"]').first().click();
+  const dialog = page.locator("[data-detail-dialog]");
+  await expect(dialog).toHaveAttribute("aria-busy", "false");
+  await checkReadingOrder(dialog.locator(".article-detail"));
+});
+
 test("home places a real image near the first screen and alternates text with images", async ({ page }) => {
   await page.goto("/");
   const distance = await page.locator(".home-feed .image-card").first().evaluate((card) => card.getBoundingClientRect().top);
