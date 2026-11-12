@@ -213,6 +213,7 @@ function preferredEntries(source, candidateEntries, preferredIds) {
  *   relatedSlots?: number,
  *   allowSurprise?: boolean,
  *   preferredIds?: string[],
+ *   preferredOnly?: boolean,
  * }} [options]
  */
 export function selectContentRecommendations(
@@ -223,6 +224,7 @@ export function selectContentRecommendations(
     relatedSlots = Math.min(2, limit),
     allowSurprise = true,
     preferredIds = [],
+    preferredOnly = false,
   } = {},
 ) {
   if (!Number.isInteger(limit) || limit <= 0) return [];
@@ -230,7 +232,7 @@ export function selectContentRecommendations(
   const sourceId = source.id;
   const preferred = preferredEntries(source, candidateEntries, preferredIds).slice(0, limit);
   const selectedIds = new Set(preferred.map((entry) => recommendationDocument(entry).id));
-  if (preferred.length >= limit) return preferred;
+  if (preferredOnly || preferred.length >= limit) return preferred;
 
   const ranked = rankRecommendationCandidates(sourceEntry, candidateEntries).filter(
     (candidate) => !selectedIds.has(candidate.id),
@@ -268,4 +270,15 @@ export function selectContentRecommendations(
     selectedIds.add(candidate.id);
   }
   return selected.slice(0, limit);
+}
+
+/** A thresholded empty image list is intentional; do not fill it with weaker matches. */
+export function manifestRecommendationOptions(manifest, contentId, kind) {
+  const record = manifest?.recommendations?.[String(contentId || "").trim()];
+  const values = record?.[kind];
+  return {
+    preferredIds: asArray(values).filter((value) => typeof value === "string"),
+    preferredOnly: (kind === "images" || record?.sourceType === "image") && manifest?.mode === "hybrid"
+      && Number.isFinite(manifest?.selection?.imageMinSimilarity) && Array.isArray(values),
+  };
 }

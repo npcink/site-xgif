@@ -10,7 +10,7 @@ import {
   selectContentRecommendations,
   selectArticleRecommendations,
 } from "../lib/content";
-import { staticRecommendationIds } from "../lib/recommendation-manifest";
+import { staticRecommendationIds, staticRecommendationOptions } from "../lib/recommendation-manifest";
 
 interface Props {
   article: CollectionEntry<"articles">;
@@ -34,7 +34,7 @@ const relatedImages = selectContentRecommendations(article, allImages, {
   limit: 8,
   relatedSlots: 3,
   allowSurprise: false,
-  preferredIds: staticRecommendationIds(article.data.contentId, "images"),
+  ...staticRecommendationOptions(article.data.contentId, "images"),
 });
 const sourceLabel = {
   original: "原创内容",
