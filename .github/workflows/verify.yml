@@ -31,7 +31,7 @@ jobs:
           cache: npm
           cache-dependency-path: site/package-lock.json
       - run: npm ci
-      - run: npm run test:all
+      - run: npm run test && npm run test:visual:linux && npm run test:gallery
       - run: npm run check:deploy
       - name: Upload visual diff artifacts
         if: failure()
