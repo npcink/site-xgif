@@ -5,7 +5,7 @@
  * The caller may add semantic (Qwen), OCR, and upload-batch signals; the
  * classifier keeps those signals explicit so a weak visual match cannot auto-merge.
  */
-export const SERIES_CANDIDATE_VERSION = 3;
+export const SERIES_CANDIDATE_VERSION = 4;
 export const SERIES_MIN_EMBEDDING_SIMILARITY = 0.62;
 
 const clamp = (value, minimum = 0, maximum = 1) => Math.max(minimum, Math.min(maximum, Number(value) || 0));
@@ -39,18 +39,21 @@ export function classifySeriesSignals({
   textOverlap = 0,
   batchMatch = false,
   sourceConflict = false,
+  themeRelation = "",
 } = {}) {
   const visual = clamp(visualSimilarity);
   const embedding = clamp(embeddingSimilarity);
   const text = clamp(textOverlap);
   const score = rounded(visual * 0.55 + embedding * 0.25 + text * 0.1 + (batchMatch ? 0.1 : 0));
   if (sourceConflict) return { decision: "separate", confidence: score, score, reasons: ["来源或授权信息冲突"] };
-  if (score >= 0.3 || embedding >= SERIES_MIN_EMBEDDING_SIMILARITY || batchMatch) {
+  const theme = ["same_series", "shared_template", "related_theme"].includes(themeRelation);
+  if (score >= 0.3 || embedding >= SERIES_MIN_EMBEDDING_SIMILARITY || batchMatch || theme) {
     const reasons = [];
     if (visual >= 0.45) reasons.push("图片感知指纹相似");
     if (embedding >= SERIES_MIN_EMBEDDING_SIMILARITY) reasons.push("图文向量相似");
     if (text >= 0.5) reasons.push("文字或 OCR 重叠");
     if (batchMatch) reasons.push("同一上传批次");
+    if (theme) reasons.push({ same_series: "视觉模型发现同系列证据，仍需人工确认", shared_template: "视觉模型发现共同梗模板，仍需人工确认", related_theme: "视觉模型发现主题关联，不等于同一系列，需人工确认" }[themeRelation]);
     if (batchMatch && score >= 0.9) reasons.push("高置信度仍需人工确认");
     return { decision: "review", confidence: score, score, reasons };
   }
@@ -72,6 +75,9 @@ export function buildSeriesCandidates(matches = []) {
   const groups = new Map();
   for (const match of Array.isArray(matches) ? matches : []) {
     if (!match || !match.file) continue;
+    if (match.kind === "theme" && (!["same_series", "shared_template", "related_theme"].includes(match.themeRelation)
+      || !["high", "medium"].includes(match.themeConfidence) || !match.themeReason
+      || !match.queryEvidence?.length || !match.candidateEvidence?.length)) continue;
     const group = groups.get(match.file) || {
       file: match.file,
       contentId: String(match.contentId || ""),
@@ -84,12 +90,18 @@ export function buildSeriesCandidates(matches = []) {
     group.members.push({
       index: Number.isInteger(match.memberIndex) ? match.memberIndex : null,
       image: String(match.image || ""),
-      kind: ["exact", "similar", "semantic"].includes(match.kind) ? match.kind : "similar",
+      kind: ["exact", "similar", "semantic", "theme"].includes(match.kind) ? match.kind : "similar",
       distance: Number.isFinite(match.distance) ? match.distance : null,
       embeddingSimilarity: Number.isFinite(Number(match.embeddingSimilarity)) ? Number(match.embeddingSimilarity) : 0,
       textOverlap: Number.isFinite(Number(match.textOverlap)) ? Number(match.textOverlap) : 0,
       batchMatch: Boolean(match.batchMatch),
       sourceConflict: Boolean(match.sourceConflict),
+      ...(match.kind === "theme" ? {
+        themeRelation: match.themeRelation, themeConfidence: match.themeConfidence, themeReason: match.themeReason,
+        queryEvidence: match.queryEvidence, candidateEvidence: match.candidateEvidence,
+        querySha256: match.querySha256, candidateSha256: match.candidateSha256,
+        reportedModel: match.reportedModel, inputVersion: match.inputVersion,
+      } : {}),
     });
     groups.set(match.file, group);
   }
@@ -106,6 +118,7 @@ export function buildSeriesCandidates(matches = []) {
       textOverlap: Math.max(...group.members.map(member => member.textOverlap)),
       batchMatch: group.members.some(member => member.batchMatch),
       sourceConflict: group.members.some(member => member.sourceConflict),
+      themeRelation: group.members.find(member => member.kind === "theme")?.themeRelation,
     });
     const reasons = exact
       ? ["图片字节完全一致，属于重复图片"]
