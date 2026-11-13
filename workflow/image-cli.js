@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import sharp from "sharp";
 import { ImageSimilarityIndex } from "./image-similarity.js";
+import { findSemanticSeriesMatches } from "./series-embeddings.js";
 import { loadLocalEnv } from "./local-env.js";
 import { ensureR2Asset, getR2StorageConfig, r2ObjectKey, r2PublicUrl } from "./r2-storage.js";
 import { saveR2PrivateBackup } from "./r2-private-backup.js";
@@ -23,15 +24,27 @@ export async function inspectImageFile(file) {
     sha256: createHash("sha256").update(buffer).digest("hex") };
 }
 
-export async function runImageTool({ repoRoot, file, upload = false, apply = false, reviewedSha256 = "", env = process.env, storeAsset = ensureR2Asset }) {
+export async function runImageTool({ repoRoot, file, upload = false, apply = false, reviewedSha256 = "", env = process.env, storeAsset = ensureR2Asset, fetchImpl = globalThis.fetch }) {
   const workflowRoot = path.join(repoRoot, "workflow");
   await loadLocalEnv(workflowRoot, { env });
   return withToolLock(workflowRoot, async () => {
     const asset = await inspectImageFile(file);
     const { buffer, ...metadata } = asset;
-    const similarity = await new ImageSimilarityIndex({ repoRoot }).check({ buffer });
+    const semanticSeries = await findSemanticSeriesMatches({ repoRoot, buffer, env, fetchImpl });
+    const { matches: semanticMatches, ...seriesEmbedding } = semanticSeries;
+    const similarity = await new ImageSimilarityIndex({ repoRoot }).check({ buffer, seriesMatches: semanticMatches });
+    similarity.seriesEmbedding = seriesEmbedding;
+    try {
+      await appendFile(path.join(workflowRoot, ".runtime/image-checks.jsonl"), JSON.stringify({
+        schemaVersion: 1, checkedAt: new Date().toISOString(),
+        requestedAction: upload && apply ? "upload" : "check",
+        reviewed: reviewedSha256 === asset.sha256, ...metadata, similarity,
+      }) + "\n", { mode: 0o600 });
+      similarity.checkRecordSaved = true;
+    } catch { similarity.checkRecordSaved = false; }
     if (!upload || !apply) return { ok: true, mode: "dry-run", ...metadata, similarity };
-    if ((similarity.matches.some((match) => match.kind === "similar") || similarity.unavailable)
+    const requiresSeriesReview = similarity.seriesCandidates.some((candidate) => candidate.requiresReview);
+    if ((similarity.matches.some((match) => match.kind === "similar") || requiresSeriesReview || similarity.unavailable || semanticSeries.status === "partial")
       && reviewedSha256 !== asset.sha256) throw new Error("请先对照相似候选和未检查项，再传入 --reviewed-sha256 <本次图片哈希>。");
     const siteRoot = path.join(repoRoot, "site");
     const config = getR2StorageConfig({ siteRoot, env });
@@ -61,7 +74,7 @@ export async function runImageTool({ repoRoot, file, upload = false, apply = fal
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const [command, file, ...args] = process.argv.slice(2);
   if (command === "--help" || file === "--help") {
-    console.log("image:check -- <图片路径>\nimage:upload -- <图片路径> [--apply] [--reviewed-sha256 <图片哈希>]\n默认只检查；上传返回可复用 URL，不创建内容、不推测来源和授权。");
+    console.log("image:check -- <图片路径>\nimage:upload -- <图片路径> [--apply] [--reviewed-sha256 <图片哈希>]\n默认只检查；结果中的 seriesCandidates 只生成系列候选，不会自动合并。上传返回可复用 URL，不创建内容、不推测来源和授权。");
   } else {
     try {
       const reviewedIndex = args.indexOf("--reviewed-sha256");

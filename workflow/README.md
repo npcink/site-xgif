@@ -112,3 +112,11 @@ npm run recommendations:build -- --require-embeddings
 先从公开 Git 或私有 `backups/content-history.git` 恢复 Markdown、图片和台账，必要时从私有远端恢复；再 `data:rebuild`、R2 对账、运行站点测试并通过 PR 部署。回滚此架构改动可恢复旧代码，但不要覆盖迁移后的内容或私有数据。
 
 `docs/` 与 `PROJECT_HISTORY.md` 中的旧编辑器、API、端口和启动命令属于历史记录，以本文和 [工程规范](docs/LOCAL_PUBLISHER_ENGINEERING_STANDARD.md) 为当前入口。
+
+## 图片系列候选（仅人工确认）
+
+`npm run image:series -- /绝对路径/图片.webp` 与 `image:check` 执行相同检查。结果按已有内容归组，并标出命中的成员位置；重复字节只视为重复图片。所有候选均为 `manual-required`，不得据分数自动追加、合并或发布。`--reviewed-sha256` 仅表示操作者已核对本次文件，不能替代用户对具体合并目标的确认。
+
+Qwen3-VL-Embedding 2B 使用每张成员图片的可核验原始字节生成纯图片向量，阈值为 0.62。标题、描述、标签不参与；新图集无需先重算相关推荐。缓存按原图 SHA-256、模型 digest 和输入版本区分。`XGIF_SERIES_EMBEDDINGS=off` 可关闭；缺少字节或服务异常会在报告中明确说明，零命中不能证明无关联。GIF/WebP 仅检查第一帧。
+
+M4 Ollama 保持 loopback 监听；可用 `XGIF_EMBEDDING_SSH_TARGET` 与 `XGIF_EMBEDDING_SSH_REMOTE_PORT` 按需建立本机 loopback SSH 隧道。仅关闭本次工具创建的隧道，已有连接不受影响。

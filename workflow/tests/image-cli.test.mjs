@@ -54,3 +54,20 @@ test("upload backs up original bytes before external writes and reuses a ledger 
   assert.equal(rows.length, 1);
   assert.equal(JSON.parse(rows[0]).publicUrl, result.publicUrl);
 });
+
+test("a failed semantic check remains visible in the result and private check record", async t => {
+  const repoRoot = await mkdtemp(path.join(os.tmpdir(), "xgif-check-record-"));
+  t.after(() => rm(repoRoot, { recursive: true, force: true }));
+  const file = path.join(repoRoot, "private-original-name.png");
+  await writeFile(file, await sharp({ create: { width: 200, height: 200, channels: 3, background: "blue" } }).png().toBuffer());
+  const result = await runImageTool({ repoRoot, file, env: {
+    XGIF_EMBEDDING_PROVIDER: "ollama", XGIF_EMBEDDING_BASE_URL: "http://127.0.0.1:11435",
+    XGIF_EMBEDDING_MODEL: "test-model", XGIF_EMBEDDING_API_KEY: "private-test-key",
+  }, fetchImpl: async () => { throw new Error("private-test-key must not be recorded"); } });
+  assert.equal(result.similarity.seriesEmbedding.status, "unavailable");
+  assert.equal(result.similarity.checkRecordSaved, true);
+  const record = await readFile(path.join(repoRoot, "workflow/.runtime/image-checks.jsonl"), "utf8");
+  assert.equal(JSON.parse(record).similarity.seriesEmbedding.status, "unavailable");
+  assert.ok(!record.includes("private-test-key"));
+  assert.ok(!record.includes(file));
+});
