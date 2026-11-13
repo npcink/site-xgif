@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import sharp from "sharp";
 import { ImageSimilarityIndex } from "./image-similarity.js";
 import { findSemanticSeriesMatches } from "./series-embeddings.js";
+import { findThemeSeriesMatches } from "./series-theme.js";
 import { loadLocalEnv } from "./local-env.js";
 import { ensureR2Asset, getR2StorageConfig, r2ObjectKey, r2PublicUrl } from "./r2-storage.js";
 import { saveR2PrivateBackup } from "./r2-private-backup.js";
@@ -31,9 +32,12 @@ export async function runImageTool({ repoRoot, file, upload = false, apply = fal
     const asset = await inspectImageFile(file);
     const { buffer, ...metadata } = asset;
     const semanticSeries = await findSemanticSeriesMatches({ repoRoot, buffer, env, fetchImpl });
+    const thematicSeries = await findThemeSeriesMatches({ repoRoot, buffer, env, fetchImpl });
     const { matches: semanticMatches, ...seriesEmbedding } = semanticSeries;
-    const similarity = await new ImageSimilarityIndex({ repoRoot }).check({ buffer, seriesMatches: semanticMatches });
+    const { matches: themeMatches, ...seriesTheme } = thematicSeries;
+    const similarity = await new ImageSimilarityIndex({ repoRoot }).check({ buffer, seriesMatches: [...semanticMatches, ...themeMatches] });
     similarity.seriesEmbedding = seriesEmbedding;
+    similarity.seriesTheme = seriesTheme;
     try {
       await appendFile(path.join(workflowRoot, ".runtime/image-checks.jsonl"), JSON.stringify({
         schemaVersion: 1, checkedAt: new Date().toISOString(),
@@ -44,7 +48,8 @@ export async function runImageTool({ repoRoot, file, upload = false, apply = fal
     } catch { similarity.checkRecordSaved = false; }
     if (!upload || !apply) return { ok: true, mode: "dry-run", ...metadata, similarity };
     const requiresSeriesReview = similarity.seriesCandidates.some((candidate) => candidate.requiresReview);
-    if ((similarity.matches.some((match) => match.kind === "similar") || requiresSeriesReview || similarity.unavailable || semanticSeries.status === "partial")
+    if ((similarity.matches.some((match) => match.kind === "similar") || requiresSeriesReview || similarity.unavailable || semanticSeries.status === "partial"
+      || ["partial", "unavailable"].includes(thematicSeries.status))
       && reviewedSha256 !== asset.sha256) throw new Error("请先对照相似候选和未检查项，再传入 --reviewed-sha256 <本次图片哈希>。");
     const siteRoot = path.join(repoRoot, "site");
     const config = getR2StorageConfig({ siteRoot, env });

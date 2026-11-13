@@ -120,3 +120,11 @@ npm run recommendations:build -- --require-embeddings
 Qwen3-VL-Embedding 2B 使用每张成员图片的可核验原始字节生成纯图片向量，阈值为 0.62。标题、描述、标签不参与；新图集无需先重算相关推荐。缓存按原图 SHA-256、模型 digest 和输入版本区分。`XGIF_SERIES_EMBEDDINGS=off` 可关闭；缺少字节或服务异常会在报告中明确说明，零命中不能证明无关联。GIF/WebP 仅检查第一帧。
 
 M4 Ollama 保持 loopback 监听；可用 `XGIF_EMBEDDING_SSH_TARGET` 与 `XGIF_EMBEDDING_SSH_REMOTE_PORT` 按需建立本机 loopback SSH 隧道。仅关闭本次工具创建的隧道，已有连接不受影响。
+
+### 主题补充检查
+
+设置 `XGIF_SERIES_THEME=on`，并填写专用的 `XGIF_SERIES_VISION_PROVIDER/BASE_URL/MODEL/API_KEY` 后，`image:check` 和 `image:upload` 会独立比较现有公开图片的原始像素，补充向量未命中的主题关联。可用支持图片的 OpenAI 兼容服务或本机 Ollama；密钥仅放在未跟踪的本机 `.env`。主题模型与 Qwen3-VL-Embedding 2B 是不同职责，可分别更换。第三方视觉服务会接收待上传图和现有公开图片的缩放首帧。
+
+`similarity.seriesTheme` 报告模型、输入版本、比较范围、缓存命中及检查状态；候选保留 `same_series`、`shared_template`、`related_theme` 和两侧原图的证据。仅仅都是猫、搞笑图或九宫格不能构成主题关系。`related_theme` 不等于同系列，最终是否合并仍由用户决定。模型请求不含标题、描述、标签、alt、原文件名和图片 URL；检查不会改动原图或内容。
+
+每次最多检查 120 张去重后的公开成员，每批 6 张，最多 20 次调用；首次扫描可能较慢并产生模型费用。超限或缺少可核验字节返回 `partial`，请求或输出异常返回 `unavailable`，不能当作“没有关联”。启用主题检查后，这两种状态同样要求上传复核。缓存按原图 SHA-256、服务、模型、提示词、输入版本与 revision 隔离。服务端模型升级时修改 `XGIF_SERIES_VISION_REVISION`；`XGIF_SERIES_THEME_REFRESH=1` 可强制重算。只有预先明确允许的 `XGIF_SERIES_VISION_REPORTED_MODEL_ALIASES` 才接受不同返回模型名，默认严格一致。
