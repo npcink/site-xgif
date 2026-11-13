@@ -8,7 +8,7 @@ import { inspectR2PrivateBackup } from "./r2-private-backup.js";
 const MAX_BYTES = 8 * 1024 * 1024;
 
 /** Read verified local bytes only; recommendation generation never fetches image URLs. */
-export async function recommendationImages(repoRoot, data) {
+export async function verifiedImageBytes(repoRoot, data) {
   const images = galleryImages(data);
   if (!images.length || images.length > 12) throw new Error("推荐图片必须包含 1–12 张可核验的图片。");
   let ledger;
@@ -38,10 +38,19 @@ export async function recommendationImages(repoRoot, data) {
     if (expectedHash && sha256 !== expectedHash) throw new Error("推荐图片字节在读取时发生变化。");
     const metadata = await sharp(buffer, { limitInputPixels: 36_000_000 }).metadata();
     if (!["jpeg", "png", "webp", "gif"].includes(metadata.format)) throw new Error("推荐图片格式不受支持。");
-    // Animated images use their first displayed frame; source bytes are never rewritten.
+    result.push({ sha256, buffer, metadata, src: image.src, altText: String(image.altText || "") });
+  }
+  return result;
+}
+
+export async function recommendationImages(repoRoot, data) {
+  const images = await verifiedImageBytes(repoRoot, data);
+  const result = [];
+  for (const { sha256, buffer, altText } of images) {
+    // Recommendation v1 deliberately remains a first-frame embedding pipeline.
     const png = await sharp(buffer, { pages: 1, limitInputPixels: 36_000_000 }).rotate()
       .resize({ width: 768, height: 768, fit: "inside", withoutEnlargement: true }).png().toBuffer();
-    result.push({ sha256, image: png.toString("base64"), altText: String(image.altText || "") });
+    result.push({ sha256, image: png.toString("base64"), altText });
   }
   return result;
 }

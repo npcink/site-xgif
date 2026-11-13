@@ -44,6 +44,8 @@ test("similarity index rebuilds corrupt cache, excludes the edited entry, and re
   const index = new ImageSimilarityIndex({ repoRoot: root });
   const identical = await index.check({ buffer: original });
   assert.equal(identical.matches[0].kind, "exact");
+  assert.equal(identical.seriesCandidates[0].decision, "duplicate");
+  assert.equal(identical.seriesCandidates[0].memberCount, 1);
   const reencoded = await sharp(original).jpeg({ quality: 65 }).toBuffer();
   const report = await index.check({ buffer: reencoded });
   assert.equal(report.matches[0].kind, "similar");

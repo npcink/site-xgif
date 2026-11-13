@@ -41,6 +41,8 @@ test("bundles, similarity and R2 reconciliation include non-cover images", async
     await writeFile(path.join(publicDir, "two.png"), second);
     const similarity = await new ImageSimilarityIndex({ repoRoot }).check({ buffer: second });
     assert.ok(similarity.matches.some((match) => match.image === images[1].src && match.kind === "exact"));
+    assert.equal(similarity.seriesCandidates[0].memberCount, 2);
+    assert.equal(similarity.seriesCandidates[0].decision, "duplicate");
     const remote = [{ src: "https://img.xgif.cn/memes/one.png" }, { src: "https://img.xgif.cn/memes/two.png" }];
     await writeFile(path.join(repoRoot, file), (await readFile(path.join(repoRoot, file), "utf8")).replace(JSON.stringify(images), JSON.stringify(remote)).replace('image: "/images/memes/one.png"', `image: "${remote[0].src}"`));
     await mkdir(path.join(repoRoot, "workflow/records"), { recursive: true });

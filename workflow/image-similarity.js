@@ -5,6 +5,7 @@ import path from "node:path";
 import sharp from "sharp";
 import { parseContentDocument } from "./content-audit.js";
 import { inspectR2PrivateBackup } from "./r2-private-backup.js";
+import { buildSeriesCandidates } from "./series-candidates.js";
 
 const VERSION = 1;
 const MAX_BYTES = 8 * 1024 * 1024;
@@ -124,7 +125,7 @@ export class ImageSimilarityIndex {
     return { hash, fingerprint: this.fingerprints.get(hash) };
   }
 
-  async check({ buffer, excludeFile = "" }) {
+  async check({ buffer, excludeFile = "", seriesMatches = [] }) {
     await this.load();
     const query = await perceptualFingerprint(buffer);
     const queryHash = digest(buffer);
@@ -145,7 +146,8 @@ export class ImageSimilarityIndex {
       const relative = `site/src/content/images/${file}`;
       if (relative === excludeFile) continue;
       const { data } = parseContentDocument(await readFile(path.join(directory, file), "utf8"));
-      for (const { src: image } of galleryImages(data)) {
+      const gallery = galleryImages(data);
+      for (const [memberIndex, { src: image }] of gallery.entries()) {
         if (!image || images.has(image)) continue;
         images.add(image);
         try {
@@ -154,8 +156,11 @@ export class ImageSimilarityIndex {
           const comparison = compareImageFingerprints(query, candidate.fingerprint);
           if (queryHash === candidate.hash || comparison.similar) matches.push({
             file: relative,
+            contentId: String(data.contentId || ""),
             title: String(data.title || "未命名图片"),
             image,
+            memberIndex,
+            memberCount: gallery.length,
             kind: queryHash === candidate.hash ? "exact" : "similar",
             animated: query.animated || candidate.fingerprint.animated,
             distance: comparison.distance,
@@ -169,6 +174,7 @@ export class ImageSimilarityIndex {
       checked, unavailable, cacheSaved,
       matches: matches.sort((a, b) => (a.kind === "exact" ? -1 : a.distance) - (b.kind === "exact" ? -1 : b.distance))
         .slice(0, 4).map(({ file, title, image, kind, animated }) => ({ file, title, image, kind, animated })),
+      seriesCandidates: buildSeriesCandidates([...matches, ...(Array.isArray(seriesMatches) ? seriesMatches : [])]),
     };
   }
 }

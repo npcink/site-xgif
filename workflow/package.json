@@ -32,7 +32,8 @@
     "test:all": "npm test",
     "content:sync": "node --disable-warning=ExperimentalWarning content-sync-cli.js",
     "image:check": "node image-cli.js check",
-    "image:upload": "node image-cli.js upload"
+    "image:upload": "node image-cli.js upload",
+    "image:series": "node image-cli.js check"
   },
   "engines": {
     "node": ">=22.5.0"
