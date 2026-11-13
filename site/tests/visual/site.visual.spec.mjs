@@ -82,7 +82,12 @@ test("homepage discovery distinguishes featured filtering from full-site search"
   await expect(page.locator("[data-home-global-search]")).toHaveAttribute("href", "/search?q=AI");
   await input.press("Enter");
   await expect(page).toHaveURL(/\/search\?q=AI$/);
-  await expect(page.locator("[data-visible-count]")).toHaveText("2");
+  const searchMatches = await page.locator("[data-search-item]").evaluateAll((cards) =>
+    cards.filter((card) => card.dataset.search.includes("ai")).length);
+  expect(searchMatches).toBeGreaterThan(0);
+  expect(searchMatches).toBeGreaterThanOrEqual(homeImageMatches);
+  await expect(page.locator("[data-visible-count]")).toHaveText(String(searchMatches));
+  await expect(page.locator("[data-search-item]:visible")).toHaveCount(searchMatches);
   await page.goBack();
   await expect(page).toHaveURL(/\/$/);
   await expect(input).toHaveValue("AI");
@@ -175,9 +180,13 @@ test("image library matches the approved visual baseline", async ({ page }, test
 test("image library filtered state matches the approved visual baseline", async ({ page }, testInfo) => {
   await page.goto("/images", { waitUntil: "networkidle" });
   await waitForImages(page);
+  const moodMatches = await page.locator(".masonry-grid .image-card").evaluateAll((cards) =>
+    cards.filter((card) => card.dataset.search.includes("无语")).length);
+  expect(moodMatches).toBeGreaterThan(0);
   await page.getByRole("button", { name: "无语" }).click();
   await expect(page.getByRole("button", { name: "无语" })).toHaveClass(/active/);
-  await expect(page.locator("[data-visible-count]")).toHaveText("3");
+  await expect(page.locator("[data-visible-count]")).toHaveText(String(moodMatches));
+  await expect(page.locator(".masonry-grid .image-card:visible")).toHaveCount(moodMatches);
   await hideMoodLabelsForScreenshot(page);
 
   await expect(page).toHaveScreenshot(`image-library-filtered-${testInfo.project.name}.png`, {
