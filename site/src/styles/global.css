@@ -220,10 +220,9 @@ button { color: inherit; }
 .image-card.wide { grid-column: span 1; }
 
 .image-card img { display: block; width: 100%; height: auto; object-fit: contain; }
-.image-copy { padding: 20px 60px 20px 20px; color: var(--ink); }
-.image-tags { display: flex; gap: 7px; font-family: var(--font-geist-mono); font-size: 9px; margin-bottom: 9px; }
-.image-copy h2, .image-copy h3, .image-copy h4 { font-size: 26px; letter-spacing: -.04em; margin: 0 0 8px; }
-.image-copy p { font-size: 12px; line-height: 1.5; margin: 0; color: var(--muted); }
+.image-copy { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; min-height: 58px; padding: 12px 60px 12px 16px; color: var(--ink); }
+.image-tags { display: flex; flex-wrap: wrap; gap: 7px; font-family: var(--font-geist-mono); font-size: 11px; }
+.image-copy .image-count { margin: 0; padding: 0; background: transparent; }
 .open-mark { position: absolute; bottom: 15px; right: 15px; width: 34px; height: 34px; display: grid; place-items: center; background: var(--paper); border-radius: 50%; font-size: 14px; transition: transform .2s; }
 .image-card:hover .open-mark { transform: rotate(45deg); }
 .empty-state { text-align: center; border: 1px solid var(--ink); padding: 80px 20px; max-width: 1200px; margin: 40px auto; }

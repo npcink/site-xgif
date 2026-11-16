@@ -23,6 +23,7 @@ const containsAnimation = ["animated", "mixed"].includes(mediaType);
 <a
   class:list={["image-card", item.data.ratio]}
   href={href}
+  aria-label={item.data.title}
   data-detail-link
   data-detail-kind="image"
   data-recommendation-id={recommendation ? item.data.contentId : undefined}
@@ -44,8 +45,7 @@ const containsAnimation = ["animated", "mixed"].includes(mediaType);
     <div class="image-tags">
       {item.data.tags.slice(0, 2).map((tag) => <span>#{tag}</span>)}
     </div>
-    <Heading>{item.data.title}</Heading>
-    <p>{item.data.description}</p>
+    <Heading class="sr-only">{item.data.title}</Heading>
   </div>
   <span class="open-mark" aria-hidden="true">↗</span>
 </a>
