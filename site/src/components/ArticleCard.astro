@@ -21,7 +21,8 @@ const { Content } = await render(article);
   class:list={["article-card", accent, { "article-card--short": isShortForm }]}
   data-inline-content-id={isShortForm ? article.data.contentId : undefined}
   data-search-item
-  data-search={`${article.data.title} ${article.data.summary} ${article.data.source} ${article.data.tags.join(" ")}`.toLowerCase()}
+  data-source={article.data.source.toLowerCase()}
+  data-search={`${article.body || ""} ${article.data.title} ${article.data.summary} ${article.data.source} ${article.data.tags.join(" ")}`.toLowerCase()}
 >
   <div class="article-meta">
     <span>{article.data.source}</span>

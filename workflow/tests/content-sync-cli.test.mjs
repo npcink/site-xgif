@@ -5,6 +5,7 @@ import { promisify } from "node:util";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { loadPublicRecommendationContent, buildRecommendationManifest, writeRecommendationManifest } from "../recommendation-engine.js";
 import { planContentSync, runContentSync } from "../content-sync-cli.js";
 
 const exec = promisify(execFile);
@@ -41,9 +42,17 @@ test("dry-run bundles only selected public content and its referenced image with
   await mkdir(path.dirname(path.join(repoRoot, asset)), { recursive: true });
   await writeFile(path.join(repoRoot, asset), "fixture image bytes");
   await writeFile(path.join(repoRoot, file), markdown.replace('draft: false', 'coverImage: "/images/articles/cover.png"\ndraft: false'));
+  await git(repoRoot, "init", "-b", "main");
+  await git(repoRoot, "config", "user.name", "XGIF Test");
+  await git(repoRoot, "config", "user.email", "xgif@example.test");
+  await writeFile(path.join(repoRoot, "README.md"), "base");
+  await git(repoRoot, "add", "README.md");
+  await git(repoRoot, "commit", "-m", "Base");
+  await git(repoRoot, "update-ref", "refs/remotes/origin/main", "HEAD");
+  await writeRecommendationManifest(repoRoot, buildRecommendationManifest(await loadPublicRecommendationContent(repoRoot)));
   const result = await runContentSync({ repoRoot, files: [file, file] });
   assert.equal(result.mode, "dry-run");
-  assert.deepEqual(result.files, [asset, file]);
+  assert.deepEqual(result.files, [asset, file, "site/src/data/recommendations.json"]);
   assert.match(result.expectedFileSha256[asset], /^[a-f0-9]{64}$/u);
   await assert.rejects(readFile(path.join(repoRoot, "workflow/records/publication-events.jsonl")), { code: "ENOENT" });
   await assert.rejects(readFile(path.join(repoRoot, "workflow/.runtime/content-tools.lock")), { code: "ENOENT" });
@@ -95,6 +104,7 @@ test("apply pushes only selected content, persists receipts, and retries PR fail
   await git(repoRoot, "remote", "add", "origin", remote);
   await git(repoRoot, "push", "-u", "origin", "main");
   await writeFile(path.join(repoRoot, "README.md"), "unrelated dirty code\n");
+  await writeRecommendationManifest(repoRoot, buildRecommendationManifest(await loadPublicRecommendationContent(repoRoot)));
   const failedPR = await runContentSync({ repoRoot, files: [file], apply: true,
     createPullRequest: async () => ({ ok: false, error: "GitHub temporarily unavailable" }) });
   assert.equal(failedPR.ok, false);

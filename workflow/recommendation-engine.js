@@ -12,15 +12,18 @@ import {
   rankRecommendationCandidates,
   recommendationDocument,
   selectContentRecommendations,
+  RECOMMENDATION_EVIDENCE_VERSION,
 } from "../site/src/lib/recommendations.mjs";
 import { parseContentDocument } from "./local-data-store.js";
 import { validateServiceBaseUrl } from "./service-url-policy.js";
+import { publicationImageEvidence, publicationEvidenceHash } from "./recommendation-publication.js";
 import { recommendationImages } from "./recommendation-images.js";
 
 const DEFAULT_TIMEOUT_MS = 60_000;
 const DEFAULT_BATCH_SIZE = 16;
-const VECTOR_INPUT_LIMIT = 1_600;
-export const MULTIMODAL_INPUT_VERSION = "qwen3-vl-pixels-v1";
+export const TEXT_CHUNK_SIZE = 1200;
+export const EVIDENCE_VERSION = RECOMMENDATION_EVIDENCE_VERSION;
+export const MULTIMODAL_INPUT_VERSION = "qwen3-vl-body-chunks-pixels-v2";
 export const DEFAULT_MULTIMODAL_MODEL = "RizwanMalik/qwen3-vl-embedding-2b:q8_0-q8_0";
 const IMAGE_MIN_SIMILARITY = 0.35;
 
@@ -220,20 +223,15 @@ async function listMarkdownFiles(directory) {
   }
 }
 
-function semanticInput(type, data, body) {
-  const lines = [
-    `类型：${type === "article" ? "文章" : "图片"}`,
-    `标题：${String(data.title || "").trim()}`,
-    `摘要：${String(data.summary || data.description || "").trim()}`,
-    `标签：${Array.isArray(data.tags) ? data.tags.join("、") : ""}`,
-    `分类：${String(data.category || "").trim()}`,
-    `情绪：${Array.isArray(data.mood) ? data.mood.join("、") : ""}`,
-    `场景：${Array.isArray(data.scenes) ? data.scenes.join("、") : ""}`,
-    type === "article"
-      ? `正文：${String(body || "").replace(/\s+/g, " ").trim().slice(0, VECTOR_INPUT_LIMIT)}`
-      : "",
-  ];
-  return lines.filter((line) => !line.endsWith("：")).join("\n");
+/** Fixed, non-overlapping Unicode chunks cover the full original body. */
+export function articleEvidenceChunks(body) {
+  const characters = Array.from(String(body || ""));
+  const chunks = [];
+  for (let offset = 0; offset < characters.length; offset += TEXT_CHUNK_SIZE) {
+    const text = characters.slice(offset, offset + TEXT_CHUNK_SIZE).join("");
+    if (text.trim()) chunks.push({ text, weight: Array.from(text.trim()).length });
+  }
+  return chunks;
 }
 
 export async function loadPublicRecommendationContent(repoRoot, { multimodal = false } = {}) {
@@ -256,7 +254,8 @@ export async function loadPublicRecommendationContent(repoRoot, { multimodal = f
       if (Boolean(data.draft) || data.public === false || data.publicationHold === true) continue;
       const contentId = String(data.contentId || "").trim();
       if (!contentId) continue;
-      const input = semanticInput(source.type, data, body);
+      const chunks = source.type === "article" ? articleEvidenceChunks(body) : [];
+      const input = source.type === "article" ? body : "";
       let images = [];
       if (multimodal && source.type === "image") {
         try {
@@ -265,19 +264,28 @@ export async function loadPublicRecommendationContent(repoRoot, { multimodal = f
           throw new EmbeddingServiceError("EMBEDDING_IMAGE_UNAVAILABLE", `Cannot read verified images for ${contentId}: ${error.message}`, { cause: error });
         }
       }
-      const fingerprint = multimodal
-        ? JSON.stringify([MULTIMODAL_INPUT_VERSION, input, images.map(({ sha256, altText }) => [sha256, altText])])
-        : input;
+      const fingerprint = source.type === "article"
+        ? [MULTIMODAL_INPUT_VERSION, "article", body]
+        : [MULTIMODAL_INPUT_VERSION, "image", multimodal ? images.map(({ sha256 }) => sha256) : data.images?.map(({ src }) => src) || [data.image]];
+      const imageEvidence = source.type === "image" ? await publicationImageEvidence(repoRoot, data) : [];
+      const publicEntry = { data: { ...data, pubDate: data.pubDate ? new Date(data.pubDate) : new Date(0) } };
+      const publicationEvidence = [contentId, source.type, source.type === "article" ? createHash("sha256").update(body).digest("hex") : imageEvidence,
+        recommendationDocument(publicEntry).recommendationGroup, recommendationDocument(publicEntry).pubDate];
+      if (multimodal && images.some((image, i) => imageEvidence[i]?.sha256 && image.sha256 !== imageEvidence[i].sha256)) {
+        throw new Error(`Content-addressed image hash mismatch: ${contentId}`);
+      }
       documents.push({
+        publicationEvidence,
         id: contentId,
         type: source.type,
         input,
-        // Metadata already contributes to rule ranking; keep visual similarity grounded in pixels.
-        inputs: images.length ? images.map(({ image }) => ({ text: "", image })) : [input],
-        contentSha256: createHash("sha256").update(fingerprint).digest("hex"),
+        inputs: source.type === "image" ? images.map(({ image }) => ({ text: "", image })) : chunks.map(({ text }) => text),
+        inputWeights: source.type === "image" ? images.map(() => 1) : chunks.map(({ weight }) => weight),
+        contentSha256: createHash("sha256").update(JSON.stringify(fingerprint)).digest("hex"),
         entry: {
           id: contentId,
           collection: source.type === "article" ? "articles" : "images",
+          body: source.type === "article" ? body : "",
           data: {
             ...data,
             contentId,
@@ -294,7 +302,7 @@ export function recommendationSourceHash(documents) {
   return createHash("sha256")
     .update(documents.map((document) => {
       const group = recommendationDocument(document.entry).recommendationGroup;
-      return `${document.id}:${document.contentSha256}${group === "adult-humor" ? `:${group}` : ""}`;
+      return JSON.stringify([EVIDENCE_VERSION, document.id, document.type, document.contentSha256, group, recommendationDocument(document.entry).pubDate]);
     }).join("\n"))
     .digest("hex");
 }
@@ -394,6 +402,7 @@ export async function getRecommendationStatus({
   const currentSourceHash = recommendationSourceHash(documents);
   const stale = (
     !manifest
+    || manifest.selection?.evidenceVersion !== EVIDENCE_VERSION
     || manifest.sourceHash !== currentSourceHash
     || covered !== total
     || Boolean(configurationCode)
@@ -484,7 +493,7 @@ export function rankHybridCandidates(source, candidates, vectors) {
       return {
         ...candidate,
         vector,
-        score: vector * 0.55 + candidate.relevance * 0.35 + candidate.freshness * 0.1,
+        score: vector * 0.9 + candidate.freshness * 0.1,
       };
     })
     .sort(
@@ -492,7 +501,6 @@ export function rankHybridCandidates(source, candidates, vectors) {
         Number(right.groupMatch) - Number(left.groupMatch)
         || right.score - left.score
         || right.vector - left.vector
-        || right.relevance - left.relevance
         || left.id.localeCompare(right.id),
     );
 }
@@ -552,7 +560,10 @@ export function buildRecommendationManifest(
       .filter((candidate) => sourceGroup !== "adult-humor"
         || recommendationDocument(candidate.entry).recommendationGroup === "adult-humor")
       .map((candidate) => candidate.entry);
-    const imageEntries = images.map((candidate) => candidate.entry);
+    const imageEntries = images
+      .filter((candidate) => sourceGroup !== "adult-humor"
+        || recommendationDocument(candidate.entry).recommendationGroup === "adult-humor")
+      .map((candidate) => candidate.entry);
     const articleLimit = document.type === "article" ? 12 : 8;
     const rankedArticles = mode === "hybrid" ? rankHybridCandidates(source, articleEntries, vectors) : [];
     const rankedImages = mode === "hybrid" ? rankHybridCandidates(source, imageEntries, vectors) : [];
@@ -592,14 +603,17 @@ export function buildRecommendationManifest(
     schemaVersion: 1,
     generatedAt,
     sourceHash,
+    ...(documents.every((doc) => doc.publicationEvidence) ? { publication: { schemaVersion: 1, sourceHash: publicationEvidenceHash(documents) } } : {}),
     mode,
     embedding: {
       model: mode === "hybrid" ? model : null,
       dimensions,
+      ...(embeddingDetails.inputVersion === MULTIMODAL_INPUT_VERSION ? { framePolicy: "first-frame" } : {}),
       ...embeddingDetails,
     },
-    ...(mode === "hybrid" && embeddingDetails.inputVersion === MULTIMODAL_INPUT_VERSION
-      ? { selection: { imageMinSimilarity: IMAGE_MIN_SIMILARITY } } : {}),
+    selection: { evidenceVersion: EVIDENCE_VERSION,
+      ...(mode === "hybrid" && embeddingDetails.inputVersion === MULTIMODAL_INPUT_VERSION ? { imageMinSimilarity: IMAGE_MIN_SIMILARITY } : {}),
+    },
     generation: {
       fallbackCode: String(generation.fallbackCode || ""),
       requestedModel: String(generation.requestedModel || model || ""),
@@ -654,26 +668,26 @@ async function embeddingVectors(documents, store, config, fetchImpl) {
 
   for (let index = 0; index < pending.length; index += config.batchSize) {
     const batch = pending.slice(index, index + config.batchSize);
-    let batchVectors;
-    if (config.provider === "ollama") {
-      batchVectors = [];
-      for (const document of batch) {
-        const members = [];
-        for (const input of document.inputs) members.push((await requestEmbeddings([input], config, fetchImpl))[0]);
-        const dimensions = members[0].length;
-        if (members.some((vector) => vector.length !== dimensions)) {
-          throw new EmbeddingServiceError("EMBEDDING_RESPONSE_INVALID", "Gallery embeddings have inconsistent dimensions.");
-        }
-        const combined = Array(dimensions).fill(0);
-        for (const vector of members) {
-          const norm = Math.hypot(...vector);
-          for (let index = 0; index < dimensions; index += 1) combined[index] += vector[index] / norm / members.length;
-        }
-        if (!validateEmbeddingVector(combined)) throw new EmbeddingServiceError("EMBEDDING_RESPONSE_INVALID", "Gallery embedding is empty.");
-        batchVectors.push(combined);
+    const batchVectors = [];
+    for (const document of batch) {
+      if (!document.inputs.length) throw new EmbeddingServiceError("EMBEDDING_INPUT_EMPTY", `No original evidence for ${document.id}.`);
+      const members = [];
+      for (let offset = 0; offset < document.inputs.length; offset += config.batchSize) {
+        members.push(...await requestEmbeddings(document.inputs.slice(offset, offset + config.batchSize), config, fetchImpl));
       }
-    } else {
-      batchVectors = await requestEmbeddings(batch.map((document) => document.input), config, fetchImpl);
+      const dimensions = members[0].length;
+      if (members.some((vector) => vector.length !== dimensions)) {
+        throw new EmbeddingServiceError("EMBEDDING_RESPONSE_INVALID", "Source embeddings have inconsistent dimensions.");
+      }
+      const combined = Array(dimensions).fill(0);
+      const weights = document.inputWeights;
+      const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
+      for (let member = 0; member < members.length; member++) {
+        const vector = members[member]; const norm = Math.hypot(...vector);
+        for (let axis = 0; axis < dimensions; axis++) combined[axis] += vector[axis] / norm * weights[member] / totalWeight;
+      }
+      if (!validateEmbeddingVector(combined)) throw new EmbeddingServiceError("EMBEDDING_RESPONSE_INVALID", "Combined source embedding is empty.");
+      batchVectors.push(combined);
     }
     for (let itemIndex = 0; itemIndex < batch.length; itemIndex += 1) {
       const document = batch[itemIndex];
@@ -765,6 +779,7 @@ export async function generateRecommendationManifest({
 
   try {
     if (config.provider === "ollama") documents = await loadPublicRecommendationContent(repoRoot, { multimodal: true });
+    else if (documents.some((document) => document.type === "image")) throw new EmbeddingServiceError("EMBEDDING_VISION_UNAVAILABLE", "Image evidence requires native multimodal Ollama; generated descriptions cannot substitute for pixels.");
     const result = await embeddingVectors(documents, store, config, fetchImpl);
     return {
       manifest: buildRecommendationManifest(documents, {

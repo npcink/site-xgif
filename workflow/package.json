@@ -32,8 +32,11 @@
     "test:all": "npm test",
     "content:sync": "node --disable-warning=ExperimentalWarning content-sync-cli.js",
     "image:check": "node image-cli.js check",
-    "image:upload": "node image-cli.js upload",
     "image:series": "node image-cli.js check",
+    "image:upload": "node image-cli.js upload",
+    "ai:metadata": "node --disable-warning=ExperimentalWarning ai-metadata-cli.js",
+    "recommendations:verify": "node --disable-warning=ExperimentalWarning recommendation-verify.js",
+    "recommendations:eval-export": "node --disable-warning=ExperimentalWarning recommendation-quality-export.js",
     "image:media": "node image-media-cli.js"
   },
   "engines": {

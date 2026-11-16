@@ -8,9 +8,8 @@ import {
   formatShortDate,
   publicArticleNote,
   selectContentRecommendations,
-  selectArticleRecommendations,
 } from "../lib/content";
-import { staticRecommendationIds, staticRecommendationOptions } from "../lib/recommendation-manifest";
+import { staticRecommendationOptions } from "../lib/recommendation-manifest";
 
 interface Props {
   article: CollectionEntry<"articles">;
@@ -24,12 +23,10 @@ const [allArticles, allImages] = await Promise.all([
   getCollection("articles"),
   getCollection("images").then((entries) => entries.filter((entry) => !entry.data.draft && entry.data.public)),
 ]);
-const recommendedArticles = selectArticleRecommendations(
-  article,
-  allArticles,
-  12,
-  staticRecommendationIds(article.data.contentId, "articles"),
-);
+const recommendedArticles = selectContentRecommendations(article, allArticles, {
+  limit: 12,
+  ...staticRecommendationOptions(article.data.contentId, "articles"),
+});
 const relatedImages = selectContentRecommendations(article, allImages, {
   limit: 8,
   relatedSlots: 3,

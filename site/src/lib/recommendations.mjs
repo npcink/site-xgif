@@ -1,4 +1,5 @@
 const DAY_MS = 86_400_000;
+export const RECOMMENDATION_EVIDENCE_VERSION = "original-sources-v2";
 
 function asArray(value) {
   return Array.isArray(value) ? value : [];
@@ -48,37 +49,17 @@ function cosineSetSimilarity(left, right) {
 
 export function recommendationDocument(entry) {
   const data = entry?.data || entry || {};
-  const tags = asArray(data.tags).map(String).filter(Boolean);
-  const mood = asArray(data.mood).map(String).filter(Boolean);
-  const scenes = asArray(data.scenes).map(String).filter(Boolean);
-  const category = String(data.category || "").trim();
-  const title = String(data.title || "").trim();
-  const summary = String(data.summary || data.description || "").trim();
-  const semanticText = [
-    title,
-    summary,
-    tags.join(" "),
-    category,
-    mood.join(" "),
-    scenes.join(" "),
-  ]
-    .filter(Boolean)
-    .join(" ");
-
+  // Astro's body is the stored source. Generated frontmatter never supplies evidence.
+  const isImage = entry?.collection === "images" || Boolean(data.image);
+  const semanticText = isImage ? "" : String(entry?.body || "");
   return {
     entry,
     id: String(data.contentId || entry?.id || "").trim(),
-    title,
-    summary,
-    tags,
-    category,
-    mood,
-    scenes,
     semanticText,
     semanticTokens: textTokens(semanticText),
     pubDate: normalizedDateValue(data.pubDate),
     isDraft: Boolean(data.draft),
-    isPublic: data.public !== false,
+    isPublic: data.public !== false && data.publicationHold !== true,
     recommendationGroup: data.recommendationGroup === "adult-humor" ? "adult-humor" : "general",
   };
 }
@@ -88,39 +69,7 @@ function isSameRecommendationGroup(source, candidate) {
 }
 
 function allowsRecommendation(source, candidate) {
-  return source.recommendationGroup === "adult-humor"
-    || candidate.recommendationGroup !== "adult-humor";
-}
-
-function tagWeights(documents) {
-  const frequencies = new Map();
-  for (const document of documents) {
-    for (const tag of new Set(document.tags)) {
-      frequencies.set(tag, (frequencies.get(tag) || 0) + 1);
-    }
-  }
-  const population = Math.max(documents.length, 1);
-  return new Map(
-    [...frequencies].map(([tag, frequency]) => [
-      tag,
-      1 + Math.log((population + 1) / (frequency + 1)),
-    ]),
-  );
-}
-
-function weightedTagSimilarity(source, candidate, weights) {
-  if (!source.tags.length || !candidate.tags.length) return 0;
-  const sourceTags = new Set(source.tags);
-  const candidateTags = new Set(candidate.tags);
-  const union = new Set([...sourceTags, ...candidateTags]);
-  let sharedWeight = 0;
-  let unionWeight = 0;
-  for (const tag of union) {
-    const weight = weights.get(tag) || 1;
-    unionWeight += weight;
-    if (sourceTags.has(tag) && candidateTags.has(tag)) sharedWeight += weight;
-  }
-  return unionWeight ? sharedWeight / unionWeight : 0;
+  return isSameRecommendationGroup(source, candidate);
 }
 
 function freshnessScore(candidate, newestDate) {
@@ -148,19 +97,16 @@ export function rankRecommendationCandidates(sourceEntry, candidateEntries) {
       seenCandidateIds.add(candidate.id);
       return true;
     });
-  const weights = tagWeights([source, ...candidates]);
   const newestDate = Math.max(source.pubDate, ...candidates.map((candidate) => candidate.pubDate));
 
   return candidates
     .map((candidate) => {
-      const tag = weightedTagSimilarity(source, candidate, weights);
       const lexical = cosineSetSimilarity(source.semanticTokens, candidate.semanticTokens);
       const freshness = freshnessScore(candidate, newestDate);
-      const relevance = tag * 0.62 + lexical * 0.28;
+      const relevance = lexical * 0.9;
       return {
         entry: candidate.entry,
         id: candidate.id,
-        tag,
         lexical,
         freshness,
         relevance,
@@ -188,11 +134,7 @@ function preferredEntries(source, candidateEntries, preferredIds) {
           id !== source.id &&
           !recommendationDocument(entry).isDraft &&
           recommendationDocument(entry).isPublic &&
-          allowsRecommendation(source, recommendationDocument(entry)) &&
-          (
-            source.recommendationGroup !== "adult-humor"
-            || isSameRecommendationGroup(source, recommendationDocument(entry))
-          ),
+          allowsRecommendation(source, recommendationDocument(entry)),
       ),
   );
   const seen = new Set();
@@ -248,10 +190,7 @@ export function selectContentRecommendations(
   const selected = [...preferred, ...related.map((candidate) => candidate.entry)];
   if (allowSurprise && selected.length < limit) {
     const unselected = ranked.filter((candidate) => !selectedIds.has(candidate.id));
-    const groupCandidates = source.recommendationGroup === "adult-humor"
-      ? unselected.filter((candidate) => candidate.groupMatch)
-      : unselected;
-    const surprise = (groupCandidates.length ? groupCandidates : unselected)
+    const surprise = unselected
       .sort(
         (left, right) =>
           stableRank(sourceId, left.id) - stableRank(sourceId, right.id) ||
@@ -278,7 +217,8 @@ export function manifestRecommendationOptions(manifest, contentId, kind) {
   const values = record?.[kind];
   return {
     preferredIds: asArray(values).filter((value) => typeof value === "string"),
-    preferredOnly: (kind === "images" || record?.sourceType === "image") && manifest?.mode === "hybrid"
-      && Number.isFinite(manifest?.selection?.imageMinSimilarity) && Array.isArray(values),
+    preferredOnly: Array.isArray(values) && (manifest?.selection?.evidenceVersion === RECOMMENDATION_EVIDENCE_VERSION
+      || ((kind === "images" || record?.sourceType === "image") && manifest?.mode === "hybrid"
+        && Number.isFinite(manifest?.selection?.imageMinSimilarity))),
   };
 }

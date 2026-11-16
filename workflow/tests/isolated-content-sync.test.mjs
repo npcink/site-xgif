@@ -5,6 +5,8 @@ import { chmod, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { buildRecommendationManifest } from "../recommendation-engine.js";
+const emptyManifest = () => JSON.stringify(buildRecommendationManifest([]));
 import {
   cleanupContentSyncBranch,
   isolatedContentSync,
@@ -40,6 +42,8 @@ async function createRepository() {
     "base article\n",
   );
   await writeFile(path.join(repoRoot, "workflow", "content-audit-cli.js"), "base code\n");
+  await mkdir(path.join(repoRoot, "site/src/data"), { recursive: true });
+  await writeFile(path.join(repoRoot, "site/src/data/recommendations.json"), emptyManifest());
   await run(repoRoot, ["add", "."]);
   await run(repoRoot, ["commit", "-m", "Initial main"]);
   await run(repoRoot, ["remote", "add", "origin", remote]);
@@ -146,7 +150,7 @@ test("isolated content sync accepts only the exact recommendation derived artifa
   const branch = "content-sync/test-recommendations";
   try {
     await mkdir(path.join(dirs.repoRoot, path.dirname(manifest)), { recursive: true });
-    await writeFile(path.join(dirs.repoRoot, manifest), '{"recommendations":{}}\n');
+    await writeFile(path.join(dirs.repoRoot, manifest), emptyManifest());
     const result = await isolatedContentSync({
       repoRoot: dirs.repoRoot,
       files: [manifest],
@@ -156,7 +160,7 @@ test("isolated content sync accepts only the exact recommendation derived artifa
     assert.equal(result.push.ok, true);
     assert.equal(
       await run(dirs.repoRoot, ["show", `origin/${branch}:${manifest}`]),
-      '{"recommendations":{}}',
+      await readFile(path.join(dirs.repoRoot, manifest), "utf8"),
     );
     await assert.rejects(
       isolatedContentSync({

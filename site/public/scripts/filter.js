@@ -9,6 +9,7 @@
   const clear = document.querySelector("[data-clear]");
   const pagination = document.querySelector("[data-pagination]");
   const pageSummary = document.querySelector("[data-page-summary]");
+  const sourceOnly = Boolean(document.querySelector('[data-filter-kind="source"]'));
   const pageSize = Number(pagination?.dataset.pageSize || 0);
 
   if (!(input instanceof HTMLInputElement)) return;
@@ -42,10 +43,11 @@
   };
 
   const apply = () => {
-    const queries = [input.value.trim().toLowerCase(), chipFilter].filter(Boolean);
+    const query = input.value.trim().toLowerCase();
     const matches = items.filter((item) => {
       const searchable = item.dataset.search || "";
-      return queries.every((query) => searchable.includes(query))
+      return searchable.includes(query) && (!chipFilter
+        || (sourceOnly ? item.dataset.source === chipFilter : searchable.includes(chipFilter)))
         && (!mediaFilter || (item.dataset.mediaTypes || "").split(" ").includes(mediaFilter));
     });
     const pages = pageSize ? Math.max(1, Math.ceil(matches.length / pageSize)) : 1;
