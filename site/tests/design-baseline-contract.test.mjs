@@ -15,8 +15,9 @@ test("image detail surfaces keep the two-column layout without cropping source i
 
   assert.match(dialog, /<b aria-hidden="true">×<\/b>/);
   assert.doesNotMatch(dialog, /<span>关闭<\/span>/);
-  assert.match(imageCard, /referrerpolicy="no-referrer"/);
-  assert.match(page, /referrerpolicy="no-referrer"/);
+  assert.match(await read("src/components/DisplayImage.astro"), /referrerpolicy="no-referrer"/);
+  assert.match(imageCard, /<DisplayImage/);
+  assert.match(page, /<DisplayImage/);
   assert.match(articlePage, /referrerpolicy="no-referrer"/);
   assert.match(page, /class="image-source"/);
   assert.match(page, /data-image-ratio=\{imageRatioKey\}/);
@@ -49,7 +50,8 @@ test("home and discovery routes preserve the editorial visual hierarchy", async 
   assert.match(home, /class="tag-ticker"/);
   assert.match(home, /class="home-feed"/);
   assert.match(imageCard, /class:list=\{\["image-card", item\.data\.ratio\]\}/);
-  assert.match(imageCard, /class="image-shade"/);
+  assert.doesNotMatch(imageCard, /class="image-shade"/);
+  assert.match(styles, /\.image-card img \{[^}]*height: auto;[^}]*object-fit: contain;/);
   assert.match(search, /class="search-page"/);
   assert.match(tagIndex, /class="tag-index"/);
   assert.match(styles, /@fontsource-variable\/geist/);

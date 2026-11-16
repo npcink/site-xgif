@@ -2,14 +2,18 @@
 import { imageMediaType, mediaFilterValues } from "../lib/image-media.mjs";
 import type { CollectionEntry } from "astro:content";
 import { contentHref } from "../lib/content";
+import DisplayImage from "./DisplayImage.astro";
 
 interface Props {
+  headingLevel?: "h2" | "h3";
   item: CollectionEntry<"images">;
   recommendation?: boolean;
   hidden?: boolean;
+  priority?: boolean;
 }
 
-const { item, recommendation = false, hidden = false } = Astro.props;
+const { item, recommendation = false, hidden = false, priority = false } = Astro.props;
+const Heading = Astro.props.headingLevel || "h3";
 const imageCount = item.data.images?.length || 1;
 const href = contentHref(item);
 const mediaType = imageMediaType(item.data);
@@ -26,25 +30,22 @@ const containsAnimation = ["animated", "mixed"].includes(mediaType);
   data-media-types={mediaFilterValues(item.data)}
   data-search-item
   data-search={`${item.data.title} ${item.data.description} ${item.data.source} ${item.data.tags.join(" ")} ${item.data.mood.join(" ")} ${item.data.scenes.join(" ")}`.toLowerCase()}
-  aria-label={`查看图片：${item.data.title}${imageCount > 1 ? `，共 ${imageCount} 张` : ""}`}
 >
-  <img
+  <DisplayImage
     src={item.data.image}
     alt={item.data.images?.[0]?.altText || item.data.altText || item.data.title}
     width={item.data.width}
     height={item.data.height}
-    loading="lazy"
-    decoding="async"
-    referrerpolicy="no-referrer"
+    priority={priority}
+    animated={item.data.images?.[0]?.animated ?? item.data.animated}
   />
-  <div class="image-shade"></div>
   <div class="image-copy">
+    {(imageCount > 1 || containsAnimation) && <span class="image-count">{imageCount > 1 ? `共 ${imageCount} 张${containsAnimation ? " · 含动图" : ""}` : "动图"}</span>}
     <div class="image-tags">
       {item.data.tags.slice(0, 2).map((tag) => <span>#{tag}</span>)}
     </div>
-    <h3>{item.data.title}</h3>
+    <Heading>{item.data.title}</Heading>
     <p>{item.data.description}</p>
   </div>
-  {(imageCount > 1 || containsAnimation) && <span class="image-count">{imageCount > 1 ? `共 ${imageCount} 张${containsAnimation ? " · 含动图" : ""}` : "动图"}</span>}
   <span class="open-mark" aria-hidden="true">↗</span>
 </a>

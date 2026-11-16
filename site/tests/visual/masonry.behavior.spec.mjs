@@ -82,6 +82,13 @@ test("feeds fill the shortest column under CSP and repack after filtering and re
   await page.locator("[data-filter-input]").fill("");
   await expect(articles.locator(".article-card:visible")).toHaveCount(12);
   await expectPacked(articles);
+  await page.goto(`${origin}/images`);
+  const images = page.locator(".masonry-grid").first();
+  await expectPacked(images);
+  await page.getByRole("button", { name: "动图", exact: true }).click();
+  await expectPacked(images);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expectPacked(images);
   expect(await page.evaluate(() => window.cspViolations)).toEqual([]);
   expect(errors).toEqual([]);
 });

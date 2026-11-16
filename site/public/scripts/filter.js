@@ -31,8 +31,10 @@
     if (previous) previous.disabled = currentPage <= 1;
     if (next) next.disabled = currentPage >= pages;
     if (numbers) {
-      numbers.innerHTML = Array.from({ length: pages }, (_, index) => index + 1)
-        .map((page) => `<button type="button" data-page="${page}"${page === currentPage ? ' class="active" aria-current="page"' : ""}>${page}</button>`)
+      const visible = [...new Set([1, currentPage - 1, currentPage, currentPage + 1, pages])]
+        .filter((page) => page >= 1 && page <= pages).sort((a, b) => a - b);
+      numbers.innerHTML = visible
+        .map((page, index) => `${index && page - visible[index - 1] > 1 ? '<span class="page-gap" aria-hidden="true">…</span>' : ""}<button type="button" data-page="${page}"${page === currentPage ? ' class="active" aria-current="page"' : ""}>${page}</button>`)
         .join("");
     }
     if (pageSummary) {
@@ -124,4 +126,5 @@
   });
 
   apply();
+  document.documentElement.removeAttribute("data-filter-pending");
 })();

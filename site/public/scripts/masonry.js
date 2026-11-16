@@ -1,7 +1,7 @@
 (() => {
   if (!("ResizeObserver" in window)) return;
 
-  document.querySelectorAll(".home-feed, .article-grid").forEach((grid) => {
+  document.querySelectorAll(".home-feed, .article-grid, .masonry-grid").forEach((grid) => {
     const items = Array.from(grid.children);
     let frame = 0;
 

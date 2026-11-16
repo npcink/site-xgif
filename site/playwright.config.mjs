@@ -32,6 +32,8 @@ export default defineConfig({
     },
   ],
   webServer: {
+    // Cold builds download and encode the complete public image set.
+    timeout: 180000,
     command: `npm run build && npm run preview -- --port ${port}`,
     url: `http://localhost:${port}`,
     reuseExistingServer: !process.env.CI && !process.env.XGIF_SITE_TEST_PORT && process.env.XGIF_GALLERY_FIXTURE !== "true",

@@ -1,0 +1,49 @@
+---
+import { getImage } from "astro:assets";
+import type { ImageMetadata } from "astro";
+
+interface Props {
+  src: string;
+  alt: string;
+  width?: number;
+  height?: number;
+  thumbnail?: boolean;
+  detail?: boolean;
+  priority?: boolean;
+  deferred?: boolean;
+  animated?: boolean;
+}
+
+const { src, alt, width, height, thumbnail = false, detail = false, priority = false, deferred = false, animated = false } = Astro.props;
+const localImages = import.meta.glob<ImageMetadata>("/public/images/**/*.{jpg,jpeg,png,webp,gif}", { eager: true, import: "default" });
+const local = localImages[`/public${src}`];
+const canOptimize = Boolean(local || (src.startsWith("https://img.xgif.cn/memes/") && width && height));
+const candidates = thumbnail ? [120] : animated ? (detail ? [480, 640] : [320, 480]) : detail ? [640, 960, 1280] : [320, 640, 960];
+const widths = [...new Set(candidates.map((size) => Math.min(size, width || size)))];
+const display = canOptimize ? await getImage({
+  src: local || src,
+  width: widths.at(-1),
+  height: width && height ? Math.round(widths.at(-1)! * height / width) : undefined,
+  widths,
+  format: "webp",
+  quality: 82,
+}) : undefined;
+const displaySrc = display?.src || src;
+const srcset = display?.srcSet.attribute || undefined;
+const sizes = thumbnail ? "60px" : detail ? "(max-width: 900px) 90vw, 55vw" : "(max-width: 600px) 92vw, (max-width: 900px) 45vw, 40vw";
+---
+
+<img
+  src={deferred ? undefined : displaySrc}
+  srcset={deferred ? undefined : srcset}
+  data-gallery-src={deferred ? displaySrc : undefined}
+  data-gallery-srcset={deferred ? srcset : undefined}
+  sizes={sizes}
+  alt={alt}
+  width={width}
+  height={height}
+  loading={priority ? "eager" : "lazy"}
+  fetchpriority={priority ? "high" : undefined}
+  decoding="async"
+  referrerpolicy="no-referrer"
+/>
