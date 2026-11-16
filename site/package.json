@@ -21,7 +21,8 @@
     "test:visual:linux": "sh scripts/run-visual-baseline.sh",
     "test:visual:update:linux": "sh scripts/run-visual-baseline.sh --update-snapshots",
     "test:all": "npm run test && npm run test:visual && npm run test:gallery",
-    "check:deploy": "npm run build && wrangler deploy --dry-run"
+    "check:deploy": "npm run build && wrangler deploy --dry-run",
+    "stats:favorites": "node scripts/favorite-stats.mjs"
   },
   "dependencies": {
     "@astrojs/rss": "^4.0.19",

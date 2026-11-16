@@ -1,3 +1,4 @@
+import { trackFavoriteAction } from "./favorite-metrics.js";
 import {
   favoriteKey,
   readFavorites,
@@ -72,6 +73,7 @@ document.addEventListener("click", (event) => {
 
   updateInterface();
   const isFavorite = result.favorites.items.some((item) => favoriteKey(item) === favoriteKey(input));
+  trackFavoriteAction(input, isFavorite ? "add" : "remove");
   announce(isFavorite ? `已收藏：${input.title}` : `已取消收藏：${input.title}`);
   window.dispatchEvent(new CustomEvent("xgif:favorites-changed"));
 });
