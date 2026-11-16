@@ -18,6 +18,10 @@
   const detailPath = /^\/\d{8}-[a-z0-9]{4}$/;
   const cache = new Map();
   const initialTitle = document.title;
+  const initialPath = window.location.pathname;
+  // History survives reloads; a dialog belongs only to the document that opened it.
+  const historyOwner = crypto.randomUUID();
+  const ownsDialogState = (state) => state?.detailDialog && state.detailDialogOwner === historyOwner;
   let activeRequest = null;
   let closeTimer = null;
   let lastTrigger = null;
@@ -165,7 +169,7 @@
   const requestClose = () => {
     if (isCloseRequested) return;
     isCloseRequested = true;
-    if (history.state?.detailDialog) {
+    if (ownsDialogState(history.state)) {
       const detailDepth = Number(history.state.detailDialogDepth) || 1;
       history.go(-detailDepth);
       return;
@@ -192,10 +196,12 @@
 
     const url = new URL(trigger.href, window.location.href);
     if (!isDetailUrl(url)) return;
+    // Full detail pages keep native navigation; only discovery lists use overlays.
+    if (!dialog.contains(trigger) && trigger.closest("[data-detail-content]")) return;
 
     event.preventDefault();
     const kindHint = trigger.dataset.detailKind;
-    if (dialog.open && history.state?.detailDialog) {
+    if (dialog.open && ownsDialogState(history.state)) {
       const detailDepth = Number(history.state.detailDialogDepth) || 1;
       history.pushState(
         {
@@ -215,6 +221,8 @@
     lastTrigger = trigger;
     const baseState = {
       ...history.state,
+      detailDialog: false,
+      detailDialogOwner: historyOwner,
       detailDialogBase: true,
       detailDialogBaseTitle: document.title,
       detailDialogScrollY: window.scrollY,
@@ -223,6 +231,7 @@
     history.pushState(
       {
         detailDialog: true,
+        detailDialogOwner: historyOwner,
         detailDialogUrl: url.href,
         detailDialogBaseTitle: baseState.detailDialogBaseTitle,
         detailDialogDepth: 1,
@@ -244,13 +253,19 @@
   });
 
   window.addEventListener("popstate", (event) => {
-    if (event.state?.detailDialog) {
+    if (ownsDialogState(event.state)) {
       openDetail(new URL(window.location.href), event.state.detailDialogKind);
       return;
     }
+    // An old overlay entry from another document is a normal page destination.
+    if (window.location.pathname !== initialPath) {
+      window.location.reload();
+      return;
+    }
+    const isLocalBase = event.state?.detailDialogOwner === historyOwner;
     closeDetail({
-      title: event.state?.detailDialogBaseTitle || initialTitle,
-      scrollY: event.state?.detailDialogScrollY,
+      title: (isLocalBase && event.state?.detailDialogBaseTitle) || initialTitle,
+      scrollY: isLocalBase ? event.state?.detailDialogScrollY : null,
     });
   });
 })();

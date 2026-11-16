@@ -1,0 +1,84 @@
+import { expect, test } from "@playwright/test";
+
+test("list overlays reuse one dialog and Back/Forward restore the matching content", async ({ page }) => {
+  await page.goto("/images");
+  await page.locator('a.image-card[href="/20261112-cbac"]').click();
+  const dialog = page.locator("[data-detail-dialog]");
+  const content = dialog.locator("[data-detail-content]");
+  await expect(content).toHaveAttribute("data-content-id", "20261112-cbac");
+  const next = dialog.locator('a[data-recommendation-id][data-detail-kind="image"]:visible').first();
+  const href = await next.getAttribute("href");
+  await next.click();
+  await expect(content).toHaveAttribute("data-content-id", href.slice(1));
+  await expect(page.locator("dialog[open]")).toHaveCount(1);
+  await page.goBack();
+  await expect(content).toHaveAttribute("data-content-id", "20261112-cbac");
+  await page.goForward();
+  await expect(content).toHaveAttribute("data-content-id", href.slice(1));
+  await dialog.getByRole("button", { name: "关闭详情" }).click();
+  await expect(page).toHaveURL("/images");
+  await expect(dialog).not.toBeVisible();
+});
+
+test("standalone recommendations navigate as pages and Back restores the original page", async ({ page }) => {
+  await page.goto("/20260722-3u91");
+  const next = page.locator("main .article-recommendation:visible").first();
+  const href = await next.getAttribute("href");
+  await next.scrollIntoViewIfNeeded();
+  const scrollY = await page.evaluate(() => window.scrollY);
+  await next.click();
+  await expect(page).toHaveURL(href);
+  await expect(page.locator("main [data-detail-content]")).toHaveAttribute("data-content-id", href.slice(1));
+  await expect(page.locator("[data-detail-dialog]")).not.toBeVisible();
+  await page.goBack();
+  await expect(page.locator("main [data-detail-content]")).toHaveAttribute("data-content-id", "20260722-3u91");
+  await expect(page.locator("[data-detail-dialog]")).not.toBeVisible();
+  await expect.poll(() => page.evaluate((before) => Math.abs(window.scrollY - before), scrollY)).toBeLessThanOrEqual(2);
+  await page.goForward();
+  await expect(page.locator("main [data-detail-content]")).toHaveAttribute("data-content-id", href.slice(1));
+  await expect(page.locator("[data-detail-dialog]")).not.toBeVisible();
+});
+
+test("reloading an overlay does not let old history entries reopen it", async ({ page }) => {
+  await page.goto("/images");
+  await page.locator('a.image-card[href="/20261112-cbac"]').click();
+  await expect(page.locator("[data-detail-dialog]")).toHaveAttribute("aria-busy", "false");
+  await page.reload();
+  await expect(page.locator("main [data-detail-content]")).toHaveAttribute("data-content-id", "20261112-cbac");
+  await expect(page.locator("[data-detail-dialog]")).not.toBeVisible();
+  await page.goBack();
+  await expect(page).toHaveURL("/images");
+  await expect(page.locator("main .archive-hero")).toBeVisible();
+  await expect(page.locator("[data-detail-dialog]")).not.toBeVisible();
+  await page.goForward();
+  await expect(page.locator("main [data-detail-content]")).toHaveAttribute("data-content-id", "20261112-cbac");
+  await expect(page.locator("[data-detail-dialog]")).not.toBeVisible();
+  const next = page.locator('main a[data-recommendation-id]:visible').first();
+  const href = await next.getAttribute("href");
+  await next.click();
+  await expect(page.locator("main [data-detail-content]")).toHaveAttribute("data-content-id", href.slice(1));
+  await page.goBack();
+  await expect(page.locator("main [data-detail-content]")).toHaveAttribute("data-content-id", "20261112-cbac");
+  await expect(page.locator("[data-detail-dialog]")).not.toBeVisible();
+});
+
+test("long image dialogs use one vertical scroll container and keep all actions reachable", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.goto("/images");
+  await page.locator('a.image-card[href="/20261112-cbac"]').click();
+  const dialog = page.locator("[data-detail-dialog]");
+  await expect(dialog).toHaveAttribute("aria-busy", "false");
+  const scrollers = await dialog.evaluate((root) => [...root.querySelectorAll("*")]
+    .filter((element) => /auto|scroll/.test(getComputedStyle(element).overflowY) && element.scrollHeight > element.clientHeight + 1)
+    .map((element) => element.className));
+  expect(scrollers).toEqual(["detail-dialog-shell"]);
+  const copy = dialog.locator(".image-detail-copy");
+  expect(await copy.evaluate((element) => element.scrollHeight - element.clientHeight)).toBeLessThanOrEqual(1);
+  await dialog.getByRole("link", { name: "查看 / 保存原图" }).scrollIntoViewIfNeeded();
+  await expect(dialog.getByRole("link", { name: "查看 / 保存原图" })).toBeInViewport();
+  await dialog.locator(".image-source").scrollIntoViewIfNeeded();
+  await expect(dialog.locator(".image-source")).toBeInViewport();
+  await page.getByRole("button", { name: "关闭详情" }).click();
+  await expect(page).toHaveURL("/images");
+  await expect(dialog).not.toBeVisible();
+});

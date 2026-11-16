@@ -24,7 +24,7 @@ test("image detail surfaces keep the two-column layout without cropping source i
   assert.doesNotMatch(page, /style=/);
   assert.match(styles, /grid-template-columns: minmax\(0, 1\.15fr\) minmax\(0, \.85fr\)/);
   assert.match(styles, /\.detail-dialog-body \.image-detail-grid \{[\s\S]*align-items: stretch;/);
-  assert.match(styles, /\.detail-dialog-body \.image-detail-grid \{[\s\S]*height: 520px;/);
+  assert.match(styles, /\.detail-dialog-body \.image-detail-grid \{[^}]*height: auto;[^}]*min-height: 520px;/);
   assert.match(styles, /\.detail-dialog-body \.image-detail figure img \{[^}]*min-height: 0;[^}]*object-fit: contain;/);
   assert.match(styles, /\.detail-dialog\[data-detail-kind="image"\] \.image-detail figure\.ratio-wide/);
   assert.match(styles, /figure\.ratio-square \{ aspect-ratio: auto; \}/);
