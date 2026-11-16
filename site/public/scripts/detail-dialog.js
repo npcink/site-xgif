@@ -17,6 +17,7 @@
 
   const detailPath = /^\/\d{8}-[a-z0-9]{4}$/;
   const cache = new Map();
+  const viewStates = new Map();
   const initialTitle = document.title;
   const initialPath = window.location.pathname;
   // History survives reloads; a dialog belongs only to the document that opened it.
@@ -28,6 +29,18 @@
   let previousBodyPadding = "";
   let isPageLocked = false;
   let isCloseRequested = false;
+  let displayedEntry = null;
+
+  const rememberDialogView = () => {
+    if (displayedEntry) {
+      const gallery = body.querySelector("[data-image-gallery]");
+      viewStates.set(displayedEntry, {
+        scrollTop: shell.scrollTop,
+        galleryIndex: gallery ? Number(gallery.dataset.current || 0) : null,
+      });
+    }
+    displayedEntry = null;
+  };
 
   const isDetailUrl = (url) => url.origin === window.location.origin && detailPath.test(url.pathname);
 
@@ -93,6 +106,8 @@
 
   const openDetail = async (url, kindHint = null) => {
     if (!isDetailUrl(url)) return;
+    rememberDialogView();
+    const entry = history.state?.detailDialogEntry;
 
     if (closeTimer) {
       window.clearTimeout(closeTimer);
@@ -126,7 +141,12 @@
       }
       document.title = payload.title;
       setLoading(false);
-      window.dispatchEvent(new CustomEvent("xgif:detail-opened", { detail: { root: body } }));
+      const view = viewStates.get(entry);
+      window.dispatchEvent(new CustomEvent("xgif:detail-opened", {
+        detail: { root: body, galleryIndex: view?.galleryIndex },
+      }));
+      displayedEntry = entry;
+      shell.scrollTop = view?.scrollTop || 0;
       closeButton?.focus({ preventScroll: true });
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;
@@ -135,6 +155,7 @@
   };
 
   const closeDetail = ({ title = initialTitle, scrollY = null } = {}) => {
+    rememberDialogView();
     activeRequest?.abort();
     activeRequest = null;
     document.title = title;
@@ -207,6 +228,7 @@
         {
           ...history.state,
           detailDialog: true,
+          detailDialogEntry: crypto.randomUUID(),
           detailDialogUrl: url.href,
           detailDialogDepth: detailDepth + 1,
           detailDialogKind: kindHint,
@@ -231,6 +253,7 @@
     history.pushState(
       {
         detailDialog: true,
+        detailDialogEntry: crypto.randomUUID(),
         detailDialogOwner: historyOwner,
         detailDialogUrl: url.href,
         detailDialogBaseTitle: baseState.detailDialogBaseTitle,

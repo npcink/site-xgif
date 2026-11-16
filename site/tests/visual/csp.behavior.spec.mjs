@@ -4,6 +4,11 @@ import { expect, test } from "@playwright/test";
 const headers = await readFile(new URL("../../public/_headers", import.meta.url), "utf8");
 const policy = headers.match(/Content-Security-Policy: (.+)/u)[1];
 
+test.afterEach(async ({ page }) => {
+  // Assertions are complete; late virtual-host responses may be cancelled at teardown.
+  await page.unrouteAll({ behavior: "ignoreErrors" });
+});
+
 test("image dimensions work under production CSP on direct pages and dialogs", async ({ page, baseURL }) => {
   const origin = "https://csp-fixture.example";
   await page.addInitScript(() => {
