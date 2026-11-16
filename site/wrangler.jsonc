@@ -12,7 +12,8 @@
   },
   "main": "worker/index.mjs",
   "vars": {
-    "METRICS_ORIGIN": "https://www.xgif.cn"
+    "METRICS_ORIGIN": "https://www.xgif.cn",
+    "FAVORITE_METRICS_ENABLED": "true"
   },
   "d1_databases": [
     {
@@ -20,6 +21,32 @@
       "database_name": "xgif-engagement",
       "database_id": "97b6efcc-3b64-4e37-9008-70da8a1d8beb",
       "migrations_dir": "migrations"
+    }
+  ],
+  "ratelimits": [
+    {
+      "name": "FAVORITE_IP_LIMIT",
+      "namespace_id": "2026111601",
+      "simple": {
+        "limit": 30,
+        "period": 60
+      }
+    },
+    {
+      "name": "FAVORITE_CONTENT_LIMIT",
+      "namespace_id": "2026111602",
+      "simple": {
+        "limit": 6,
+        "period": 60
+      }
+    },
+    {
+      "name": "FAVORITE_WRITE_LIMIT",
+      "namespace_id": "2026111603",
+      "simple": {
+        "limit": 120,
+        "period": 60
+      }
     }
   ]
 }

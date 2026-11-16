@@ -136,3 +136,5 @@ M4 Ollama 保持 loopback 监听；可用 `XGIF_EMBEDDING_SSH_TARGET` 与 `XGIF_
 ## 收藏操作统计
 
 本地收藏列表仍保存在访客浏览器；正式站点仅将主动收藏／取消的内容 ID、类型和动作发送到同源接口，按 UTC 日汇总到 Cloudflare D1，不采集个人收藏夹。操作次数不能当作收藏人数、净收藏总数或直接用于相关推荐。AI 和站长可在 `site/` 执行 `npm run stats:favorites -- 30`，或在 Cloudflare D1 控制台查询 `xgif-engagement`。免费额度、数据口径、停用方式见 [ADR-026](../site/docs/decisions/ADR-026-favorite-action-statistics.md)。
+
+收藏接口的限流阈值、近似计数限制及紧急停写／停流步骤见 ADR-026 的“接口防滥用”。正常收藏无需登录或验证码；超限只会丢弃统计，不清除浏览器收藏。

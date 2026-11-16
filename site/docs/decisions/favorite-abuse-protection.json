@@ -1,0 +1,29 @@
+{
+  "checkedAt": "2026-11-16",
+  "zone": "xgif.cn",
+  "zonePlan": "Free Website",
+  "managedVia": "Cloudflare dashboard; existing Wrangler OAuth cannot manage WAF",
+  "rateLimit": {
+    "id": "3364a8a03d9d46cf94a615c8603be35a",
+    "name": "R2 图片与收藏接口单 IP 限速",
+    "previousName": "R2 图片单 IP 限速",
+    "previousExpression": "starts_with(http.request.uri.path, \"/memes/\") and not cf.client.bot",
+    "expression": "(starts_with(http.request.uri.path, \"/memes/\") and not cf.client.bot) or (http.request.uri.path eq \"/api/favorites/events\")",
+    "characteristics": [
+      "IP"
+    ],
+    "requestsPerPeriod": 200,
+    "periodSeconds": 10,
+    "mitigationSeconds": 10,
+    "action": "block",
+    "enabled": true
+  },
+  "customRule": {
+    "id": "2050a0e1f8e44711bb68cdf6b41aba4a",
+    "name": "收藏接口非法请求拦截",
+    "expression": "(http.request.uri.path eq \"/api/favorites/events\") and ((http.request.method ne \"POST\") or not any(http.request.headers[\"origin\"][*] eq \"https://www.xgif.cn\") or not starts_with(lower(http.request.headers[\"content-type\"][0]), \"application/json\") or (http.request.uri.query ne \"\"))",
+    "action": "block",
+    "enabled": true
+  },
+  "rollback": "Keep protection during normal frontend rollbacks. To undo this WAF-only change: restore prior rateLimit expression/name and remove only the customRule with the recorded ID. Never overwrite the pre-existing R2 rules."
+}

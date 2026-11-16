@@ -4,11 +4,11 @@ test.beforeEach(async ({ page }) => {
   await page.route("https://img.xgif.cn/**", route => route.fulfill({ contentType: "image/svg+xml", body: '<svg xmlns="http://www.w3.org/2000/svg" width="600" height="600"><rect width="600" height="600" fill="#bac7ae"/></svg>' }));
 });
 
-test("successful local favorites survive failed reporting; only explicit add and remove actions are sent", async ({ page }) => {
+for (const failureStatus of [429, 503]) test(`successful local favorites survive reporting ${failureStatus}; only explicit add and remove actions are sent`, async ({ page }) => {
   const sent = [];
   await page.route("**/api/favorites/events", route => {
     sent.push(route.request().postDataJSON());
-    return route.fulfill({ status: 503 });
+    return route.fulfill({ status: failureStatus });
   });
   await page.goto("/20261112-6ix8");
   // Exercise the production-only sender against a controlled failing endpoint.
