@@ -33,7 +33,8 @@
     "content:sync": "node --disable-warning=ExperimentalWarning content-sync-cli.js",
     "image:check": "node image-cli.js check",
     "image:upload": "node image-cli.js upload",
-    "image:series": "node image-cli.js check"
+    "image:series": "node image-cli.js check",
+    "image:media": "node image-media-cli.js"
   },
   "engines": {
     "node": ">=22.5.0"

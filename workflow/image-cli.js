@@ -21,7 +21,7 @@ export async function inspectImageFile(file) {
   if (!extension) throw new Error("仅支持 JPEG、PNG、GIF 和 WebP。");
   const { width, height } = metadata.autoOrient;
   if (width < 160 || height < 160 || width > 6000 || height > 6000) throw new Error("图片单边必须在 160–6000 像素之间。");
-  return { buffer, width, height, extension, mime: `image/${metadata.format}`, byteLength: buffer.length,
+  return { buffer, width, height, animated: (metadata.pages || 1) > 1, extension, mime: `image/${metadata.format}`, byteLength: buffer.length,
     sha256: createHash("sha256").update(buffer).digest("hex") };
 }
 

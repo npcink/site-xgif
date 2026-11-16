@@ -3,7 +3,7 @@ export const MAX_GALLERY_IMAGES = 12;
 /** Read legacy single images and ordered galleries through the same interface. */
 export function galleryImages(data) {
   if (Array.isArray(data.images) && data.images.length) return data.images.filter((image) => image && typeof image.src === "string");
-  return data.image ? [{ src: data.image, width: data.width, height: data.height, altText: data.altText }] : [];
+  return data.image ? [{ src: data.image, width: data.width, height: data.height, altText: data.altText, ...(typeof data.animated === "boolean" ? { animated: data.animated } : {}) }] : [];
 }
 
 export function validateGalleryImages(images) {
@@ -23,6 +23,7 @@ export function validateGalleryImages(images) {
       src,
       ...(Number.isInteger(image.width) && image.width > 0 ? { width: image.width } : {}),
       ...(Number.isInteger(image.height) && image.height > 0 ? { height: image.height } : {}),
+      ...(typeof image.animated === "boolean" ? { animated: image.animated } : {}),
       ...(typeof image.altText === "string" ? { altText: image.altText.trim().slice(0, 160) } : {}),
     };
   });
