@@ -75,9 +75,12 @@ test("homepage discovery distinguishes featured filtering from full-site search"
   await expect(page.locator('[data-home-count="images"]')).toHaveText("06");
   const homeImageMatches = await page.locator(".home-feed .image-card").evaluateAll((cards) =>
     cards.filter((card) => card.dataset.search.includes("ai")).length);
+  const homeArticleMatches = await page.locator(".home-feed .article-card").evaluateAll((cards) =>
+    cards.filter((card) => card.dataset.search.includes("ai")).length);
+  const homeMatches = homeImageMatches + homeArticleMatches;
   await input.fill("AI");
-  await expect(page.locator("[data-home-visible-count]")).toHaveText(String(homeImageMatches));
-  await expect(page.locator('[data-home-section="articles"]').first()).toBeHidden();
+  await expect(page.locator("[data-home-visible-count]")).toHaveText(String(homeMatches));
+  await expect(page.locator('[data-home-section="articles"]:visible')).toHaveCount(homeArticleMatches);
   await expect(page.locator('[data-home-count="images"]')).toHaveText(String(homeImageMatches).padStart(2, "0"));
   await expect(page.locator("[data-home-global-search]")).toHaveAttribute("href", "/search?q=AI");
   await input.press("Enter");
@@ -85,14 +88,14 @@ test("homepage discovery distinguishes featured filtering from full-site search"
   const searchMatches = await page.locator("[data-search-item]").evaluateAll((cards) =>
     cards.filter((card) => card.dataset.search.includes("ai")).length);
   expect(searchMatches).toBeGreaterThan(0);
-  expect(searchMatches).toBeGreaterThanOrEqual(homeImageMatches);
+  expect(searchMatches).toBeGreaterThanOrEqual(homeMatches);
   await expect(page.locator("[data-visible-count]")).toHaveText(String(searchMatches));
   await expect(page.locator("[data-search-item]:visible")).toHaveCount(searchMatches);
   await page.goBack();
   await expect(page).toHaveURL(/\/$/);
   await expect(input).toHaveValue("AI");
-  await expect(page.locator("[data-home-visible-count]")).toHaveText(String(homeImageMatches));
-  await expect(page.locator('[data-home-section="articles"]').first()).toBeHidden();
+  await expect(page.locator("[data-home-visible-count]")).toHaveText(String(homeMatches));
+  await expect(page.locator('[data-home-section="articles"]:visible')).toHaveCount(homeArticleMatches);
   await expect(page.locator('[data-home-count="images"]')).toHaveText(String(homeImageMatches).padStart(2, "0"));
 });
 

@@ -14,6 +14,13 @@ const rawArticleHtml = /<(?!https?:\/\/)\s*(?:\/?\s*[A-Za-z][^>]*|!--[\s\S]*?--)
 
 const contentRoot = new URL("../src/content/", import.meta.url);
 
+test("built articles preserve literal punctuation from the original text", async () => {
+  const source = await readFile(new URL("articles/20260725-62f5.md", contentRoot), "utf8");
+  const html = await readFile(new URL("../dist/20260725-62f5/index.html", import.meta.url), "utf8");
+  assert.ok(source.includes("---我妈以前是针织厂的"));
+  assert.ok(html.includes("<p>---我妈以前是针织厂的"), "渲染不能把原文的连续连字符改成破折号");
+});
+
 test("public summaries describe content and publication holds remain drafts", async () => {
   for (const { file, text } of await frontmatter("articles")) {
     if (field(text, "publicationHold") === "true") assert.equal(field(text, "draft"), "true", file);

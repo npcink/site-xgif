@@ -42,9 +42,16 @@ test("image dialogs retain both recommendation types and avoid already viewed co
   expect(errors).toEqual([]);
 });
 
-test("article dialogs retain images and direct navigation preserves seen history", async ({ page }) => {
+async function openArticleFromArchive(page, id) {
   await page.goto("/articles");
-  await page.locator('a[data-detail-link][href="/20260722-9c7n"]').first().click();
+  const link = page.locator(`a[data-detail-link][href="/${id}"]`).first();
+  await page.getByRole("textbox", { name: "筛选文章" }).fill((await link.textContent()).trim());
+  await expect(link).toBeVisible();
+  await link.click();
+}
+
+test("article dialogs retain images and direct navigation preserves seen history", async ({ page }) => {
+  await openArticleFromArchive(page, "20260722-9c7n");
   const dialog = page.locator("[data-detail-dialog]");
   await expect(dialog).toHaveAttribute("aria-busy", "false");
   await expect(dialog.getByRole("heading", { name: "接着看图片" })).toBeVisible();
@@ -72,8 +79,7 @@ test("articles show the full summary above the body and tags after it", async ({
 
   await page.goto("/20260722-1x4w");
   await checkReadingOrder(page.locator("main .article-detail"));
-  await page.goto("/articles");
-  await page.locator('a[data-detail-link][href="/20260722-1x4w"]').first().click();
+  await openArticleFromArchive(page, "20260722-1x4w");
   const dialog = page.locator("[data-detail-dialog]");
   await expect(dialog).toHaveAttribute("aria-busy", "false");
   await checkReadingOrder(dialog.locator(".article-detail"));
