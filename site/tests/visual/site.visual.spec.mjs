@@ -162,7 +162,7 @@ test("image dialog matches the approved visual baseline", async ({ page }, testI
     animations: "disabled",
     fullPage: false,
     maskColor: "#d9d4ca",
-    mask: [page.locator(".detail-dialog-body > .image-detail > .related-section")],
+    mask: [page.locator(".detail-dialog-body .related-section")],
   });
 });
 
