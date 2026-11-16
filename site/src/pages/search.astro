@@ -6,19 +6,19 @@ import { pageTitle } from "../config/site";
 import BaseLayout from "../layouts/BaseLayout.astro";
 import { sortByDate } from "../lib/content";
 
-const articles = sortByDate((await getCollection("articles")).filter((entry) => !entry.data.draft));
+const articles = sortByDate((await getCollection("articles")).filter((entry) => !entry.data.draft && !entry.data.publicationHold));
 const images = sortByDate(
   (await getCollection("images")).filter((entry) => !entry.data.draft && entry.data.public),
 );
 ---
 
-<BaseLayout title={pageTitle("搜索")} description="搜索文章、图片、标签与来源。" noindex>
+<BaseLayout title={pageTitle("搜索")} description="搜索文章原文、图片说明、标签与来源。" noindex>
   <section class="search-page">
     <p class="section-kicker">SEARCH / 搜索</p>
     <h1>想找什么？</h1>
     <label class="search-page-input">
       <span>⌕</span>
-      <input data-filter-input placeholder="输入文章、图片、标签或来源…" autofocus aria-label="搜索内容" />
+      <input data-filter-input placeholder="输入文章正文、图片说明、标签或来源…" autofocus aria-label="搜索内容" />
       <button type="button" data-clear aria-label="清空搜索">×</button>
     </label>
     <p class="filter-count">找到 <span data-visible-count>{articles.length + images.length}</span> 条内容</p>

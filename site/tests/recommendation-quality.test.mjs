@@ -9,6 +9,7 @@ import {
 const entry = ({
   id,
   title,
+  body = "",
   summary = "",
   tags = [],
   mood = [],
@@ -19,6 +20,7 @@ const entry = ({
   public: isPublic = true,
 }) => ({
   id,
+  body,
   data: {
     contentId: id,
     title,
@@ -33,77 +35,21 @@ const entry = ({
   },
 });
 
-test("rare shared tags outrank broad shared tags", () => {
-  const source = entry({
-    id: "source",
-    title: "校园里的哲学困惑",
-    tags: ["生活", "哲学"],
-  });
-  const broad = entry({ id: "broad", title: "普通生活记录", tags: ["生活"] });
-  const rare = entry({ id: "rare", title: "阅读哲学后的变化", tags: ["哲学"] });
-  const background = [
-    entry({ id: "life-1", title: "生活一", tags: ["生活"] }),
-    entry({ id: "life-2", title: "生活二", tags: ["生活"] }),
-    entry({ id: "life-3", title: "生活三", tags: ["生活"] }),
-  ];
-
-  const ranked = rankRecommendationCandidates(source, [broad, rare, ...background]);
-  assert.equal(ranked[0].id, "rare");
-  assert.ok(ranked[0].tag > ranked.find((item) => item.id === "broad").tag);
+test("original body overlap relates articles while all generated metadata is ignored", () => {
+  const source = entry({ id: "source", title: "服务器", body: "军训树荫下的游泳课记忆，那个炎热午后多年后仍未忘记。", tags: ["科技"] });
+  const related = entry({ id: "related", title: "无关标题", body: "多年后仍未忘记的青春记忆，炎热午后的树荫和游泳课。", tags: ["美食"] });
+  const unrelated = entry({ id: "unrelated", title: "服务器", summary: "军训树荫下的游泳课记忆", body: "硬盘主机断电后的数据备份恢复方法。", tags: ["科技"] });
+  const ranked = rankRecommendationCandidates(source, [unrelated, related]);
+  assert.equal(ranked[0].id, "related"); assert.ok(ranked[0].lexical > ranked[1].lexical);
+  for (const item of [source, related, unrelated]) Object.assign(item.data, { title: "被新模型完全重写", summary: "新摘要", description: "新描述", tags: ["新标签"], category: "新分类", mood: ["悲伤"], scenes: ["群聊"], altText: "新图注" });
+  assert.deepEqual(rankRecommendationCandidates(source, [unrelated, related]).map(({ id, score }) => ({ id, score })), ranked.map(({ id, score }) => ({ id, score })));
 });
 
-test("semantic title and summary overlap can relate content without a shared tag", () => {
-  const source = entry({
-    id: "source",
-    title: "军训树荫下的游泳课记忆",
-    summary: "多年后仍记得那个炎热午后。",
-    tags: ["校园"],
-  });
-  const semantic = entry({
-    id: "semantic",
-    title: "炎热午后的树荫",
-    summary: "一段多年后仍未忘记的青春记忆。",
-    tags: ["回忆"],
-  });
-  const unrelated = entry({
-    id: "unrelated",
-    title: "服务器硬盘与备份",
-    summary: "一次运维事故复盘。",
-    tags: ["科技"],
-  });
-
-  const ranked = rankRecommendationCandidates(source, [unrelated, semantic]);
-  assert.equal(ranked[0].id, "semantic");
-  assert.ok(ranked[0].lexical > ranked[1].lexical);
-});
-
-test("image mood and scene text participates in cross-content ranking", () => {
-  const image = entry({
-    id: "image",
-    title: "无语小熊",
-    tags: ["反应图"],
-    mood: ["无语", "吐槽"],
-    scenes: ["群聊", "回应质疑"],
-  });
-  const related = entry({
-    id: "related",
-    title: "群聊里令人无语的回应",
-    summary: "面对质疑时的一次吐槽。",
-    tags: ["生活"],
-  });
-  const unrelated = entry({
-    id: "unrelated",
-    title: "菜市场里的童年味道",
-    summary: "回忆爷爷奶奶做饭。",
-    tags: ["回忆"],
-  });
-
-  const selected = selectContentRecommendations(image, [unrelated, related], {
-    limit: 1,
-    relatedSlots: 1,
-    allowSurprise: false,
-  });
-  assert.equal(selected[0].data.contentId, "related");
+test("image descriptions, moods, tags, scenes and body captions supply no lexical evidence", () => {
+  const image = entry({ id: "image", title: "无语小熊", body: "群聊里的回应", mood: ["无语"], scenes: ["群聊"] });
+  image.collection = "images";
+  const related = entry({ id: "related", title: "无语小熊", body: "无语小熊群聊里的回应" });
+  assert.equal(rankRecommendationCandidates(image, [related])[0].lexical, 0);
 });
 
 test("recommendations exclude drafts, private entries, self, and duplicates", () => {
@@ -116,20 +62,21 @@ test("recommendations exclude drafts, private entries, self, and duplicates", ()
     tags: ["生活"],
     public: false,
   });
+  const held = entry({ id: "held", title: "暂缓公开" }); held.data.publicationHold = true;
 
   const selected = selectContentRecommendations(
     source,
-    [source, draft, privateEntry, published, published],
+    [source, draft, privateEntry, held, published, published],
     { limit: 3 },
   );
   assert.deepEqual(selected.map((item) => item.data.contentId), ["published"]);
 });
 
 test("the surprise slot is deterministic while the first two remain relevance-led", () => {
-  const source = entry({ id: "source", title: "成长与校园", tags: ["成长"] });
+  const source = entry({ id: "source", title: "成长与校园", body: "成长校园学习", tags: ["成长"] });
   const candidates = [
-    entry({ id: "related-1", title: "成长一", tags: ["成长"] }),
-    entry({ id: "related-2", title: "成长二", tags: ["成长"] }),
+    entry({ id: "related-1", title: "成长一", body: "成长校园学习一", tags: ["成长"] }),
+    entry({ id: "related-2", title: "成长二", body: "成长校园学习二", tags: ["成长"] }),
     entry({ id: "surprise-1", title: "美食", tags: ["美食"] }),
     entry({ id: "surprise-2", title: "科技", tags: ["科技"] }),
   ];
@@ -163,4 +110,27 @@ test("a thresholded image manifest can intentionally show fewer or zero results"
   manifest.recommendations.source.articles = [];
   assert.equal(manifestRecommendationOptions(manifest, "source", "articles").preferredOnly, true);
   assert.equal(manifestRecommendationOptions({ recommendations: manifest.recommendations }, "source", "images").preferredOnly, false);
+});
+
+test("source-grounded manifests are authoritative for article lists too, including intentional empties", () => {
+  const source = entry({ id: "source", body: "同一正文", title: "标题" });
+  const candidates = [entry({ id: "one", body: "同一正文", title: "标题" })];
+  const manifest = { mode: "rules", selection: { evidenceVersion: "original-sources-v2" }, recommendations: { source: { articles: [], images: [] } } };
+  assert.deepEqual(selectContentRecommendations(source, candidates, manifestRecommendationOptions(manifest, "source", "articles")), []);
+});
+
+test("all fallback paths preserve groups for missing, legacy, partial and deleted recommendation lists", () => {
+  const make = (id, group, extra = {}) => ({ collection: "articles", id, body: "相同的原文主题", data: { contentId: id, recommendationGroup: group, pubDate: new Date("2026-11-13"), ...extra } });
+  const adult = make("adult", "adult-humor"); const general = make("general", "general");
+  const same = make("same", "adult-humor");
+  for (const manifest of [null, { recommendations: {} }, { recommendations: { adult: {} } },
+    { recommendations: { adult: { articles: ["general", "deleted"] } } }]) {
+    for (const options of [{}, { relatedSlots: 0 }, { allowSurprise: false }, { relatedSlots: 0, allowSurprise: false }]) {
+      const select = (candidates) => selectContentRecommendations(adult, candidates, { ...manifestRecommendationOptions(manifest, "adult", "articles"), ...options });
+      assert.deepEqual(select([general]), []);
+      assert.deepEqual(select([general, same]).map(e => e.id), ["same"]);
+      assert.deepEqual(select([general, make("hidden", "adult-humor", { publicationHold: true })]), []);
+    }
+  }
+  assert.deepEqual(selectContentRecommendations(general, [adult]), []);
 });

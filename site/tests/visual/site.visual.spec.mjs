@@ -155,9 +155,14 @@ test("homepage matches the approved visual baseline", async ({ page }, testInfo)
 test("image dialog matches the approved visual baseline", async ({ page }, testInfo) => {
   await openImageDialog(page);
 
+  // Recommendation cards are data-owned and intentionally change when the
+  // original-evidence manifest is rebuilt. Keep the dialog shell and primary
+  // image under visual review without making content selection a layout baseline.
   await expect(page).toHaveScreenshot(`image-dialog-${testInfo.project.name}.png`, {
     animations: "disabled",
     fullPage: false,
+    maskColor: "#d9d4ca",
+    mask: [page.locator(".detail-dialog-body .related-section")],
   });
 });
 

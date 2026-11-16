@@ -1,3 +1,4 @@
+import { planRecommendationPublication, verifyRecommendationRef } from "./publication-projection.js";
 import { readFile, realpath } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -29,7 +30,7 @@ export async function planContentSync({ repoRoot, files }) {
   for (const file of bundle.files) {
     if (await realpath(path.join(repoRoot, file)) !== path.join(root, file)) throw new Error(`拒绝同步符号链接：${file}`);
   }
-  return bundle;
+  return planRecommendationPublication({ repoRoot, bundle });
 }
 
 export async function runContentSync({ repoRoot, files, apply = false, retry = "", createPullRequest = ensureGitHubPullRequest }) {
@@ -41,6 +42,7 @@ export async function runContentSync({ repoRoot, files, apply = false, retry = "
     if (retry) {
       const referenceReceipt = (await receipts.list()).findLast((record) => record.branch === retry);
       if (!referenceReceipt) throw new Error("没有这个分支的本机发布回执，请先核实 GitHub 和本地分支。");
+      await verifyRecommendationRef(repoRoot, referenceReceipt.commitSha);
       result = referenceReceipt.pushOk ? {
         branch: retry, commitSha: referenceReceipt.commitSha, push: { ok: true, attempted: false },
       } : await retryPublicationBatch({
@@ -60,6 +62,7 @@ export async function runContentSync({ repoRoot, files, apply = false, retry = "
         repoRoot,
         files: bundle.files,
         expectedFileSha256: bundle.expectedFileSha256,
+        expectedBaseCommit: bundle.expectedBaseCommit,
         message: "Publish selected XGIF content",
         onPrepared: async ({ branch, commitSha }) => {
           const records = await receipts.appendBatch({ action: "sync", branch, commitSha, state: "prepared", items: bundle.items });

@@ -37,12 +37,14 @@ function response(payload, { ok = true, status = 200 } = {}) {
 function entry(id, {
   title = id,
   summary = "",
+  body = "",
   tags = [],
   pubDate = "2026-07-24",
   recommendationGroup = "general",
 } = {}) {
   return {
     id,
+    body,
     data: {
       contentId: id,
       title,
@@ -99,8 +101,8 @@ test("hybrid ranking can promote semantic similarity over a shared broad tag", (
 });
 
 test("manifest excludes drafts and offers a deterministic surprise slot", () => {
-  const source = entry("source", { title: "远方", tags: ["旅行"] });
-  const related = entry("related", { title: "火车旅行", tags: ["旅行"] });
+  const source = entry("source", { title: "远方", body: "火车旅行沿途风景", tags: ["旅行"] });
+  const related = entry("related", { title: "火车旅行", body: "火车旅行沿途风景", tags: ["旅行"] });
   const surprise = entry("surprise", { title: "厨房", tags: ["饮食"] });
   const draft = {
     ...entry("draft", { title: "草稿", tags: ["旅行"] }),
@@ -362,7 +364,7 @@ draft: false
   assert.equal(recovered.status.degraded, false);
 });
 
-test("recommendation status detects changed public content and refreshes atomically", async () => {
+test("recommendation status ignores generated title changes but detects original body changes", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "xgif-recommendation-status-"));
   const articlesDir = path.join(root, "site", "src", "content", "articles");
   const articlePath = path.join(articlesDir, "one.md");
@@ -405,6 +407,8 @@ draft: false
   assert.equal(unchanged.status.generatedAt, "2026-07-24T00:00:00.000Z");
 
   await writeFile(articlePath, (await readFile(articlePath, "utf8")).replace("第一版", "第二版"), "utf8");
+  assert.equal((await getRecommendationStatus({ repoRoot: root, env: {} })).stale, false);
+  await writeFile(articlePath, (await readFile(articlePath, "utf8")) + "后来新增的原始正文。", "utf8");
   const stale = await getRecommendationStatus({ repoRoot: root, env: {} });
   assert.equal(stale.stale, true);
 

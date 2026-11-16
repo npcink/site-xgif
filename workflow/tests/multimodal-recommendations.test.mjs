@@ -8,6 +8,7 @@ import {
   buildRecommendationManifest, generateRecommendationManifest, getEmbeddingConfig,
   loadPublicRecommendationContent, MULTIMODAL_INPUT_VERSION, refreshRecommendationManifest,
   requestEmbeddings, writeRecommendationManifest, getRecommendationStatus,
+  articleEvidenceChunks, TEXT_CHUNK_SIZE, recommendationSourceHash,
 } from "../recommendation-engine.js";
 import { sampleImage } from "./fixtures/image-sample.mjs";
 
@@ -56,7 +57,7 @@ function fakeStore() {
 
 const env = { XGIF_EMBEDDING_PROVIDER: "ollama", XGIF_EMBEDDING_BASE_URL: "http://localhost:11434", XGIF_EMBEDDING_MODEL: "test-vl" };
 
-test("all gallery members enter one model space; image bytes, captions, model digest and input version invalidate cache", async () => {
+test("all gallery members enter one model space; image bytes, model digest and input version invalidate cache; generated captions do not", async () => {
   const root = await fixture(), store = fakeStore();
   const original = await readFile(path.join(root, "site/src/content/articles/one.md"));
   let digest = "a".repeat(64), requests = 0;
@@ -92,15 +93,15 @@ test("all gallery members enter one model space; image bytes, captions, model di
   assert.equal(requests, 5);
   const galleryFile = path.join(root, "site/src/content/images/one.md");
   await writeFile(galleryFile, (await readFile(galleryFile, "utf8")).replace('"/images/two.png"}', '"/images/two.png","altText":"不同描述"}'));
-  assert.equal((await run()).summary.cacheHits, 1);
-  assert.equal(requests, 7);
+  assert.equal((await run()).summary.cacheHits, 2);
+  assert.equal(requests, 5);
   // An entry from another input pipeline cannot masquerade as a valid cache hit.
   store.records.get("test-vl:image").contentSha256 = "old-pipeline-fingerprint";
   assert.equal((await run()).summary.cacheHits, 1);
-  assert.equal(requests, 9);
+  assert.equal(requests, 7);
   digest = "b".repeat(64);
   assert.equal((await run()).summary.cacheHits, 0);
-  assert.equal(requests, 12);
+  assert.equal(requests, 10);
   assert.ok(original.equals(await readFile(path.join(root, "site/src/content/articles/one.md"))));
   const changedModel = { ...env, XGIF_EMBEDDING_MODEL: "another-model" };
   assert.equal((await getRecommendationStatus({ repoRoot: root, env: changedModel })).stale, true);
@@ -168,4 +169,72 @@ test("a response with changing dimensions cannot persist partial cache updates",
       : response({ embeddings: [++calls === 1 ? [1, 0] : [1, 0, 0]] }),
   }), { code: "EMBEDDING_RESPONSE_INVALID" });
   assert.equal(store.records.size, 0);
+});
+
+test("changing every AI field leaves source hashes, vector cache and recommendation lists unchanged", async () => {
+  const root = await fixture(), store = fakeStore(); let requests = 0;
+  const fetchImpl = async (url) => url.endsWith("/api/tags")
+    ? response({ models: [{ name: "test-vl", digest: "c".repeat(64), capabilities: ["embedding", "vision"] }] })
+    : (requests++, response({ embeddings: [[1, 0]] }));
+  const options = { repoRoot: root, store, env, fetchImpl, requireEmbeddings: true, generatedAt: "2026-11-13T00:00:00Z" };
+  const before = await generateRecommendationManifest(options); await writeRecommendationManifest(root, before.manifest);
+  const sourceHash = recommendationSourceHash(await loadPublicRecommendationContent(root, { multimodal: true }));
+  for (const file of ["site/src/content/articles/one.md", "site/src/content/images/one.md"]) {
+    const full = path.join(root, file); let raw = await readFile(full, "utf8");
+    raw = raw.replace(/^(title|summary|description|tags):.*\n/gmu, "").replace("\n---\n", '\ntitle: "完全换了主题的新标题"\nsummary: "新摘要"\ndescription: "新图述"\ntags: ["任意标签"]\ncategory: "新分类"\nmood: ["开心"]\nscenes: ["回应群聊"]\naltText: "新说明"\ncoverAlt: "新封面说明"\n---\n');
+    if (file.includes("/images/")) raw = raw.replace('"/images/two.png"}', '"/images/two.png","altText":"新的组图说明"}');
+    await writeFile(full, raw);
+  }
+  assert.equal((await getRecommendationStatus({ repoRoot: root, env })).stale, false);
+  assert.equal(recommendationSourceHash(await loadPublicRecommendationContent(root, { multimodal: true })), sourceHash);
+  const next = await generateRecommendationManifest(options);
+  assert.equal(next.summary.cacheHits, 2); assert.equal(requests, 3);
+  assert.deepEqual(next.manifest, before.manifest);
+  const article = path.join(root, "site/src/content/articles/one.md");
+  await writeFile(article, (await readFile(article, "utf8")).replace("draft: false", 'recommendationGroup: "adult-humor"\ndraft: false'));
+  assert.equal((await getRecommendationStatus({ repoRoot: root, env })).stale, true);
+  const changedGroup = await generateRecommendationManifest(options);
+  assert.equal(changedGroup.summary.cacheHits, 2); assert.equal(requests, 3);
+  assert.notEqual(changedGroup.manifest.sourceHash, sourceHash);
+  // Match the frontend's existing group constraint for preferred image lists.
+  assert.deepEqual(changedGroup.manifest.recommendations.article.images, []);
+  const hashAfterGroup = changedGroup.manifest.sourceHash;
+  await writeFile(article, (await readFile(article, "utf8")).replace("\n---\n", '\npubDate: "2025-01-01"\n---\n'));
+  const changedDate = await generateRecommendationManifest(options);
+  assert.equal(changedDate.summary.cacheHits, 2); assert.equal(requests, 3);
+  assert.notEqual(changedDate.manifest.sourceHash, hashAfterGroup);
+  await writeFile(article, (await readFile(article, "utf8")).replace("\n---\n", '\npublicationHold: true\n---\n'));
+  assert.equal((await generateRecommendationManifest(options)).summary.documents, 1);
+});
+
+test("a legacy text endpoint cannot use generated descriptions instead of image pixels", async () => {
+  const root = await fixture(); let calls = 0;
+  await assert.rejects(generateRecommendationManifest({ repoRoot: root, store: fakeStore(), requireEmbeddings: true,
+    env: { XGIF_EMBEDDING_BASE_URL: "http://localhost:11434/v1", XGIF_EMBEDDING_MODEL: "text-only" },
+    fetchImpl: async () => { calls++; throw Error("Should not call provider"); },
+  }), { code: "EMBEDDING_VISION_UNAVAILABLE" });
+  assert.equal(calls, 0);
+});
+
+test("full body chunks preserve Unicode and late paragraphs affect the pooled vector", async () => {
+  const original = "🦊原文".repeat(TEXT_CHUNK_SIZE) + "最后的备份事故";
+  const chunks = articleEvidenceChunks(original);
+  assert.equal(chunks.map(c => c.text).join(""), original);
+  assert.ok(chunks.every(c => Array.from(c.text).length <= TEXT_CHUNK_SIZE));
+  const root = await fixture(), store = fakeStore();
+  const file = path.join(root, "site/src/content/articles/one.md");
+  const body = "甲".repeat(TEXT_CHUNK_SIZE) + "乙".repeat(TEXT_CHUNK_SIZE);
+  await writeFile(file, (await readFile(file, "utf8")).replace("正文不得改动。", body));
+  const seen = [];
+  const run = () => generateRecommendationManifest({ repoRoot: root, store, env, requireEmbeddings: true, fetchImpl: async (url, request) => {
+    if (url.endsWith("/api/tags")) return response({ models: [{ name: "test-vl", digest: "d".repeat(64), capabilities: ["embedding", "vision"] }] });
+    const input = JSON.parse(request.body).input[0]; seen.push(input);
+    return response({ embeddings: [typeof input === "string" && input.includes("乙") ? [0, 1] : [1, 0]] });
+  } });
+  await run(); assert.ok(seen.some(input => typeof input === "string" && input.includes("乙")));
+  const vector = store.records.get("test-vl:article").vector;
+  assert.ok(Math.abs(vector[0] - vector[1]) < 0.01);
+  await writeFile(file, (await readFile(file, "utf8")).replaceAll("乙", "丙"));
+  const changed = await run(); assert.equal(changed.summary.cacheHits, 1);
+  assert.notDeepEqual(store.records.get("test-vl:article").vector, vector);
 });

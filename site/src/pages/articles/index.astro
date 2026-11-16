@@ -5,7 +5,7 @@ import { pageTitle } from "../../config/site";
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import { sortByDate } from "../../lib/content";
 
-const articles = sortByDate((await getCollection("articles")).filter((entry) => !entry.data.draft));
+const articles = sortByDate((await getCollection("articles")).filter((entry) => !entry.data.draft && !entry.data.publicationHold));
 const sources = Array.from(new Set(articles.map((entry) => entry.data.source)));
 ---
 
@@ -20,9 +20,9 @@ const sources = Array.from(new Set(articles.map((entry) => entry.data.source)));
     <div class="archive-toolbar">
       <label class="inline-search">
         <span>⌕</span>
-        <input data-filter-input placeholder="搜索标题、来源或标签…" aria-label="筛选文章" />
+        <input data-filter-input placeholder="搜索正文、标题、来源或标签…" aria-label="筛选文章" />
       </label>
-      <div class="filter-chips">
+      <div class="filter-chips" data-filter-kind="source">
         <button class="active" data-filter="">全部来源</button>
         {sources.map((source) => <button data-filter={source.toLowerCase()}>{source}</button>)}
       </div>

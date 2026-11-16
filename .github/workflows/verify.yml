@@ -56,4 +56,5 @@ jobs:
           cache: npm
           cache-dependency-path: workflow/package-lock.json
       - run: npm ci
+      - run: node --disable-warning=ExperimentalWarning recommendation-verify.js
       - run: npm run test:all

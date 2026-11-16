@@ -1,3 +1,5 @@
+import { verifyRecommendationRef } from "./publication-projection.js";
+import { verifyRecommendationPublication } from "./recommendation-verify.js";
 import { createHash, randomUUID } from "node:crypto";
 import { execFile } from "node:child_process";
 import { copyFile, mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
@@ -59,6 +61,7 @@ export async function isolatedContentSync({
   remote = "origin",
   branch = contentSyncBranchName(),
   deleteFiles = [],
+  expectedBaseCommit = "",
   expectedContentSha256 = {},
   expectedFileSha256 = expectedContentSha256,
   expectedDeletionContentIds = {},
@@ -78,7 +81,10 @@ export async function isolatedContentSync({
 
   try {
     await git(repoRoot, ["fetch", remote, "main"]);
-    await git(repoRoot, ["worktree", "add", "-b", branch, worktreePath, baseRef]);
+    if (expectedBaseCommit && (await git(repoRoot, ["rev-parse", baseRef])).stdout.trim() !== expectedBaseCommit) {
+      throw new Error("发布基线已变化，请重新执行 dry-run；本次没有推送。");
+    }
+    await git(repoRoot, ["worktree", "add", "-b", branch, worktreePath, expectedBaseCommit || baseRef]);
     worktreeAdded = true;
 
     for (const relativeFile of relativeFiles) {
@@ -118,6 +124,7 @@ export async function isolatedContentSync({
     if (deletionFiles.length) {
       await git(worktreePath, ["rm", "--ignore-unmatch", "--", ...deletionFiles]);
     }
+    await verifyRecommendationPublication(worktreePath);
     const changedFiles = [...relativeFiles, ...deletionFiles];
     const changed = (await git(
       worktreePath,
@@ -145,6 +152,7 @@ export async function isolatedContentSync({
     await git(worktreePath, ["commit", "-m", message, "--", ...changedFiles]);
     commitCreated = true;
     commitSha = (await git(worktreePath, ["rev-parse", "HEAD"])).stdout.trim();
+    await verifyRecommendationRef(repoRoot, commitSha);
     if (typeof onPrepared === "function") {
       await onPrepared({ branch, commitSha, relativeFiles, deletionFiles, baseRef });
     }
@@ -194,6 +202,7 @@ export async function retryContentSyncPush({
   await git(repoRoot, ["show-ref", "--verify", `refs/heads/${normalizedBranch}`]);
   const commitSha = (await git(repoRoot, ["rev-parse", normalizedBranch])).stdout.trim();
   if (expectedCommitSha && commitSha !== expectedCommitSha) throw new Error("原发布分支的提交与回执不一致，已停止重试。");
+  await verifyRecommendationRef(repoRoot, commitSha);
   const push = { attempted: true, ok: false, error: "" };
   try {
     await git(repoRoot, ["push", "-u", remote, normalizedBranch], { timeoutMs: 60_000 });
