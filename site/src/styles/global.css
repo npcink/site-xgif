@@ -968,3 +968,9 @@ body.detail-dialog-open { overflow: hidden; }
   .detail-dialog-body .public-image-gallery { height: auto; }
   .detail-dialog-body .image-detail .public-image-gallery .gallery-stage { flex: none; height: min(60svh, 480px); }
 }
+
+/* Media type is independent of the mood and text filters. */
+.media-filter { display: flex; gap: 0; width: fit-content; border: 1px solid var(--ink); margin-bottom: 16px; }
+.media-filter button { padding: 10px 20px; border: 0; border-right: 1px solid var(--line); background: transparent; color: var(--ink); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+.media-filter button:last-child { border-right: 0; }
+.media-filter button.active, .media-filter button:hover { background: var(--ink); color: var(--paper); }

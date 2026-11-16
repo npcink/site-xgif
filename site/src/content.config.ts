@@ -62,8 +62,10 @@ const images = defineCollection({
     altText: z.string().max(160).optional(),
     description: z.string(),
     image: imagePath,
+    animated: z.boolean().optional(),
     images: z.array(z.object({
       src: imagePath,
+      animated: z.boolean().optional(),
       width: z.number().int().positive().optional(),
       height: z.number().int().positive().optional(),
       altText: z.string().max(160).optional(),
@@ -85,6 +87,12 @@ const images = defineCollection({
     ratio: z.enum(["wide", "tall", "square"]).default("square"),
     draft: z.boolean().default(false),
   }).superRefine((data, context) => {
+    if (!data.draft && data.public) {
+      const members = data.images || [{ animated: data.animated }];
+      if (members.some(image => typeof image.animated !== "boolean")) {
+        context.addIssue({ code: "custom", path: ["animated"], message: "公开图片须先用 image:media 核验动画帧类型" });
+      }
+    }
     if (data.images) {
       if (data.images[0].src !== data.image || new Set(data.images.map((image) => image.src)).size !== data.images.length) {
         context.addIssue({ code: "custom", path: ["images"], message: "图集首张必须为封面，且不能包含重复图片" });

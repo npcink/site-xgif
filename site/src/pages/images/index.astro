@@ -19,6 +19,11 @@ const moods = Array.from(new Set(images.flatMap((entry) => entry.data.mood)));
   </section>
 
   <section class="archive-content">
+    <div class="media-filter" role="group" aria-label="图片类型">
+      <button type="button" data-media-filter="" aria-pressed="true" class="active">全部</button>
+      <button type="button" data-media-filter="static" aria-pressed="false">静态图</button>
+      <button type="button" data-media-filter="animated" aria-pressed="false">动图</button>
+    </div>
     <div class="archive-toolbar">
       <label class="inline-search">
         <span>⌕</span>
@@ -29,7 +34,7 @@ const moods = Array.from(new Set(images.flatMap((entry) => entry.data.mood)));
         {moods.map((mood) => <button data-filter={mood.toLowerCase()}>{mood}</button>)}
       </div>
     </div>
-    <p class="filter-count"><span data-visible-count>{images.length}</span> 张图片</p>
+    <p class="filter-count"><span data-visible-count>{images.length}</span> 项内容</p>
     <div class="masonry-grid" data-filter-list>
       {images.map((item) => <ImageCard item={item} />)}
     </div>

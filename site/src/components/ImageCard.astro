@@ -1,4 +1,5 @@
 ---
+import { imageMediaType, mediaFilterValues } from "../lib/image-media.mjs";
 import type { CollectionEntry } from "astro:content";
 import { contentHref } from "../lib/content";
 
@@ -11,6 +12,8 @@ interface Props {
 const { item, recommendation = false, hidden = false } = Astro.props;
 const imageCount = item.data.images?.length || 1;
 const href = contentHref(item);
+const mediaType = imageMediaType(item.data);
+const containsAnimation = ["animated", "mixed"].includes(mediaType);
 ---
 
 <a
@@ -20,6 +23,7 @@ const href = contentHref(item);
   data-detail-kind="image"
   data-recommendation-id={recommendation ? item.data.contentId : undefined}
   hidden={hidden}
+  data-media-types={mediaFilterValues(item.data)}
   data-search-item
   data-search={`${item.data.title} ${item.data.description} ${item.data.source} ${item.data.tags.join(" ")} ${item.data.mood.join(" ")} ${item.data.scenes.join(" ")}`.toLowerCase()}
   aria-label={`查看图片：${item.data.title}${imageCount > 1 ? `，共 ${imageCount} 张` : ""}`}
@@ -41,6 +45,6 @@ const href = contentHref(item);
     <h3>{item.data.title}</h3>
     <p>{item.data.description}</p>
   </div>
-  {imageCount > 1 && <span class="image-count">共 {imageCount} 张</span>}
+  {(imageCount > 1 || containsAnimation) && <span class="image-count">{imageCount > 1 ? `共 ${imageCount} 张${containsAnimation ? " · 含动图" : ""}` : "动图"}</span>}
   <span class="open-mark" aria-hidden="true">↗</span>
 </a>

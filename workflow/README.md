@@ -128,3 +128,11 @@ M4 Ollama 保持 loopback 监听；可用 `XGIF_EMBEDDING_SSH_TARGET` 与 `XGIF_
 `similarity.seriesTheme` 报告模型、输入版本、比较范围、缓存命中及检查状态；候选保留 `same_series`、`shared_template`、`related_theme` 和两侧原图的证据。仅仅都是猫、搞笑图或九宫格不能构成主题关系。`related_theme` 不等于同系列，最终是否合并仍由用户决定。模型请求不含标题、描述、标签、alt、原文件名和图片 URL；检查不会改动原图或内容。
 
 每次最多检查 120 张去重后的公开成员，每批 6 张，最多 20 次调用；首次扫描可能较慢并产生模型费用。超限或缺少可核验字节返回 `partial`，请求或输出异常返回 `unavailable`，不能当作“没有关联”。启用主题检查后，这两种状态同样要求上传复核。缓存按原图 SHA-256、服务、模型、提示词、输入版本与 revision 隔离。服务端模型升级时修改 `XGIF_SERIES_VISION_REVISION`；`XGIF_SERIES_THEME_REFRESH=1` 可强制重算。只有预先明确允许的 `XGIF_SERIES_VISION_REPORTED_MODEL_ALIASES` 才接受不同返回模型名，默认严格一致。
+
+## 动图识别与日常发布
+
+`image:check` / `image:upload` 返回依据原始帧数判定的 `animated`。单图写在顶层，图集写入每个成员；不按 GIF/WebP 扩展名猜测。新增图片或图集成员后，先预览 `npm run image:media`，再执行 `npm run image:media -- --apply` 补齐公开图片的事实属性。命令只更新动画属性，不修改原文、标题、来源、原图或成员顺序；缺少核验字节时停止。公开图片属性缺失会阻断构建，避免误归为静态图。混合图集同时出现在两类筛选中，保持同一个 URL。
+
+## 收藏操作统计
+
+本地收藏列表仍保存在访客浏览器；正式站点仅将主动收藏／取消的内容 ID、类型和动作发送到同源接口，按 UTC 日汇总到 Cloudflare D1，不采集个人收藏夹。操作次数不能当作收藏人数、净收藏总数或直接用于相关推荐。AI 和站长可在 `site/` 执行 `npm run stats:favorites -- 30`，或在 Cloudflare D1 控制台查询 `xgif-engagement`。免费额度、数据口径、停用方式见 [ADR-026](../site/docs/decisions/ADR-026-favorite-action-statistics.md)。

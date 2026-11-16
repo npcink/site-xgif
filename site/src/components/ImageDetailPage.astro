@@ -2,6 +2,7 @@
 import { getCollection, render, type CollectionEntry } from "astro:content";
 import ArticleRecommendations from "./ArticleRecommendations.astro";
 import ImageGallery from "./ImageGallery.astro";
+import { imageMediaType } from "../lib/image-media.mjs";
 import { galleryImages } from "../lib/image-gallery.mjs";
 import ImageRecommendations from "./ImageRecommendations.astro";
 import FavoriteButton from "./FavoriteButton.astro";
@@ -14,6 +15,7 @@ interface Props {
 
 const { item } = Astro.props;
 const images = galleryImages(item.data);
+const containsAnimation = ["animated", "mixed"].includes(imageMediaType(item.data));
 const canonicalPath = contentHref(item);
 const { Content } = await render(item);
 const allArticles = (await getCollection("articles")).filter((entry) => !entry.data.draft);
@@ -57,7 +59,7 @@ const imageRatioKey =
     </figure>
     )}
     <div class="image-detail-copy">
-      <p class="section-kicker">REACTION / {images.length > 1 ? `图集 · ${images.length} 张` : "图片详情"}</p>
+      <p class="section-kicker">REACTION / {images.length > 1 ? `图集 · ${images.length} 张${containsAnimation ? " · 含动图" : ""}` : containsAnimation ? "动图详情" : "图片详情"}</p>
       <h1>{item.data.title}</h1>
       <p class="detail-summary">{item.data.description}</p>
       <dl>

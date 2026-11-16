@@ -4,6 +4,7 @@
   const count = document.querySelector("[data-visible-count]");
   const empty = document.querySelector("[data-empty]");
   const chips = Array.from(document.querySelectorAll("[data-filter]"));
+  const mediaChips = Array.from(document.querySelectorAll("[data-media-filter]"));
   const groups = Array.from(document.querySelectorAll("[data-search-group]"));
   const clear = document.querySelector("[data-clear]");
   const pagination = document.querySelector("[data-pagination]");
@@ -15,6 +16,7 @@
   const params = new URLSearchParams(window.location.search);
   input.value = params.get("q") || "";
   let chipFilter = params.get("source") || "";
+  let mediaFilter = mediaChips.length && ["static", "animated"].includes(params.get("media")) ? params.get("media") : "";
   let currentPage = Math.max(1, Number.parseInt(params.get("page") || "1", 10) || 1);
 
   if (!chips.some((chip) => (chip.dataset.filter || "") === chipFilter)) chipFilter = "";
@@ -43,7 +45,8 @@
     const queries = [input.value.trim().toLowerCase(), chipFilter].filter(Boolean);
     const matches = items.filter((item) => {
       const searchable = item.dataset.search || "";
-      return queries.every((query) => searchable.includes(query));
+      return queries.every((query) => searchable.includes(query))
+        && (!mediaFilter || (item.dataset.mediaTypes || "").split(" ").includes(mediaFilter));
     });
     const pages = pageSize ? Math.max(1, Math.ceil(matches.length / pageSize)) : 1;
     currentPage = Math.min(currentPage, pages);
@@ -68,10 +71,17 @@
     else url.searchParams.delete("q");
     if (chipFilter) url.searchParams.set("source", chipFilter);
     else url.searchParams.delete("source");
+    if (mediaFilter) url.searchParams.set("media", mediaFilter);
+    else url.searchParams.delete("media");
     if (pageSize && currentPage > 1) url.searchParams.set("page", String(currentPage));
     else url.searchParams.delete("page");
     window.history.replaceState(window.history.state, "", url);
 
+    mediaChips.forEach((chip) => {
+      const active = (chip.dataset.mediaFilter || "") === mediaFilter;
+      chip.classList.toggle("active", active);
+      chip.setAttribute("aria-pressed", String(active));
+    });
     chips.forEach((chip) => {
       const active = (chip.dataset.filter || "") === chipFilter;
       chip.classList.toggle("active", active);
@@ -96,6 +106,11 @@
       apply();
     });
   });
+  mediaChips.forEach((chip) => chip.addEventListener("click", () => {
+    mediaFilter = chip.dataset.mediaFilter || "";
+    currentPage = 1;
+    apply();
+  }));
   pagination?.addEventListener("click", (event) => {
     const button = event.target.closest("button");
     if (!button || button.disabled) return;
