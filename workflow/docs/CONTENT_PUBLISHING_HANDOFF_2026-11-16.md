@@ -34,6 +34,7 @@
 2. 图片先执行 `npm run image:check -- /绝对路径/图片`；需要上传时执行 `npm run image:upload -- /绝对路径/图片`。相似系列必须人工确认后才合并。
 3. 新图片或图集成员完成上传后执行 `npm run image:media` 预览动画帧属性，再按计划执行 `npm run image:media -- --apply`。
 4. 在 `site` 运行前端预览，核对标题、摘要、标签位置、原文和图片顺序。
+   图片预览使用自动生成的 WebP 副本；原图仍保留原 URL。发布构建生成响应式尺寸和缩略图，不需要手工改图片台账或重算推荐；规则见 [ADR-028](../../site/docs/decisions/ADR-028-static-webp-display-images.md)。
 5. 在 `workflow` 运行 `npm run content:audit`；在 `site` 运行 `npm test`。
 6. 先针对最新主线加本批内容生成并核验推荐清单；仅改 AI 展示字段时可以复用。仅将已确认内容改为公开，再通过 `npm run content:sync -- --apply <文件>` 创建隔离内容 PR。不要使用 `git add .`。
 7. PR 合并并部署后，核对 `/build.json`、公开 URL、图片资源和页面正文。

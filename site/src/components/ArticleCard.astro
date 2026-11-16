@@ -3,11 +3,13 @@ import { render, type CollectionEntry } from "astro:content";
 import { contentHref, formatShortDate, publicArticleNote } from "../lib/content";
 
 interface Props {
+  headingLevel?: "h2" | "h3";
   article: CollectionEntry<"articles">;
   index?: number;
 }
 
 const { article, index = 0 } = Astro.props;
+const Heading = Astro.props.headingLevel || "h3";
 const accents = ["coral", "sage", "blue", "yellow"];
 const accent = accents[index % accents.length];
 const editorNote = publicArticleNote(article.data);
@@ -28,7 +30,7 @@ const { Content } = await render(article);
     <span>{article.data.source}</span>
     <time datetime={article.data.pubDate.toISOString()}>{formatShortDate(article.data.pubDate)}</time>
   </div>
-  <h3><a href={href} data-detail-link data-detail-kind="article">{article.data.title}</a></h3>
+  <Heading><a href={href} data-detail-link data-detail-kind="article">{article.data.title}</a></Heading>
   {isShortForm ? <div class="article-inline-text prose"><Content /><span data-reading-end aria-hidden="true"></span></div> : <p>{article.data.summary}</p>}
   {editorNote && <blockquote>{editorNote}</blockquote>}
   <div class="card-tags">

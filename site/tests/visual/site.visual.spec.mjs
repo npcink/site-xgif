@@ -85,6 +85,8 @@ test("homepage discovery distinguishes featured filtering from full-site search"
   await expect(page.locator("[data-home-global-search]")).toHaveAttribute("href", "/search?q=AI");
   await input.press("Enter");
   await expect(page).toHaveURL(/\/search\?q=AI$/);
+  await expect(page.locator("[data-filter-input]")).toHaveValue("AI");
+  await expect(page.locator("html")).not.toHaveAttribute("data-filter-pending");
   const searchMatches = await page.locator("[data-search-item]").evaluateAll((cards) =>
     cards.filter((card) => card.dataset.search.includes("ai")).length);
   expect(searchMatches).toBeGreaterThan(0);

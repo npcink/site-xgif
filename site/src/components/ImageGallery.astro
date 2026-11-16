@@ -1,6 +1,7 @@
 ---
+import DisplayImage from "./DisplayImage.astro";
 interface Props {
-  images: { src: string; width?: number; height?: number; altText?: string }[];
+  images: { src: string; width?: number; height?: number; altText?: string; animated?: boolean }[];
   title: string;
 }
 const { images, title } = Astro.props;
@@ -10,7 +11,7 @@ const { images, title } = Astro.props;
   <figure class="gallery-stage" data-gallery-stage>
     {images.map((image, index) => (
       <a href={image.src} target="_blank" rel="noreferrer" data-gallery-slide hidden={index !== 0} aria-label={`查看第 ${index + 1} 张原图`}>
-        <img src={image.src} alt={image.altText || `${title} · 第 ${index + 1} 张`} width={image.width} height={image.height} loading={index ? "lazy" : "eager"} decoding="async" referrerpolicy="no-referrer" />
+        <DisplayImage src={image.src} alt={image.altText || `${title} · 第 ${index + 1} 张`} width={image.width} height={image.height} animated={image.animated} detail priority={index === 0} deferred={index !== 0} />
       </a>
     ))}
   </figure>
@@ -22,7 +23,7 @@ const { images, title } = Astro.props;
   <nav class="gallery-thumbnails" aria-label="选择图集图片">
     {images.map((image, index) => (
       <a href={image.src} target="_blank" rel="noreferrer" data-gallery-index={index} aria-current={index === 0 ? "true" : undefined} aria-label={`第 ${index + 1} 张${index === 0 ? "，封面" : ""}`}>
-        <img src={image.src} alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" />
+        <DisplayImage src={image.src} alt="" width={image.width} height={image.height} thumbnail />
         <span>{index + 1}</span>
       </a>
     ))}

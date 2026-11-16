@@ -2,6 +2,7 @@
 import { getCollection, render, type CollectionEntry } from "astro:content";
 import ArticleRecommendations from "./ArticleRecommendations.astro";
 import ImageGallery from "./ImageGallery.astro";
+import DisplayImage from "./DisplayImage.astro";
 import { imageMediaType } from "../lib/image-media.mjs";
 import { galleryImages } from "../lib/image-gallery.mjs";
 import ImageRecommendations from "./ImageRecommendations.astro";
@@ -49,12 +50,13 @@ const imageRatioKey =
       class:list={[`ratio-${item.data.ratio}`]}
       data-image-ratio={imageRatioKey}
     >
-      <img
+      <DisplayImage
         src={item.data.image}
         alt={images[0]?.altText || item.data.altText || item.data.title}
         width={item.data.width}
         height={item.data.height}
-        referrerpolicy="no-referrer"
+        detail priority
+        animated={images[0]?.animated}
       />
     </figure>
     )}

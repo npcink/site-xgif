@@ -3,6 +3,13 @@
     const slides = [...gallery.querySelectorAll("[data-gallery-slide]")];
     index = Math.max(0, Math.min(slides.length - 1, index));
     gallery.dataset.current = String(index);
+    const image = slides[index]?.querySelector("img[data-gallery-src]");
+    if (image) {
+      if (image.dataset.gallerySrcset) image.srcset = image.dataset.gallerySrcset;
+      image.src = image.dataset.gallerySrc;
+      delete image.dataset.gallerySrc;
+      delete image.dataset.gallerySrcset;
+    }
     slides.forEach((slide, position) => { slide.hidden = position !== index; });
     gallery.querySelectorAll("[data-gallery-index]").forEach((thumbnail, position) => {
       if (position === index) thumbnail.setAttribute("aria-current", "true");
@@ -35,7 +42,7 @@
     if (!gallery) return;
     event.preventDefault();
     if (event.key === "Home") select(gallery, 0);
-    else if (event.key === "End") select(gallery, 11);
+    else if (event.key === "End") select(gallery, gallery.querySelectorAll("[data-gallery-slide]").length - 1);
     else step(gallery, event.key === "ArrowLeft" ? -1 : 1);
   });
   let touch = null;

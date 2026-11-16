@@ -31,7 +31,7 @@ const sources = Array.from(new Set(articles.map((entry) => entry.data.source)));
       <span data-page-summary>显示 1–{Math.min(12, articles.length)}，共 </span><span data-visible-count>{articles.length}</span> 篇文章
     </p>
     <div class="article-grid" data-filter-list>
-      {articles.map((article, index) => <ArticleCard article={article} index={index} />)}
+      {articles.map((article, index) => <ArticleCard article={article} index={index} headingLevel="h2" />)}
     </div>
     <nav class="archive-pagination" data-pagination data-page-size="12" aria-label="文章分页" hidden>
       <button type="button" data-page-prev>上一页</button>
