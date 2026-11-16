@@ -118,8 +118,10 @@ test("local metrics count actual views and recommendation clicks without uploadi
   await page.goto("/20260722-3u91");
   await expect.poll(() => page.evaluate(() => JSON.parse(sessionStorage.getItem("xgif:discovery-metrics:v1")).articleViews)).toBe(1);
   const next = page.locator("main .article-recommendation:visible").first();
+  const href = await next.getAttribute("href");
   await next.click();
-  await expect(page.locator("[data-detail-dialog]")).toHaveAttribute("aria-busy", "false");
+  await expect(page.locator("main [data-detail-content]")).toHaveAttribute("data-content-id", href.slice(1));
+  await expect.poll(() => page.evaluate(() => JSON.parse(sessionStorage.getItem("xgif:discovery-metrics:v1")).articleViews)).toBe(2);
   await page.goto("/activity");
   await expect(page.locator('[data-metric="articleViews"]')).toHaveText("2");
   await expect(page.locator('[data-metric="recommendationClicks"]')).toHaveText("1");
@@ -131,8 +133,10 @@ test("local metrics count actual views and recommendation clicks without uploadi
 test("storage denial leaves recommendations and navigation usable", async ({ page }) => {
   await page.addInitScript(() => Object.defineProperty(window, "sessionStorage", { get() { throw new Error("denied"); } }));
   await page.goto("/20260722-3u91");
-  await page.locator("main .article-recommendation:visible").first().click();
-  await expect(page.locator("[data-detail-dialog]")).toHaveAttribute("aria-busy", "false");
+  const next = page.locator("main .article-recommendation:visible").first();
+  const href = await next.getAttribute("href");
+  await next.click();
+  await expect(page.locator("main [data-detail-content]")).toHaveAttribute("data-content-id", href.slice(1));
   await page.goto("/activity");
   await expect(page.locator("[data-activity-status]")).toContainText("未允许保存记录");
 });
