@@ -82,3 +82,27 @@ test("long image dialogs use one vertical scroll container and keep all actions 
   await expect(page).toHaveURL("/images");
   await expect(dialog).not.toBeVisible();
 });
+
+test("Back restores the reading position of an earlier dialog", async ({ page }) => {
+  await page.goto("/articles");
+  await page.getByRole("textbox", { name: "筛选文章" }).fill("我总想用海边那天");
+  await page.locator('a[data-detail-link][href="/20260710-vfks"]').first().click();
+  const dialog = page.locator("[data-detail-dialog]");
+  await expect(dialog).toHaveAttribute("aria-busy", "false");
+  const next = dialog.locator(".article-recommendation:visible").first();
+  await next.scrollIntoViewIfNeeded();
+  const shell = dialog.locator("[data-detail-shell]");
+  const before = await shell.evaluate((element) => element.scrollTop);
+  expect(before).toBeGreaterThan(100);
+  const href = await next.getAttribute("href");
+  await next.click();
+  await expect(dialog.locator("[data-detail-content]")).toHaveAttribute("data-content-id", href.slice(1));
+  await shell.evaluate((element) => { element.scrollTop = 300; });
+  const nextScroll = await shell.evaluate((element) => element.scrollTop);
+  await page.goBack();
+  await expect(dialog.locator("[data-detail-content]")).toHaveAttribute("data-content-id", "20260710-vfks");
+  await expect.poll(() => shell.evaluate((element, previous) => Math.abs(element.scrollTop - previous), before)).toBeLessThanOrEqual(2);
+  await page.goForward();
+  await expect(dialog.locator("[data-detail-content]")).toHaveAttribute("data-content-id", href.slice(1));
+  await expect.poll(() => shell.evaluate((element, previous) => Math.abs(element.scrollTop - previous), nextScroll)).toBeLessThanOrEqual(2);
+});

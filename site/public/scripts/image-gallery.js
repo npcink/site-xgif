@@ -27,6 +27,11 @@
   };
   const step = (gallery, delta) => select(gallery, Number(gallery.dataset.current || 0) + delta);
 
+  window.addEventListener("xgif:detail-opened", (event) => {
+    const gallery = event.detail.root.querySelector("[data-image-gallery]");
+    if (gallery && Number.isInteger(event.detail.galleryIndex)) select(gallery, event.detail.galleryIndex);
+  });
+
   document.addEventListener("click", (event) => {
     if (!(event.target instanceof Element)) return;
     const trigger = event.target.closest("[data-gallery-step], [data-gallery-index]");
