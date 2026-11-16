@@ -8,7 +8,7 @@
 
 ## 当前线上状态
 
-- 线上版本：`34ad926914dea8cea4058d425d66374b8de51c57`
+- 收尾审计起点：`34ad926914dea8cea4058d425d66374b8de51c57`；当前线上 SHA 以 `/build.json` 为准
 - 站点：<https://www.xgif.cn>
 - 图片库：<https://www.xgif.cn/images>
 - 动图筛选：<https://www.xgif.cn/images?media=animated>
@@ -24,7 +24,7 @@
 3. 新图片或图集成员完成上传后执行 `npm run image:media` 预览动画帧属性，再按计划执行 `npm run image:media -- --apply`。
 4. 在 `site` 运行前端预览，核对标题、摘要、标签位置、原文和图片顺序。
 5. 在 `workflow` 运行 `npm run content:audit`；在 `site` 运行 `npm test`。
-6. 仅将已确认内容改为公开，再通过 `npm run content:sync -- --apply <文件>` 创建隔离内容 PR。不要使用 `git add .`。
+6. 先针对最新主线加本批内容生成并核验推荐清单；仅改 AI 展示字段时可以复用。仅将已确认内容改为公开，再通过 `npm run content:sync -- --apply <文件>` 创建隔离内容 PR。不要使用 `git add .`。
 7. PR 合并并部署后，核对 `/build.json`、公开 URL、图片资源和页面正文。
 8. 批次完成后执行 `npm run data:backup`，保留可恢复快照。
 
@@ -40,3 +40,10 @@
 遇到单篇异常时，先保留该项为草稿并记录失败原因，继续处理其他已通过检查的内容；不要为追求批次全绿而覆盖原文或删除原图。
 
 详细规则入口：[`workflow/README.md`](../README.md)、[`LOCAL_PUBLISHER_ENGINEERING_STANDARD.md`](LOCAL_PUBLISHER_ENGINEERING_STANDARD.md)、[`ADR-026`](../../site/docs/decisions/ADR-026-favorite-action-statistics.md)。
+
+## 已知限制与保留资料
+
+- 相关推荐的首帧策略不覆盖动态图动作；固定 13 案例历史质量总评未通过。当前 `20261112-8jzn` 原图成员已变化，旧 suite 指纹会拒绝本次 154 条清单，更新评测必须显式版本化，不能悄悄改固定答案。
+- 本轮恢复已核验的本地标题差异，只改公开内容的 title，不重写原文、不扩写短文。61 篇导入草稿继续保留私有，未因收尾自动发布。
+- 原始正文、R2 图片原字节、完整台账和私有运行结果继续留在本机及私有内容历史。收尾恢复副本位于 Codex 本机 backups 的 `site-xgif-closeout-20261116`。
+- 分支删除前保存完整 refs bundle 和工作区归档；托管 worktree 的 ignored 文件另行保存，不能只依赖托管归档。

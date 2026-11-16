@@ -94,7 +94,7 @@ test("home places a real image near the first screen and alternates text with im
 test("short general content appears inline while adult content keeps its summary", async ({ page }) => {
   await page.goto("/search?q=核导弹");
   await expect(page.locator('[data-inline-content-id="20260625-1l9f"] .article-inline-text')).toBeVisible();
-  await page.goto("/search?q=运动后的照应");
+  await page.goto("/search?q=情侣相处细节");
   await expect(page.locator('.article-card--short:visible')).toHaveCount(0);
   await expect(page.getByText("一段围绕情侣相处细节", { exact: false })).toBeVisible();
 });

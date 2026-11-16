@@ -83,3 +83,7 @@ Treat a screenshot diff as a design review item, not as a blind snapshot update.
 When a change falls into the second or third category, update this document and the affected screenshot in the same change.
 
 CI uploads `site-visual-diffs` when verification fails. Review those artifacts before deciding whether the implementation is wrong or the approved baseline should change.
+
+2026-11-16：原文/原图推荐清单重建后，图片弹窗的推荐内容会变化。视觉基线遮罩该数据区域，保留主图、右栏、操作区和弹窗几何检查；配套 Linux 基线已查看并更新。推荐约束由独立行为与清单测试核验。
+
+2026-11-16：同步已核验标题后，仅文章详情桌面/移动两张基线因标题换行更新；正文、摘要、标签、样式和推荐清单不变。完整 M4 Linux 运行 56 通过、2 条件跳过。
