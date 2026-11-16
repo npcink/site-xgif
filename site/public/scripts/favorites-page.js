@@ -1,3 +1,4 @@
+import { trackFavoriteAction } from "./favorite-metrics.js";
 import {
   favoriteKey,
   importFavoritesText,
@@ -89,9 +90,11 @@ if (root instanceof HTMLElement && catalogNode instanceof HTMLScriptElement) {
       : null;
     if (!(button instanceof HTMLButtonElement)) return;
     const { favorites } = readFavorites(window.localStorage);
+    const removed = favorites.items.find((item) => favoriteKey(item) === button.dataset.favoriteRemove);
     favorites.items = favorites.items.filter((item) => favoriteKey(item) !== button.dataset.favoriteRemove);
     const result = writeFavorites(favorites, window.localStorage);
     setStatus(result.ok ? "已移除 1 项收藏。" : result.error, result.ok ? "success" : "error");
+    if (result.ok && removed && knownKeys.has(favoriteKey(removed))) trackFavoriteAction(removed, "remove");
     if (result.ok) window.dispatchEvent(new CustomEvent("xgif:favorites-changed"));
     render();
   });
