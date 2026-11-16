@@ -1,6 +1,6 @@
 # XGIF 当前运行手册
 
-最后更新：2026-11-12
+最后更新：2026-11-16
 
 ## 当前架构
 
@@ -19,7 +19,7 @@ XGIF 是单人借助 AI 维护的 Astro 静态内容站。公开站点为 `https
 | GitHub `npcink/site-xgif` | 公开程序、文档、公开内容、PR 与部署历史 |
 | 私有仓库 `npcink/site-xgif-private-content` | 私有内容快照的 `history` 分支 |
 
-`.env`、SQLite、私有来源、备份、回收站、日志和发布回执不得进入公开提交。即使草稿位于 `site/src/content/`，也不能把它提交到公开代码 PR。不要引入在线 CMS、D1、上传 API 或第二份正文数据库。
+`.env`、SQLite、私有来源、备份、回收站、日志和发布回执不得进入公开提交。即使草稿位于 `site/src/content/`，也不能把它提交到公开代码 PR。不要引入在线 CMS、上传 API 或第二份正文数据库。D1 仅用于访客主动收藏/取消的按日汇总，不承载正文或个人收藏夹；见 [ADR-026](decisions/ADR-026-favorite-action-statistics.md)。
 
 ## 日常操作
 
@@ -68,3 +68,5 @@ git diff --check
 先恢复公开 Markdown、图片、台账和私有内容历史，再 `npm run data:rebuild` 重建派生 SQLite，运行 R2 对账、站点测试并经 PR 部署；最后核对线上版本。移除旧后台不清理原 `.env`、备份、回收站或 SQLite。新 worktree 不自动携带本机私有文件。
 
 当前开发规则见 [开发与交付规范](DEVELOPMENT_AND_DELIVERY_STANDARD.md)。历史决策和阶段记录保留在 `decisions/`、本站文档及 `workflow/docs/`。
+
+本阶段入口与已知限制见 [内容发布交接](../../workflow/docs/CONTENT_PUBLISHING_HANDOFF_2026-11-16.md)，复盘见 [收尾复盘](../../workflow/docs/CLOSEOUT_RETROSPECTIVE_2026-11-16.md)。

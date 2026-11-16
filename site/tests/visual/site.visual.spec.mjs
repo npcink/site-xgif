@@ -233,7 +233,7 @@ test("search empty state matches the approved visual baseline", async ({ page },
 test("article detail matches the approved visual baseline", async ({ page }, testInfo) => {
   await page.goto("/20260710-vfks", { waitUntil: "networkidle" });
   await waitForImages(page);
-  await expect(page.getByRole("heading", { name: "海边旧事与父亲的记忆" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "我总想用海边那天，盖过父亲后来病痛中的模样" })).toBeVisible();
 
   await expect(page).toHaveScreenshot(`article-detail-${testInfo.project.name}.png`, {
     animations: "disabled",

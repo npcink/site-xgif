@@ -1,6 +1,6 @@
 # XGIF
 
-由 AI 协助维护内容的 Astro 静态站点。网站只部署前端静态产物，不运行内容管理后台。
+由 AI 协助维护内容的 Astro 静态站点。网站以静态前端发布内容，不运行内容管理后台；同源 Worker 仅提供收藏动作汇总。
 
 - [`site/`](site/README.md)：公开站点、Markdown 内容、图片、测试与部署配置。
 - [`workflow/`](workflow/README.md)：按需执行的内容检查、图片上传、备份和隔离发布工具，没有管理界面或 HTTP 服务。
@@ -30,3 +30,5 @@ Markdown 是内容权威源；图片保存在公开资源目录或 R2。SQLite �
 内容同步默认只检查指定文件；显式执行后从最新 `origin/main` 建立隔离内容分支，只提交所选公开 Markdown 和其引用的本地图片，并创建 PR。不会自动合并。上传图片、Git 推送、PR 合并和实际部署是不同事实。
 
 根目录只保留项目目录与仓库元数据；依赖、构建产物和缓存存放在对应业务目录。旧发布管理器的历史文档保存在 `workflow/docs/`，只用于追溯，不再作为当前操作入口。
+
+当前阶段交接、已知限制和下一步见 [内容发布交接](workflow/docs/CONTENT_PUBLISHING_HANDOFF_2026-11-16.md)；开发经验见 [收尾复盘](workflow/docs/CLOSEOUT_RETROSPECTIVE_2026-11-16.md)。后续任务应先读这些文件，不依赖当前会话历史。
