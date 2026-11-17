@@ -15,7 +15,8 @@ test("image pages are bounded and preserve their URL, cards and position through
   const scrollY = await page.evaluate(() => window.scrollY);
   await nav.getByRole("button", { name: "下一页" }).click();
   await expect(page).toHaveURL(/page=3$/);
-  await page.evaluate(() => window.scrollBy(0, 200));
+  // Capture a settled visitor position, not an intermediate frame of CSS smooth scrolling.
+  await page.evaluate(() => window.scrollBy({ top: 200, behavior: "instant" }));
   // Masonry repacking can adjust the browser's scroll anchor on the next frame.
   await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   const nextScrollY = await page.evaluate(() => window.scrollY);
