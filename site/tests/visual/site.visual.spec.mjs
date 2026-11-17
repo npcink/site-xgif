@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { imageArchiveFor } from "./archive-helpers.mjs";
+import { imageArchiveFor, catalogItems } from "./archive-helpers.mjs";
 
 test.beforeEach(async ({ page }) => {
   await page.route("https://img.xgif.cn/**", async (route) => {
@@ -88,13 +88,13 @@ test("homepage discovery distinguishes featured filtering from full-site search"
   await expect(page).toHaveURL(/\/search\?q=AI$/);
   await expect(page.locator("[data-filter-input]")).toHaveValue("AI");
   await expect(page.locator("html")).not.toHaveAttribute("data-filter-pending");
-  const searchMatches = await page.locator("[data-search-item]").evaluateAll((cards) =>
-    cards.filter((card) => card.dataset.search.includes("ai")).length);
+  const articleMatches = (await catalogItems(page, "articles", true)).filter(item => item.text.includes("ai")).length;
+  const imageMatches = (await catalogItems(page, "images", true)).filter(item => item.text.includes("ai")).length;
+  const searchMatches = articleMatches + imageMatches;
   expect(searchMatches).toBeGreaterThan(0);
   expect(searchMatches).toBeGreaterThanOrEqual(homeMatches);
   await expect(page.locator("[data-visible-count]")).toHaveText(String(searchMatches));
-  const visibleMatches = await page.locator("[data-search-group]").evaluateAll(groups => groups.reduce((total, group) =>
-    total + Math.min(24, [...group.querySelectorAll("[data-search-item]")].filter(item => item.dataset.search.includes("ai")).length), 0));
+  const visibleMatches = Math.min(24, articleMatches) + Math.min(24, imageMatches);
   await expect(page.locator("[data-search-item]:visible")).toHaveCount(visibleMatches);
   await page.goBack();
   await expect(page).toHaveURL(/\/$/);
@@ -191,8 +191,7 @@ test("image library matches the approved visual baseline", async ({ page }, test
 test("image library filtered state matches the approved visual baseline", async ({ page }, testInfo) => {
   await page.goto("/images", { waitUntil: "networkidle" });
   await waitForImages(page);
-  const moodMatches = await page.locator(".masonry-grid .image-card").evaluateAll((cards) =>
-    cards.filter((card) => card.dataset.search.includes("无语")).length);
+  const moodMatches = (await catalogItems(page, "images", true)).filter(item => item.text.includes("无语")).length;
   expect(moodMatches).toBeGreaterThan(0);
   await page.getByRole("button", { name: "无语" }).click();
   await expect(page.getByRole("button", { name: "无语" })).toHaveClass(/active/);

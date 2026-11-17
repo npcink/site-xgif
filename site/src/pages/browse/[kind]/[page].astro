@@ -1,0 +1,37 @@
+---
+import BaseLayout from "../../../layouts/BaseLayout.astro";
+import ArticleCard from "../../../components/ArticleCard.astro";
+import ImageCard from "../../../components/ImageCard.astro";
+import { catalogSizes, getCatalog, type CatalogKind } from "../../../lib/catalog";
+import { pageTitle } from "../../../config/site";
+
+export async function getStaticPaths() {
+  const catalog = await getCatalog();
+  return (["articles", "images"] as CatalogKind[]).flatMap(kind =>
+    Array.from({ length: Math.max(1, Math.ceil(catalog[kind].length / catalogSizes[kind])) }, (_, index) => ({ params: { kind, page: String(index + 1) }, props: { kind, page: index + 1 } })));
+}
+const { kind, page } = Astro.props;
+const catalog = await getCatalog();
+const size = catalogSizes[kind];
+const total = catalog[kind].length;
+const pages = Math.max(1, Math.ceil(total / size));
+const start = (page - 1) * size;
+const label = kind === "articles" ? "文章" : "图片";
+---
+<BaseLayout title={pageTitle(`${label} · 第 ${page} 页`)} noindex>
+  <section class="archive-content">
+    <a href={`/${kind}`}>← 返回{label}库</a>
+    <h1>{label} · 第 {page} 页</h1>
+    <p>显示 {total ? start + 1 : 0}–{Math.min(start + size, total)}，共 {total} 项</p>
+    <div class={kind === "articles" ? "article-grid" : "masonry-grid"}>
+      {kind === "articles"
+        ? catalog.articles.slice(start, start + size).map((article, index) => <ArticleCard article={article} index={start + index} headingLevel="h2" />)
+        : catalog.images.slice(start, start + size).map(item => <ImageCard item={item} headingLevel="h2" />)}
+    </div>
+    <nav class="archive-pagination" aria-label={`${label}逐页浏览`}>
+      {page > 1 && <a href={`/browse/${kind}/${page - 1}`}>← 上一页</a>}
+      <span>{page} / {pages}</span>
+      {page < pages && <a href={`/browse/${kind}/${page + 1}`}>下一页 →</a>}
+    </nav>
+  </section>
+</BaseLayout>

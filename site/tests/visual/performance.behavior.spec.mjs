@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { waitForCatalog } from "./archive-helpers.mjs";
 
 test("cold search starts with filtered results and stays stable", async ({ page }) => {
   await page.addInitScript(() => {
@@ -18,6 +19,7 @@ test("cold search starts with filtered results and stays stable", async ({ page 
 test("small screens wrap footer and window pagination; tablet detail keeps reading width", async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 844 });
   await page.goto("/articles?page=8");
+  await waitForCatalog(page);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
   expect(await page.locator("[data-page-numbers] button").count()).toBeLessThanOrEqual(5);
   expect((await page.locator(".archive-pagination").boundingBox()).height).toBeLessThan(150);

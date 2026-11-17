@@ -110,7 +110,7 @@ test("image discovery and search retain filterable archive states", async () => 
   assert.match(search, /data-search-group/);
   assert.match(search, /data-empty/);
   assert.match(filter, /writeListUrl/);
-  assert.match(filter, /group\.hidden/);
+  assert.match(filter, /catalog\.root\.hidden/);
 });
 
 test("article archive keeps filtering, URL state, and bounded pagination together", async () => {
@@ -124,9 +124,9 @@ test("article archive keeps filtering, URL state, and bounded pagination togethe
   assert.match(articles, /data-pagination data-page-size="12"/);
   assert.match(articles, /data-page-summary/);
   assert.match(articles, /aria-live="polite"/);
-  assert.match(filter, /url\.searchParams\.set\("source"/);
+  assert.match(filter, /\["source", chipFilter\]/);
   assert.match(pager, /url\.searchParams\.set\(parameter/);
-  assert.match(filter, /chip\.setAttribute\("aria-pressed"/);
+  assert.match(filter, /button\.setAttribute\("aria-pressed"/);
   assert.match(styles, /\.archive-pagination/);
 });
 

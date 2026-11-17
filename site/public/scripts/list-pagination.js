@@ -7,6 +7,7 @@ export function createPagination(root, onChange) {
   const size = Number(nav.dataset.pageSize);
   const parameter = nav.dataset.pageParam || "page";
   let current = 1;
+  let rendered = 1, busy = false;
   const readUrl = () => {
     const value = Number(new URLSearchParams(location.search).get(parameter) || 1);
     current = Number.isSafeInteger(value) && value > 0 ? value : 1;
@@ -15,21 +16,29 @@ export function createPagination(root, onChange) {
 
   nav.addEventListener("click", (event) => {
     const button = event.target instanceof Element ? event.target.closest("button") : null;
-    if (!button || button.disabled) return;
+    if (!button || button.disabled || busy) return;
+    current = rendered;
     if (button.hasAttribute("data-page-prev")) current -= 1;
     else if (button.hasAttribute("data-page-next")) current += 1;
     else if (button.dataset.page) current = Number(button.dataset.page);
     else return;
-    onChange(window.scrollY);
+    busy = true;
+    Promise.resolve(onChange(window.scrollY)).finally(() => { busy = false; });
   });
 
   return {
     root,
     readUrl,
     reset: () => { current = 1; },
+    page: () => current,
+    bounds(total) {
+      const page = Math.min(current, Math.max(1, Math.ceil(total / size)));
+      return { start: (page - 1) * size, end: Math.min(page * size, total) };
+    },
     range(total) {
       const pages = Math.max(1, Math.ceil(total / size));
       current = Math.min(current, pages);
+      rendered = current;
       const start = (current - 1) * size;
       const end = Math.min(start + size, total);
       nav.hidden = pages <= 1;

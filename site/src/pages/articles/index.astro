@@ -2,12 +2,15 @@
 import { getCollection } from "astro:content";
 import ArticleCard from "../../components/ArticleCard.astro";
 import ListPagination from "../../components/ListPagination.astro";
+import CatalogStatus from "../../components/CatalogStatus.astro";
+import { getCatalog } from "../../lib/catalog";
 import { pageTitle } from "../../config/site";
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import { sortByDate } from "../../lib/content";
 
 const articles = sortByDate((await getCollection("articles")).filter((entry) => !entry.data.draft && !entry.data.publicationHold));
 const sources = Array.from(new Set(articles.map((entry) => entry.data.source)));
+const catalog = await getCatalog();
 ---
 
 <BaseLayout title={pageTitle("文章")} description="通过编辑摘要快速了解，也可以阅读完整正文并核对来源。">
@@ -17,7 +20,7 @@ const sources = Array.from(new Set(articles.map((entry) => entry.data.source)));
     <p>保留编辑摘要、完整正文、来源链接与编辑判断。</p>
   </section>
 
-  <section class="archive-content" data-list-scope>
+  <section class="archive-content" data-list-scope data-catalog-base={catalog.base} data-catalog-kind="articles" data-catalog-total={articles.length}>
     <div class="archive-toolbar">
       <label class="inline-search">
         <span>⌕</span>
@@ -31,10 +34,12 @@ const sources = Array.from(new Set(articles.map((entry) => entry.data.source)));
     <p class="filter-count" aria-live="polite">
       <span data-page-summary></span><span data-visible-count>{articles.length}</span> 篇文章
     </p>
+    <CatalogStatus />
     <div class="article-grid" data-filter-list>
-      {articles.map((article, index) => <ArticleCard article={article} index={index} headingLevel="h2" />)}
+      {articles.slice(0, 12).map((article, index) => <ArticleCard article={article} index={index} headingLevel="h2" />)}
     </div>
     <ListPagination label="文章分页" pageSize={12} />
+    <noscript><p><a href="/browse/articles/1">逐页浏览全部文章 →</a></p></noscript>
     <div class="empty-state" data-empty hidden>
       <span>¯\_(ツ)_/¯</span><h2>暂时没有匹配的文章</h2><p>换个更短的关键词试试。</p>
     </div>

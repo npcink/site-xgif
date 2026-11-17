@@ -3,6 +3,8 @@ import { getCollection } from "astro:content";
 import ArticleCard from "../components/ArticleCard.astro";
 import ImageCard from "../components/ImageCard.astro";
 import ListPagination from "../components/ListPagination.astro";
+import CatalogStatus from "../components/CatalogStatus.astro";
+import { getCatalog } from "../lib/catalog";
 import { pageTitle } from "../config/site";
 import BaseLayout from "../layouts/BaseLayout.astro";
 import { sortByDate } from "../lib/content";
@@ -11,6 +13,7 @@ const articles = sortByDate((await getCollection("articles")).filter((entry) => 
 const images = sortByDate(
   (await getCollection("images")).filter((entry) => !entry.data.draft && entry.data.public),
 );
+const catalog = await getCatalog();
 ---
 
 <BaseLayout title={pageTitle("搜索")} description="搜索文章原文、图片说明、标签与来源。" noindex>
@@ -24,20 +27,22 @@ const images = sortByDate(
     </label>
     <p class="filter-count" aria-live="polite">找到 <span data-visible-count>{articles.length + images.length}</span> 条内容</p>
 
+    <CatalogStatus />
     <div data-filter-list>
-      <div class="content-section search-group" data-search-group data-list-scope>
+      <div class="content-section search-group" data-search-group data-list-scope data-catalog-base={catalog.base} data-catalog-kind="articles" data-catalog-total={articles.length}>
         <div class="content-title"><h2>文章</h2><span>ARTICLES</span></div>
         <p class="filter-count"><span data-page-summary></span><span data-group-count>{articles.length}</span> 篇文章</p>
-        <div class="article-grid">{articles.map((article, index) => <ArticleCard article={article} index={index} />)}</div>
+        <div class="article-grid">{articles.slice(0, 24).map((article, index) => <ArticleCard article={article} index={index} />)}</div>
         <ListPagination label="搜索文章分页" pageParam="articlesPage" />
       </div>
-      <div class="content-section image-section search-group" data-search-group data-list-scope>
+      <div class="content-section image-section search-group" data-search-group data-list-scope data-catalog-base={catalog.base} data-catalog-kind="images" data-catalog-total={images.length}>
         <div class="content-title"><h2>图片 / 表情包</h2><span>IMAGES</span></div>
         <p class="filter-count"><span data-page-summary></span><span data-group-count>{images.length}</span> 项图片内容</p>
-        <div class="masonry-grid">{images.map((item) => <ImageCard item={item} />)}</div>
+        <div class="masonry-grid">{images.slice(0, 24).map((item) => <ImageCard item={item} />)}</div>
         <ListPagination label="搜索图片分页" pageParam="imagesPage" />
       </div>
     </div>
+    <noscript><p><a href="/browse/articles/1">逐页浏览文章</a> · <a href="/browse/images/1">逐页浏览图片</a></p></noscript>
     <div class="empty-state" data-empty hidden>
       <span>¯\_(ツ)_/¯</span><h2>这次真的什么都没搜到</h2><p>换个更短的关键词，或者从标签页开始。</p>
     </div>

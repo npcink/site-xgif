@@ -11,10 +11,11 @@ interface Props {
   detail?: boolean;
   priority?: boolean;
   deferred?: boolean;
+  deferCard?: boolean;
   animated?: boolean;
 }
 
-const { src, alt, width, height, thumbnail = false, detail = false, priority = false, deferred = false, animated = false } = Astro.props;
+const { src, alt, width, height, thumbnail = false, detail = false, priority = false, deferred = false, deferCard = false, animated = false } = Astro.props;
 const localImages = import.meta.glob<ImageMetadata>("/public/images/**/*.{jpg,jpeg,png,webp,gif}", { eager: true, import: "default" });
 const local = localImages[`/public${src}`];
 const canOptimize = Boolean(local || (src.startsWith("https://img.xgif.cn/memes/") && width && height));
@@ -34,8 +35,10 @@ const sizes = thumbnail ? "60px" : detail ? "(max-width: 900px) 90vw, 55vw" : "(
 ---
 
 <img
-  src={deferred ? undefined : displaySrc}
-  srcset={deferred ? undefined : srcset}
+  src={deferred || deferCard ? undefined : displaySrc}
+  srcset={deferred || deferCard ? undefined : srcset}
+  data-card-src={deferCard ? displaySrc : undefined}
+  data-card-srcset={deferCard ? srcset : undefined}
   data-gallery-src={deferred ? displaySrc : undefined}
   data-gallery-srcset={deferred ? srcset : undefined}
   sizes={sizes}

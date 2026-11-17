@@ -1,11 +1,12 @@
 import { expect, test } from "@playwright/test";
+import { catalogItems, waitForCatalog } from "./archive-helpers.mjs";
 
 const visibleHrefs = locator => locator.evaluateAll(items => items.map(item => item.getAttribute("href")));
 
 test("image pages are bounded and preserve their URL, cards and position through history and dialogs", async ({ page }) => {
   await page.goto("/images?page=2");
-  const all = page.locator("main .image-card");
-  const expected = (await visibleHrefs(all)).slice(24, 48);
+  await waitForCatalog(page);
+  const expected = (await catalogItems(page, "images")).slice(24, 48).map(item => `/${item.id}`);
   const visible = page.locator("main .image-card:visible");
   expect(await visibleHrefs(visible)).toEqual(expected);
   await expect(page.locator("[data-page-summary]")).toHaveText("显示 25–48，共 ");
@@ -39,15 +40,17 @@ test("image pages are bounded and preserve their URL, cards and position through
   expect(await visibleHrefs(visible)).toEqual(expected);
   await expect.poll(() => page.evaluate(before => Math.abs(scrollY - before), beforeDialog)).toBeLessThanOrEqual(2);
   await page.reload();
+  await waitForCatalog(page);
   expect(await visibleHrefs(visible)).toEqual(expected);
 });
 
 test("image filters search every page, reset pagination and clamp malformed or out-of-range pages", async ({ page }) => {
   await page.goto("/images?page=2");
-  const target = page.locator("main .image-card").last();
-  const href = await target.getAttribute("href");
+  await waitForCatalog(page);
+  const target = (await catalogItems(page, "images")).at(-1);
+  const href = `/${target.id}`;
   const input = page.getByRole("textbox", { name: "筛选图片" });
-  await input.fill(await target.getAttribute("aria-label"));
+  await input.fill(target.title);
   await expect.poll(() => new URL(page.url()).searchParams.has("page")).toBe(false);
   await expect(page.locator(`main .image-card[href="${href}"]`)).toBeVisible();
   await input.fill("不存在的分页测试词");
@@ -56,7 +59,8 @@ test("image filters search every page, reset pagination and clamp malformed or o
   await expect(page.locator("[data-visible-count]")).toHaveText("0");
   for (const value of ["-4", "NaN", "Infinity", "999999"]) {
     await page.goto(`/images?page=${value}`);
-    const total = await page.locator("main .image-card").count();
+    await waitForCatalog(page);
+    const total = Number(await page.locator("[data-catalog-total]").getAttribute("data-catalog-total"));
     const last = value === "999999";
     const expected = last ? total % 24 || 24 : Math.min(24, total);
     await expect(page.locator("main .image-card:visible")).toHaveCount(expected);
@@ -66,6 +70,7 @@ test("image filters search every page, reset pagination and clamp malformed or o
 
 test("search and tag sections paginate independently and keep image results reachable", async ({ page }) => {
   await page.goto("/search?articlesPage=2&imagesPage=2");
+  await waitForCatalog(page);
   const articles = page.locator("main .article-card:visible");
   const images = page.locator("main .image-card:visible");
   await expect(articles).toHaveCount(24);
@@ -80,7 +85,8 @@ test("search and tag sections paginate independently and keep image results reac
   await expect(images).toHaveCount(1);
   await expect(articles).toHaveCount(0);
   await page.goto("/tags/幽默?articlesPage=2");
-  const total = await page.locator("main .article-card").count();
+  await waitForCatalog(page);
+  const total = Number(await page.locator('[data-catalog-kind="articles"]').getAttribute("data-catalog-total"));
   expect(total).toBeGreaterThan(24);
   await expect(page.locator("main .article-card:visible")).toHaveCount(Math.min(24, total - 24));
   await expect(page.getByRole("navigation", { name: "标签文章分页" }).locator('[aria-current="page"]')).toHaveText("2");
@@ -119,6 +125,7 @@ test("favorites pagination preserves the full export and clamps the last page af
 
 test("article page navigation also restores its previous page through Back", async ({ page }) => {
   await page.goto("/articles?page=2");
+  await waitForCatalog(page);
   const before = await page.locator("main .article-card:visible").evaluateAll(items => items.map(item => item.dataset.search));
   await page.getByRole("navigation", { name: "文章分页" }).getByRole("button", { name: "下一页" }).click();
   await expect(page).toHaveURL(/page=3$/);
@@ -136,13 +143,19 @@ test("page number buttons keep keyboard focus after navigation", async ({ page }
   await expect(button).toBeFocused();
 });
 
-test("static image index remains complete without JavaScript", async ({ browser, baseURL }) => {
+test("static image pages remain traversable without JavaScript", async ({ browser, baseURL }) => {
   const context = await browser.newContext({ javaScriptEnabled: false });
   const page = await context.newPage();
   await page.goto(`${baseURL}/images?page=2`);
-  const total = await page.locator("main .image-card").count();
-  expect(total).toBeGreaterThan(24);
-  await expect(page.locator("main .image-card:visible")).toHaveCount(total);
+  await expect(page.locator("main .image-card:visible")).toHaveCount(24);
   await expect(page.locator("[data-pagination]")).not.toBeVisible();
+  await page.getByRole("link", { name: "逐页浏览全部图片" }).click();
+  await expect(page).toHaveURL(/\/browse\/images\/1$/);
+  const before = await visibleHrefs(page.locator("main .image-card"));
+  await page.getByRole("link", { name: "下一页" }).focus();
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/\/browse\/images\/2$/);
+  await expect(page.locator("main .image-card:visible")).toHaveCount(24);
+  expect(await visibleHrefs(page.locator("main .image-card"))).not.toEqual(before);
   await context.close();
 });

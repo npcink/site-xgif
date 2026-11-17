@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { expect, test } from "@playwright/test";
+import { catalogItems, waitForCatalog } from "./archive-helpers.mjs";
 
 const headers = await readFile(new URL("../../public/_headers", import.meta.url), "utf8");
 const policy = headers.match(/Content-Security-Policy: (.+)/u)[1];
@@ -65,10 +66,11 @@ test("feeds fill the shortest column under CSP and repack after filtering and re
   expect(await feed.locator(".home-feed-item").evaluateAll((items) => items.map((item) => item.textContent))).toEqual(order);
 
   await page.goto(`${origin}/tags/${encodeURIComponent("幽默")}`);
-  const inlineIndex = await page.locator(".article-grid > .article-card").evaluateAll(items =>
-    items.findIndex(item => item.dataset.inlineContentId === "20260721-nzrl"));
+  await waitForCatalog(page);
+  const inlineIndex = (await catalogItems(page, "articles")).filter(item => item.tags.includes("幽默")).findIndex(item => item.id === "20260721-nzrl");
   expect(inlineIndex).toBeGreaterThanOrEqual(0);
   await page.goto(`${origin}/tags/${encodeURIComponent("幽默")}?articlesPage=${Math.floor(inlineIndex / 24) + 1}`);
+  await waitForCatalog(page);
   const articles = page.locator(".article-grid");
   await expectPacked(articles);
   await expect(articles.locator('[data-inline-content-id="20260721-nzrl"] .article-inline-text')).toBeVisible();

@@ -1,4 +1,4 @@
-import { imageArchiveFor } from "./archive-helpers.mjs";
+import { imageArchiveFor, catalogItems, waitForCatalog } from "./archive-helpers.mjs";
 import { expect, test } from "@playwright/test";
 
 test.beforeEach(async ({ page }) => {
@@ -45,8 +45,11 @@ test("image dialogs retain both recommendation types and avoid already viewed co
 
 async function openArticleFromArchive(page, id) {
   await page.goto("/articles");
+  await waitForCatalog(page);
+  const item = (await catalogItems(page, "articles")).find(item => item.id === id);
+  if (!item) throw new Error(`Missing public fixture ${id}`);
   const link = page.locator(`a[data-detail-link][href="/${id}"]`).first();
-  await page.getByRole("textbox", { name: "筛选文章" }).fill((await link.textContent()).trim());
+  await page.getByRole("textbox", { name: "筛选文章" }).fill(item.title);
   await expect(link).toBeVisible();
   await link.click();
 }
