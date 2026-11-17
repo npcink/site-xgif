@@ -6,8 +6,10 @@
 
 ## 本地使用
 
+站点需要 Node.js 22.23.4 或更高版本；CI 与 Cloudflare 构建版本由 `.node-version` 固定。
+
 ```bash
-npm install
+npm ci
 npm run dev
 ```
 

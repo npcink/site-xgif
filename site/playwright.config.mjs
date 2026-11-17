@@ -34,7 +34,8 @@ export default defineConfig({
   webServer: {
     // Cold builds download and encode the complete public image set.
     timeout: 180000,
-    command: `npm run build && npm run preview -- --port ${port}`,
+    // Astro may background previews in agent sessions; Playwright must own its foreground server.
+    command: `npm run build && npm run preview -- --port ${port} --ignore-lock`,
     url: `http://localhost:${port}`,
     // A matching port can belong to another project; never test an unverified server.
     reuseExistingServer: false,
