@@ -163,8 +163,9 @@ test("image dialog matches the approved visual baseline", async ({ page }, testI
   // Recommendation cards are data-owned and intentionally change when the
   // original-evidence manifest is rebuilt. Keep the dialog shell and primary
   // image under visual review without making content selection a layout baseline.
-  // The archive behind the dialog changes with publication and scroll position.
-  await expect(page.locator(".detail-dialog")).toHaveScreenshot(`image-dialog-${testInfo.project.name}.png`, {
+  await expect(page).toHaveScreenshot(`image-dialog-${testInfo.project.name}.png`, {
+    // Hide the changing archive behind the dialog while preserving viewport size.
+    style: "body > :not(dialog) { visibility: hidden !important; }",
     animations: "disabled",
     fullPage: false,
     maskColor: "#d9d4ca",
@@ -183,7 +184,7 @@ test("image library matches the approved visual baseline", async ({ page }, test
     maskColor: "#d9d4ca",
     mask: [
       page.locator(".masonry-grid"),
-      page.locator(".filter-count"),
+      page.locator("[data-visible-count]"),
     ],
   });
 });
@@ -206,7 +207,7 @@ test("image library filtered state matches the approved visual baseline", async 
     maskColor: "#d9d4ca",
     mask: [
       page.locator(".masonry-grid"),
-      page.locator(".filter-count"),
+      page.locator("[data-visible-count]"),
     ],
   });
 });
