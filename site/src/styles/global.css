@@ -661,6 +661,7 @@ body.detail-dialog-open { overflow: hidden; }
 .search-page-input input { flex: 1; border: 0; background: transparent; font-size: 20px; min-width: 0; }
 .search-page-input button { border: 0; background: transparent; font-size: 28px; cursor: pointer; }
 .search-page .filter-count { margin: 18px 0 0; }
+.search-group > .filter-count { margin: 0 0 24px; }
 .search-group { margin-top: 75px; }
 
 .legal-page { max-width: 1200px; margin: 0 auto; padding: 92px 5vw 130px; }

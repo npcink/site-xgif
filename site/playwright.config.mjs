@@ -36,6 +36,7 @@ export default defineConfig({
     timeout: 180000,
     command: `npm run build && npm run preview -- --port ${port}`,
     url: `http://localhost:${port}`,
-    reuseExistingServer: !process.env.CI && !process.env.XGIF_SITE_TEST_PORT && process.env.XGIF_GALLERY_FIXTURE !== "true",
+    // A matching port can belong to another project; never test an unverified server.
+    reuseExistingServer: false,
   },
 });

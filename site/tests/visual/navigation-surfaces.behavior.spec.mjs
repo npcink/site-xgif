@@ -1,3 +1,4 @@
+import { imageArchiveFor } from "./archive-helpers.mjs";
 import { expect, test } from "@playwright/test";
 
 test.beforeEach(async ({ page }) => {
@@ -59,7 +60,7 @@ test("long image copy and real galleries have one vertical scroller at phone, ta
   for (const width of [390, 768, 1280]) {
     await page.setViewportSize({ width, height: 720 });
     for (const id of ["20261112-cbac", "20261112-8jzn"]) {
-      await page.goto("/images");
+      await imageArchiveFor(page, id);
       await page.locator(`a.image-card[href="/${id}"]`).click();
       const dialog = page.locator("[data-detail-dialog]");
       await expect(dialog).toHaveAttribute("aria-busy", "false");
@@ -78,7 +79,7 @@ test("long image copy and real galleries have one vertical scroller at phone, ta
 });
 
 test("Back retains the selected image of a gallery", async ({ page }) => {
-  await page.goto("/images");
+  const archiveUrl = await imageArchiveFor(page, "20261112-8jzn");
   await page.locator('a.image-card[href="/20261112-8jzn"]').click();
   const dialog = page.locator("[data-detail-dialog]");
   await expect(dialog).toHaveAttribute("aria-busy", "false");
@@ -102,12 +103,12 @@ test("Back retains the selected image of a gallery", async ({ page }) => {
 test("a failed dialog fetch falls back to a usable standalone page", async ({ page }) => {
   await page.route("**/20261112-cbac", (route) => route.request().resourceType() === "document"
     ? route.continue() : route.fulfill({ status: 503, body: "temporarily unavailable" }));
-  await page.goto("/images");
+  const archiveUrl = await imageArchiveFor(page, "20261112-cbac");
   await page.locator('a.image-card[href="/20261112-cbac"]').click();
   await expect(page.locator("main [data-detail-content]")).toHaveAttribute("data-content-id", "20261112-cbac");
   await expect(page.locator("[data-detail-dialog]")).not.toBeVisible();
   await page.goBack();
-  await expect(page).toHaveURL("/images");
+  await expect(page).toHaveURL(archiveUrl);
   await expect(page.locator("[data-detail-dialog]")).not.toBeVisible();
 });
 
@@ -124,7 +125,7 @@ test("image recommendations on standalone pages also navigate natively", async (
 });
 
 test("a dialog can switch between images and articles without another scroll layer", async ({ page }) => {
-  await page.goto("/images");
+  const archiveUrl = await imageArchiveFor(page, "20261112-cbac");
   await page.locator('a.image-card[href="/20261112-cbac"]').click();
   const dialog = page.locator("[data-detail-dialog]");
   await expect(dialog).toHaveAttribute("aria-busy", "false");
@@ -140,7 +141,7 @@ test("a dialog can switch between images and articles without another scroll lay
   await expect(dialog).toHaveAttribute("data-detail-kind", "image");
   await expect(dialog.locator("[data-detail-content]")).toHaveAttribute("data-content-id", "20261112-cbac");
   await page.getByRole("button", { name: "关闭详情" }).click();
-  await expect(page).toHaveURL("/images");
+  await expect(page).toHaveURL(archiveUrl);
   await expect(dialog).not.toBeVisible();
 });
 
@@ -152,12 +153,12 @@ test("Escape during a pending detail request closes without locking the list", a
     await route.continue().catch(() => {});
   });
   try {
-    await page.goto("/images");
+    const archiveUrl = await imageArchiveFor(page, "20261112-cbac");
     await page.locator('a.image-card[href="/20261112-cbac"]').click();
     const dialog = page.locator("[data-detail-dialog]");
     await expect(dialog).toHaveAttribute("aria-busy", "true");
     await page.keyboard.press("Escape");
-    await expect(page).toHaveURL("/images");
+    await expect(page).toHaveURL(archiveUrl);
     await expect(dialog).not.toBeVisible();
     await expect(page.locator("body")).not.toHaveClass(/detail-dialog-open/);
     release();

@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { imageArchiveFor } from "./archive-helpers.mjs";
 
 test.beforeEach(async ({ page }) => {
   await page.route("https://img.xgif.cn/**", async (route) => {
@@ -92,7 +93,9 @@ test("homepage discovery distinguishes featured filtering from full-site search"
   expect(searchMatches).toBeGreaterThan(0);
   expect(searchMatches).toBeGreaterThanOrEqual(homeMatches);
   await expect(page.locator("[data-visible-count]")).toHaveText(String(searchMatches));
-  await expect(page.locator("[data-search-item]:visible")).toHaveCount(searchMatches);
+  const visibleMatches = await page.locator("[data-search-group]").evaluateAll(groups => groups.reduce((total, group) =>
+    total + Math.min(24, [...group.querySelectorAll("[data-search-item]")].filter(item => item.dataset.search.includes("ai")).length), 0));
+  await expect(page.locator("[data-search-item]:visible")).toHaveCount(visibleMatches);
   await page.goBack();
   await expect(page).toHaveURL(/\/$/);
   await expect(input).toHaveValue("AI");
@@ -118,7 +121,7 @@ async function hideMoodLabelsForScreenshot(page) {
 
 async function openImageDialog(page) {
   // Offscreen CDN requests do not determine whether this dialog is ready.
-  await page.goto("/images", { waitUntil: "domcontentloaded" });
+  await imageArchiveFor(page, "20260723-z4xw");
   await waitForImages(page);
   await page.locator('a[href="/20260723-z4xw"][data-detail-link]').click();
   const dialog = page.getByRole("dialog", { name: "去摧毁金融区吧" });
@@ -194,7 +197,7 @@ test("image library filtered state matches the approved visual baseline", async 
   await page.getByRole("button", { name: "无语" }).click();
   await expect(page.getByRole("button", { name: "无语" })).toHaveClass(/active/);
   await expect(page.locator("[data-visible-count]")).toHaveText(String(moodMatches));
-  await expect(page.locator(".masonry-grid .image-card:visible")).toHaveCount(moodMatches);
+  await expect(page.locator(".masonry-grid .image-card:visible")).toHaveCount(Math.min(24, moodMatches));
   await hideMoodLabelsForScreenshot(page);
 
   await expect(page).toHaveScreenshot(`image-library-filtered-${testInfo.project.name}.png`, {

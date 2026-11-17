@@ -1,130 +1,105 @@
-(() => {
-  const input = document.querySelector("[data-filter-input]");
-  const items = Array.from(document.querySelectorAll("[data-search-item]"));
-  const count = document.querySelector("[data-visible-count]");
-  const empty = document.querySelector("[data-empty]");
-  const chips = Array.from(document.querySelectorAll("[data-filter]"));
-  const mediaChips = Array.from(document.querySelectorAll("[data-media-filter]"));
-  const groups = Array.from(document.querySelectorAll("[data-search-group]"));
-  const clear = document.querySelector("[data-clear]");
-  const pagination = document.querySelector("[data-pagination]");
-  const pageSummary = document.querySelector("[data-page-summary]");
-  const sourceOnly = Boolean(document.querySelector('[data-filter-kind="source"]'));
-  const pageSize = Number(pagination?.dataset.pageSize || 0);
+import { createPagination, restoreListScroll, trackListScroll, writeListUrl } from "./list-pagination.js";
 
-  if (!(input instanceof HTMLInputElement)) return;
+const input = document.querySelector("[data-filter-input]");
+const items = Array.from(document.querySelectorAll("main [data-search-item]"));
+const count = document.querySelector("[data-visible-count]");
+const empty = document.querySelector("[data-empty]");
+const chips = Array.from(document.querySelectorAll("[data-filter]"));
+const mediaChips = Array.from(document.querySelectorAll("[data-media-filter]"));
+const groups = Array.from(document.querySelectorAll("[data-search-group]"));
+const sourceOnly = Boolean(document.querySelector('[data-filter-kind="source"]'));
+const initialPath = location.pathname;
+let chipFilter = "", mediaFilter = "";
+const pagers = Array.from(document.querySelectorAll("[data-list-scope]")).map(root =>
+  createPagination(root, (scrollY) => {
+    apply({ push: true, scrollY });
+    pagers.find(pager => pager.root === root).scrollToStart();
+  }));
+// Capture original membership: dialog recommendations are outside these lists.
+const scopedItems = new Map(pagers.map(pager => [pager, items.filter(item => pager.root.contains(item))]));
 
-  const params = new URLSearchParams(window.location.search);
-  input.value = params.get("q") || "";
-  let chipFilter = params.get("source") || "";
-  let mediaFilter = mediaChips.length && ["static", "animated"].includes(params.get("media")) ? params.get("media") : "";
-  let currentPage = Math.max(1, Number.parseInt(params.get("page") || "1", 10) || 1);
+function readUrl() {
+  const params = new URLSearchParams(location.search);
+  if (input instanceof HTMLInputElement) input.value = params.get("q") || "";
+  chipFilter = params.get("source") || "";
+  if (!chips.some(chip => (chip.dataset.filter || "") === chipFilter)) chipFilter = "";
+  mediaFilter = mediaChips.length && ["static", "animated"].includes(params.get("media")) ? params.get("media") : "";
+  pagers.forEach(pager => pager.readUrl());
+}
 
-  if (!chips.some((chip) => (chip.dataset.filter || "") === chipFilter)) chipFilter = "";
+function apply({ push = false, scrollY, write = true } = {}) {
+  const query = input?.value.trim().toLowerCase() || "";
+  const matches = items.filter(item => {
+    const searchable = item.dataset.search || "";
+    return searchable.includes(query) && (!chipFilter
+      || (sourceOnly ? item.dataset.source === chipFilter : searchable.includes(chipFilter)))
+      && (!mediaFilter || (item.dataset.mediaTypes || "").split(" ").includes(mediaFilter));
+  });
+  const visible = new Set(matches);
+  for (const pager of pagers) {
+    const members = scopedItems.get(pager);
+    const filtered = matches.filter(item => members.includes(item));
+    const { start, end } = pager.range(filtered.length);
+    const pageItems = new Set(filtered.slice(start, end));
+    members.forEach(item => { if (!pageItems.has(item)) visible.delete(item); });
+    const groupCount = pager.root.querySelector("[data-group-count]");
+    if (groupCount) groupCount.textContent = String(filtered.length);
+  }
+  items.forEach(item => { item.hidden = !visible.has(item); });
+  groups.forEach(group => { group.hidden = !items.some(item => visible.has(item) && group.contains(item)); });
+  if (count) count.textContent = String(matches.length);
+  if (empty) empty.hidden = matches.length !== 0;
 
-  const renderPagination = (total, pages) => {
-    if (!pagination) return;
-    pagination.hidden = pages <= 1;
-    const previous = pagination.querySelector("[data-page-prev]");
-    const next = pagination.querySelector("[data-page-next]");
-    const numbers = pagination.querySelector("[data-page-numbers]");
-    if (previous) previous.disabled = currentPage <= 1;
-    if (next) next.disabled = currentPage >= pages;
-    if (numbers) {
-      const visible = [...new Set([1, currentPage - 1, currentPage, currentPage + 1, pages])]
-        .filter((page) => page >= 1 && page <= pages).sort((a, b) => a - b);
-      numbers.innerHTML = visible
-        .map((page, index) => `${index && page - visible[index - 1] > 1 ? '<span class="page-gap" aria-hidden="true">…</span>' : ""}<button type="button" data-page="${page}"${page === currentPage ? ' class="active" aria-current="page"' : ""}>${page}</button>`)
-        .join("");
-    }
-    if (pageSummary) {
-      const from = total ? (currentPage - 1) * pageSize + 1 : 0;
-      const to = Math.min(currentPage * pageSize, total);
-      pageSummary.textContent = `显示 ${from}–${to}，共 `;
-    }
-  };
-
-  const apply = () => {
-    const query = input.value.trim().toLowerCase();
-    const matches = items.filter((item) => {
-      const searchable = item.dataset.search || "";
-      return searchable.includes(query) && (!chipFilter
-        || (sourceOnly ? item.dataset.source === chipFilter : searchable.includes(chipFilter)))
-        && (!mediaFilter || (item.dataset.mediaTypes || "").split(" ").includes(mediaFilter));
-    });
-    const pages = pageSize ? Math.max(1, Math.ceil(matches.length / pageSize)) : 1;
-    currentPage = Math.min(currentPage, pages);
-    const pageStart = pageSize ? (currentPage - 1) * pageSize : 0;
-    const pageItems = new Set(pageSize ? matches.slice(pageStart, pageStart + pageSize) : matches);
-
-    items.forEach((item) => {
-      item.hidden = !pageItems.has(item);
-    });
-
-    groups.forEach((group) => {
-      const hasVisible = Array.from(group.querySelectorAll("[data-search-item]")).some((item) => !item.hidden);
-      group.hidden = !hasVisible;
-    });
-
-    if (count) count.textContent = String(matches.length);
-    if (empty) empty.hidden = matches.length !== 0;
-    renderPagination(matches.length, pages);
-
-    const url = new URL(window.location.href);
-    if (input.value.trim()) url.searchParams.set("q", input.value.trim());
+  if (write) {
+    const url = new URL(location.href);
+    if (query) url.searchParams.set("q", input.value.trim());
     else url.searchParams.delete("q");
     if (chipFilter) url.searchParams.set("source", chipFilter);
     else url.searchParams.delete("source");
     if (mediaFilter) url.searchParams.set("media", mediaFilter);
     else url.searchParams.delete("media");
-    if (pageSize && currentPage > 1) url.searchParams.set("page", String(currentPage));
-    else url.searchParams.delete("page");
-    window.history.replaceState(window.history.state, "", url);
+    pagers.forEach(pager => pager.writeUrl(url));
+    writeListUrl(url, push, scrollY);
+  }
+  mediaChips.forEach(chip => {
+    const active = (chip.dataset.mediaFilter || "") === mediaFilter;
+    chip.classList.toggle("active", active);
+    chip.setAttribute("aria-pressed", String(active));
+  });
+  chips.forEach(chip => {
+    const active = (chip.dataset.filter || "") === chipFilter;
+    chip.classList.toggle("active", active);
+    chip.setAttribute("aria-pressed", String(active));
+  });
+}
 
-    mediaChips.forEach((chip) => {
-      const active = (chip.dataset.mediaFilter || "") === mediaFilter;
-      chip.classList.toggle("active", active);
-      chip.setAttribute("aria-pressed", String(active));
-    });
-    chips.forEach((chip) => {
-      const active = (chip.dataset.filter || "") === chipFilter;
-      chip.classList.toggle("active", active);
-      chip.setAttribute("aria-pressed", String(active));
-    });
-  };
-
-  input.addEventListener("input", () => {
-    currentPage = 1;
-    apply();
-  });
-  clear?.addEventListener("click", () => {
-    input.value = "";
-    currentPage = 1;
-    input.focus();
-    apply();
-  });
-  chips.forEach((chip) => {
-    chip.addEventListener("click", () => {
-      chipFilter = chip.dataset.filter || "";
-      currentPage = 1;
-      apply();
-    });
-  });
-  mediaChips.forEach((chip) => chip.addEventListener("click", () => {
-    mediaFilter = chip.dataset.mediaFilter || "";
-    currentPage = 1;
-    apply();
-  }));
-  pagination?.addEventListener("click", (event) => {
-    const button = event.target.closest("button");
-    if (!button || button.disabled) return;
-    if (button.matches("[data-page-prev]")) currentPage -= 1;
-    else if (button.matches("[data-page-next]")) currentPage += 1;
-    else if (button.dataset.page) currentPage = Number(button.dataset.page);
-    apply();
-    document.querySelector(".archive-toolbar")?.scrollIntoView({ behavior: "smooth", block: "start" });
-  });
-
+const resetAndApply = () => { pagers.forEach(pager => pager.reset()); apply(); };
+input?.addEventListener("input", resetAndApply);
+document.querySelector("[data-clear]")?.addEventListener("click", () => {
+  input.value = "";
+  input.focus();
+  resetAndApply();
+});
+chips.forEach(chip => chip.addEventListener("click", () => {
+  chipFilter = chip.dataset.filter || "";
+  resetAndApply();
+}));
+mediaChips.forEach(chip => chip.addEventListener("click", () => {
+  mediaFilter = chip.dataset.mediaFilter || "";
+  resetAndApply();
+}));
+window.addEventListener("popstate", event => {
+  if (location.pathname !== initialPath || event.state?.detailDialog) return;
+  readUrl();
+  apply({ write: false });
+  restoreListScroll(event.state);
+});
+window.addEventListener("pageshow", () => {
+  if (location.pathname !== initialPath || history.state?.detailDialog) return;
+  readUrl();
   apply();
-  document.documentElement.removeAttribute("data-filter-pending");
-})();
+});
+readUrl();
+apply();
+trackListScroll();
+document.documentElement.removeAttribute("data-filter-pending");

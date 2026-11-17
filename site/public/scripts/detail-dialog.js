@@ -285,7 +285,7 @@
       window.location.reload();
       return;
     }
-    const isLocalBase = event.state?.detailDialogOwner === historyOwner;
+    const isLocalBase = event.state?.detailDialogBase && event.state.detailDialogOwner === historyOwner;
     closeDetail({
       title: (isLocalBase && event.state?.detailDialogBaseTitle) || initialTitle,
       scrollY: isLocalBase ? event.state?.detailDialogScrollY : null,

@@ -109,14 +109,15 @@ test("image discovery and search retain filterable archive states", async () => 
   assert.match(search, /data-clear/);
   assert.match(search, /data-search-group/);
   assert.match(search, /data-empty/);
-  assert.match(filter, /window\.history\.replaceState/);
-  assert.match(filter, /group\.hidden = !hasVisible/);
+  assert.match(filter, /writeListUrl/);
+  assert.match(filter, /group\.hidden/);
 });
 
 test("article archive keeps filtering, URL state, and bounded pagination together", async () => {
-  const [articles, filter, styles] = await Promise.all([
-    read("src/pages/articles/index.astro"),
+  const [articles, filter, pager, styles] = await Promise.all([
+    read("dist/articles/index.html"),
     read("public/scripts/filter.js"),
+    read("public/scripts/list-pagination.js"),
     read("src/styles/global.css"),
   ]);
 
@@ -124,7 +125,7 @@ test("article archive keeps filtering, URL state, and bounded pagination togethe
   assert.match(articles, /data-page-summary/);
   assert.match(articles, /aria-live="polite"/);
   assert.match(filter, /url\.searchParams\.set\("source"/);
-  assert.match(filter, /url\.searchParams\.set\("page"/);
+  assert.match(pager, /url\.searchParams\.set\(parameter/);
   assert.match(filter, /chip\.setAttribute\("aria-pressed"/);
   assert.match(styles, /\.archive-pagination/);
 });

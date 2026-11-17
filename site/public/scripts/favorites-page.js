@@ -1,4 +1,5 @@
 import { trackFavoriteAction } from "./favorite-metrics.js";
+import { createPagination, restoreListScroll, trackListScroll, writeListUrl } from "./list-pagination.js";
 import {
   favoriteKey,
   importFavoritesText,
@@ -23,6 +24,11 @@ if (root instanceof HTMLElement && catalogNode instanceof HTMLScriptElement) {
   const catalogByKey = new Map(catalog.map((item) => [favoriteKey(item), item]));
   const knownKeys = new Set(catalogByKey.keys());
   let importMode = "merge";
+  const initialPath = location.pathname;
+  const pager = createPagination(root, (scrollY) => {
+    render({ push: true, scrollY });
+    pager.scrollToStart();
+  });
 
   const setStatus = (message, type = "info") => {
     if (!(status instanceof HTMLElement)) return;
@@ -31,12 +37,18 @@ if (root instanceof HTMLElement && catalogNode instanceof HTMLScriptElement) {
     status.hidden = !message;
   };
 
-  const render = () => {
+  const render = ({ push = false, scrollY, write = true } = {}) => {
     if (!(list instanceof HTMLElement) || !(empty instanceof HTMLElement)) return;
     const { favorites, error } = readFavorites(window.localStorage);
+    const { start, end } = pager.range(favorites.items.length);
+    if (write) {
+      const url = new URL(location.href);
+      pager.writeUrl(url);
+      writeListUrl(url, push, scrollY);
+    }
     list.replaceChildren();
 
-    for (const saved of favorites.items) {
+    for (const saved of favorites.items.slice(start, end)) {
       const current = catalogByKey.get(favoriteKey(saved));
       const item = current ?? saved;
       const row = document.createElement("article");
@@ -75,7 +87,7 @@ if (root instanceof HTMLElement && catalogNode instanceof HTMLScriptElement) {
     empty.hidden = favorites.items.length > 0;
     if (summary instanceof HTMLElement) {
       summary.textContent = favorites.items.length
-        ? `${favorites.items.length} 项收藏${unavailableCount ? ` · ${unavailableCount} 项原内容不可用` : ""}`
+        ? `显示 ${start + 1}–${end}，共 ${favorites.items.length} 项收藏${unavailableCount ? ` · ${unavailableCount} 项原内容不可用` : ""}`
         : "还没有收藏";
     }
     if (clearUnavailable instanceof HTMLButtonElement) {
@@ -167,5 +179,13 @@ if (root instanceof HTMLElement && catalogNode instanceof HTMLScriptElement) {
 
   window.addEventListener("storage", render);
   window.addEventListener("xgif:favorites-changed", render);
+  window.addEventListener("popstate", (event) => {
+    if (location.pathname !== initialPath || event.state?.detailDialog) return;
+    pager.readUrl();
+    render({ write: false });
+    restoreListScroll(event.state);
+  });
+  window.addEventListener("pageshow", () => { pager.readUrl(); render(); });
   render();
+  trackListScroll();
 }

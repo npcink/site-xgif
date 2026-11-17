@@ -23,6 +23,11 @@ test.beforeEach(async ({ page, baseURL }) => {
   await page.route("https://images.unsplash.com/**", (route) => route.abort());
 });
 
+test.afterEach(async ({ page }) => {
+  // Let fixture responses finish before Playwright disposes their request context.
+  await page.unrouteAll({ behavior: "wait" });
+});
+
 async function expectPacked(grid) {
   // Replay shortest-column placement from actual heights, checking gaps and overlap.
   await expect.poll(() => grid.evaluate((element) => {
@@ -60,6 +65,10 @@ test("feeds fill the shortest column under CSP and repack after filtering and re
   expect(await feed.locator(".home-feed-item").evaluateAll((items) => items.map((item) => item.textContent))).toEqual(order);
 
   await page.goto(`${origin}/tags/${encodeURIComponent("幽默")}`);
+  const inlineIndex = await page.locator(".article-grid > .article-card").evaluateAll(items =>
+    items.findIndex(item => item.dataset.inlineContentId === "20260721-nzrl"));
+  expect(inlineIndex).toBeGreaterThanOrEqual(0);
+  await page.goto(`${origin}/tags/${encodeURIComponent("幽默")}?articlesPage=${Math.floor(inlineIndex / 24) + 1}`);
   const articles = page.locator(".article-grid");
   await expectPacked(articles);
   await expect(articles.locator('[data-inline-content-id="20260721-nzrl"] .article-inline-text')).toBeVisible();
@@ -84,6 +93,10 @@ test("feeds fill the shortest column under CSP and repack after filtering and re
   await expectPacked(articles);
   await page.goto(`${origin}/images`);
   const images = page.locator(".masonry-grid").first();
+  await expectPacked(images);
+  await page.getByRole("navigation", { name: "图片分页" }).getByRole("button", { name: "下一页" }).click();
+  await expect(page).toHaveURL(/page=2/u);
+  await expect(images.locator(".image-card:visible")).toHaveCount(24);
   await expectPacked(images);
   await page.getByRole("button", { name: "动图", exact: true }).click();
   await expectPacked(images);

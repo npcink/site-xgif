@@ -53,7 +53,7 @@ const rssUrl = new URL(siteConfig.rss.path, siteUrl);
     <meta name="twitter:image" content={socialImage} />
     {jsonLd && <script is:inline type="application/ld+json" set:html={JSON.stringify(jsonLd)} />}
     <title>{title}</title>
-    {["/search", "/articles", "/images"].includes(Astro.url.pathname) && <script is:inline src="/scripts/filter-init.js"></script>}
+    {(["/search", "/articles", "/images"].includes(Astro.url.pathname) || Astro.url.pathname.startsWith("/tags/")) && <script is:inline src="/scripts/filter-init.js"></script>}
   </head>
   <body>
     <Header />

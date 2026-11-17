@@ -9,7 +9,7 @@ test("image media filters compose with search and mood, persist on reload and re
   const moving = page.locator('[data-search-item][data-media-types~="animated"]');
   const total = await moving.count();
   expect(total).toBeGreaterThan(0);
-  await expect(page.locator("[data-search-item]:visible")).toHaveCount(total);
+  await expect(page.locator("[data-search-item]:visible")).toHaveCount(Math.min(24, total));
   await expect(page.locator('[data-media-filter="animated"]')).toHaveAttribute("aria-pressed", "true");
   await expect(moving.first().locator(".image-count")).toContainText("动图");
   await page.reload();
@@ -23,7 +23,7 @@ test("image media filters compose with search and mood, persist on reload and re
   await expect(page.locator('[data-search-item][data-media-types="animated"]:visible')).toHaveCount(0);
   await page.locator('[data-filter="调侃"]').click();
   const expected = await page.locator('[data-search-item]').evaluateAll(items => items.filter(item => item.dataset.mediaTypes.split(" ").includes("static") && item.dataset.search.includes("调侃")).length);
-  await expect(page.locator("[data-search-item]:visible")).toHaveCount(expected);
+  await expect(page.locator("[data-search-item]:visible")).toHaveCount(Math.min(24, expected));
   await expect(page.locator("[data-visible-count]")).toHaveText(String(expected));
   await expect(page).toHaveURL(/media=static/);
   await expect(page).toHaveURL(/source=/);

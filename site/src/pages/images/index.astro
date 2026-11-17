@@ -1,6 +1,7 @@
 ---
 import { getCollection } from "astro:content";
 import ImageCard from "../../components/ImageCard.astro";
+import ListPagination from "../../components/ListPagination.astro";
 import { pageTitle } from "../../config/site";
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import { sortByDate } from "../../lib/content";
@@ -18,7 +19,7 @@ const moods = Array.from(new Set(images.flatMap((entry) => entry.data.mood)));
     <p>按情绪、场景和主题整理，找到刚好能表达这一刻的图片。</p>
   </section>
 
-  <section class="archive-content">
+  <section class="archive-content" data-list-scope>
     <div class="media-filter" role="group" aria-label="图片类型">
       <button type="button" data-media-filter="" aria-pressed="true" class="active">全部</button>
       <button type="button" data-media-filter="static" aria-pressed="false">静态图</button>
@@ -34,13 +35,14 @@ const moods = Array.from(new Set(images.flatMap((entry) => entry.data.mood)));
         {moods.map((mood) => <button data-filter={mood.toLowerCase()}>{mood}</button>)}
       </div>
     </div>
-    <p class="filter-count"><span data-visible-count>{images.length}</span> 项内容</p>
+    <p class="filter-count" aria-live="polite"><span data-page-summary></span><span data-visible-count>{images.length}</span> 项内容</p>
     <div class="masonry-grid" data-filter-list>
       {images.map((item) => <ImageCard item={item} headingLevel="h2" />)}
     </div>
+    <ListPagination label="图片分页" />
     <div class="empty-state" data-empty hidden>
       <span>¯\_(ツ)_/¯</span><h2>这次真的没有找到</h2><p>换个情绪或场景试试。</p>
     </div>
   </section>
-  <script is:inline src="/scripts/filter.js"></script>
+  <script is:inline type="module" src="/scripts/filter.js"></script>
 </BaseLayout>
