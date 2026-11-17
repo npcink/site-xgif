@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-17T02:41:05.662Z",
-  "sourceHash": "57698a36a296684d5a2cf3032c488e66f35efeb13c9fa46b58808b70ac8e574f",
+  "generatedAt": "2026-11-17T02:56:41.198Z",
+  "sourceHash": "d95dddd7cb04048f6beca4cf5297209c97bede2c47bb01d2fdd68f58b7751f08",
   "publication": {
     "schemaVersion": 1,
-    "sourceHash": "57e8338aefe0f26fa6fc1fc059a205272bf68d77a521e69343d2b475379994af"
+    "sourceHash": "0521cc2e66ed80671457dee46fc220a530378de4fbb0017f8cb45126a63e08a5"
   },
   "mode": "hybrid",
   "embedding": {
@@ -22,7 +22,7 @@
   "generation": {
     "fallbackCode": "",
     "requestedModel": "RizwanMalik/qwen3-vl-embedding-2b:q8_0-q8_0",
-    "attemptedAt": "2026-11-17T02:41:05.662Z"
+    "attemptedAt": "2026-11-17T02:56:41.198Z"
   },
   "recommendations": {
     "20250722-n20d": {
@@ -1735,8 +1735,8 @@
         "20261112-cbac",
         "20261116-z45m",
         "20261116-j0ge",
-        "20261116-x6wo",
-        "20261116-zzzm"
+        "20261116-zzzm",
+        "20261116-x6wo"
       ]
     },
     "20260126-fox0": {
@@ -1805,9 +1805,9 @@
         "20261116-obrf",
         "20261116-zzzm",
         "20261117-whje",
-        "20261116-x6wo",
         "20261116-z45m",
         "20261116-j0ge",
+        "20261116-x6wo",
         "20261116-ll42"
       ]
     },
@@ -5929,21 +5929,21 @@
         "20260126-dh4w",
         "20260126-fox0",
         "20260126-ee3g",
-        "20260126-poye",
-        "20260817-flpv",
-        "20260722-99j9",
         "20260824-dpfb",
+        "20260817-flpv",
+        "20260126-poye",
+        "20260722-99j9",
         "20260724-46ma"
       ],
       "images": [
-        "20261113-75c8",
         "20261117-7ow5",
+        "20261113-75c8",
         "20261113-wa0d",
         "20261116-im57",
         "20261116-j0ge",
         "20261117-jv97",
-        "20261116-0j57",
-        "20261116-uzgu"
+        "20261116-uzgu",
+        "20261116-0j57"
       ]
     },
     "20261116-xfdh": {
