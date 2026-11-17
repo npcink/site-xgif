@@ -2,6 +2,8 @@
 
 最后更新：2026-11-17
 
+本轮性能候选已完成开发与云端验证，尚未发布；发布、私有备份与清理待办见 [性能阶段收尾](PERFORMANCE_CLOSEOUT_2026-11-17.md)。
+
 ## 当前架构
 
 XGIF 是单人借助 AI 维护的 Astro 静态内容站。公开站点为 `https://www.xgif.cn`，Cloudflare Workers Static Assets 托管，新图片使用 R2 `img.xgif.cn`。文章和图片 Markdown 是内容权威源，`contentId` 与公开 URL 保持稳定。
