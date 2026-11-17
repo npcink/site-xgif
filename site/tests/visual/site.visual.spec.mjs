@@ -160,15 +160,10 @@ test("homepage matches the approved visual baseline", async ({ page }, testInfo)
 test("image dialog matches the approved visual baseline", async ({ page }, testInfo) => {
   await openImageDialog(page);
 
-  // Recommendation cards are data-owned and intentionally change when the
-  // original-evidence manifest is rebuilt. Keep the dialog shell and primary
-  // image under visual review without making content selection a layout baseline.
-  await expect(page).toHaveScreenshot(`image-dialog-${testInfo.project.name}.png`, {
-    // The blur can retain a composited archive even after it is hidden. Disable
-    // only that backdrop effect so new content cannot change this shell baseline.
-    style: "body > :not(dialog) { visibility: hidden !important; } dialog::backdrop { backdrop-filter: none !important; }",
+  // Capture the dialog itself: the blurred archive outside it changes whenever
+  // content is published. Recommendation cards are data-owned and masked too.
+  await expect(page.getByRole("dialog", { name: "去摧毁金融区吧" })).toHaveScreenshot(`image-dialog-${testInfo.project.name}.png`, {
     animations: "disabled",
-    fullPage: false,
     maskColor: "#d9d4ca",
     mask: [page.locator(".detail-dialog-body .related-section")],
   });
