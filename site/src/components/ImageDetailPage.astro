@@ -62,12 +62,11 @@ const imageRatioKey =
     )}
     <div class="image-detail-copy">
       <p class="section-kicker">REACTION / {images.length > 1 ? `图集 · ${images.length} 张${containsAnimation ? " · 含动图" : ""}` : containsAnimation ? "动图详情" : "图片详情"}</p>
-      <h1>{item.data.title}</h1>
-      <p class="detail-summary">{item.data.description}</p>
+      <h1 class="sr-only">{item.data.title}</h1>
       <dl>
         <div><dt>分类</dt><dd>{item.data.category}</dd></div>
-        <div><dt>情绪</dt><dd>{item.data.mood.join(" / ") || "未分类"}</dd></div>
-        <div><dt>场景</dt><dd>{item.data.scenes.join(" / ") || "通用"}</dd></div>
+        {item.data.mood.length > 0 && <div><dt>情绪</dt><dd>{item.data.mood.join(" / ")}</dd></div>}
+        {item.data.scenes.length > 0 && <div><dt>场景</dt><dd>{item.data.scenes.join(" / ")}</dd></div>}
       </dl>
       <div class="card-tags">
         {item.data.tags.map((tag) => <a href={`/tags/${encodeURIComponent(tag)}`}>#{tag}</a>)}
@@ -85,7 +84,7 @@ const imageRatioKey =
       <p class="image-save-hint">打开原图后，可长按或右键保存。</p>
       <p class="action-feedback" data-copy-status role="status" aria-live="polite"></p>
       <input class="copy-link-fallback" data-copy-fallback aria-label="图片链接，可选择后复制" readonly hidden />
-      <div class="prose image-note"><Content /></div>
+      {Boolean(item.body?.trim()) && <div class="prose image-note"><Content /></div>}
       <p class="image-source">
         {isUserProvided
           ? "图片来源：用户提供 · 已确认可公开发布"
