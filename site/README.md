@@ -86,9 +86,9 @@ npm run test:production
 
 ## 访问统计
 
-正式域名的公开页面使用爱站统计，入口为 `public/scripts/analytics.js`，由公共布局在生产构建中加载。加载器使用站点配置中的域名校验当前主机；本地开发、部署预览和 `noindex` 页面（包括草稿、搜索、收藏与本次浏览）不启用统计。隐私说明同步记录第三方统计的数据处理范围。
+统计替换候选（未部署）：移除爱站加载器，沿用正式域名已启用的免费 Cloudflare Web Analytics 自动注入，不手工再安装 beacon。当前 Cloudflare 模式排除欧盟访客；页面 `noindex` 不控制边缘注入范围，本地及部署预览无手工统计。收藏动作汇总独立保留。线上控制台配置和真实响应需在授权发布后分别核验；说明见 [ADR-030](docs/decisions/ADR-030-image-loading-and-static-asset-caching.md)。
 
-`public/_headers` 对爱站脚本和请求放行 `https://node90.aizhantj.com:21233`，并允许部署平台从 `https://static.cloudflareinsights.com` 加载统计脚本、向 `https://cloudflareinsights.com` 上报。保留对内联脚本和动态代码执行的限制。爱站脚本包含动态解析逻辑；该逻辑继续受 CSP 限制，不为其加入 `unsafe-eval`。变更统计服务或启用其额外功能时，应重新验证所需地址和 CSP，而非放行通配域名。
+`public/_headers` 仅允许 Cloudflare 从 `https://static.cloudflareinsights.com` 加载统计脚本，向同源 `/cdn-cgi/rum` 或 `https://cloudflareinsights.com` 上报，已移除爱站域名。保留对内联脚本和动态代码执行的限制。变更统计服务或启用额外功能时，应重新验证所需地址和 CSP，不放行通配域名。
 
 图片的精确宽高比由构建期生成的同源 `/image-ratios.css` 提供，仅包含公开图片的尺寸，不再依赖被 CSP 拦截的内联样式；独立页与弹窗共用该样式。
 

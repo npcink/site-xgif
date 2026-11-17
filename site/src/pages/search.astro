@@ -38,7 +38,7 @@ const catalog = await getCatalog();
       <div class="content-section image-section search-group" data-search-group data-list-scope data-catalog-base={catalog.base} data-catalog-kind="images" data-catalog-total={images.length}>
         <div class="content-title"><h2>图片 / 表情包</h2><span>IMAGES</span></div>
         <p class="filter-count"><span data-page-summary></span><span data-group-count>{images.length}</span> 项图片内容</p>
-        <div class="masonry-grid">{images.slice(0, 24).map((item) => <ImageCard item={item} />)}</div>
+        <div class="masonry-grid">{images.slice(0, 24).map((item) => <ImageCard item={item} layout="search" />)}</div>
         <ListPagination label="搜索图片分页" pageParam="imagesPage" />
       </div>
     </div>

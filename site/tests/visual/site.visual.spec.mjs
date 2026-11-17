@@ -237,6 +237,10 @@ test("search empty state matches the approved visual baseline", async ({ page },
 
 test("article detail matches the approved visual baseline", async ({ page }, testInfo) => {
   await page.goto("/20260710-vfks", { waitUntil: "networkidle" });
+  // Optional fonts may remain on the fallback face for a cold document. Warm the
+  // actual fonts before the reference capture; cold-load CLS is tested separately.
+  await page.evaluate(() => document.fonts.ready);
+  await page.reload({ waitUntil: "networkidle" });
   await waitForImages(page);
   await expect(page.getByRole("heading", { level: 1, name: "我总想用海边那天，盖过父亲后来病痛中的模样" })).toBeVisible();
 

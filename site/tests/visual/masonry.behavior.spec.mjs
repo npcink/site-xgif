@@ -25,8 +25,8 @@ test.beforeEach(async ({ page, baseURL }) => {
 });
 
 test.afterEach(async ({ page }) => {
-  // Let fixture responses finish before Playwright disposes their request context.
-  await page.unrouteAll({ behavior: "wait" });
+  // Assertions are complete; late fixture responses can be cancelled at teardown.
+  await page.unrouteAll({ behavior: "ignoreErrors" });
 });
 
 async function expectPacked(grid) {

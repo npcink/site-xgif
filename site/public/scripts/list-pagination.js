@@ -72,6 +72,7 @@ export function createPagination(root, onChange) {
 export function writeListUrl(url, push = false, scrollY = window.scrollY) {
   if (url.href === location.href) return;
   if (push) {
+    scrollPositions.set(history.state?.listEntry, scrollY);
     history.replaceState({ ...history.state, detailDialogBase: false, listScrollY: scrollY }, "", location.href);
     history.pushState({ ...history.state, detailDialog: false, detailDialogBase: false, listEntry: crypto.randomUUID(), listScrollY: 0 }, "", url);
   } else history.replaceState(history.state, "", url);
@@ -91,7 +92,10 @@ export function trackListScroll() {
   const isList = () => location.pathname === path && !history.state?.detailDialog && !document.body.classList.contains("detail-dialog-open");
   // Keep scrolling in memory; replaceState on every frame hits Safari's history rate limit.
   window.addEventListener("scroll", () => {
-    if (isList()) scrollPositions.set(history.state?.listEntry, window.scrollY);
+    // Loading status and card replacement can move the browser's scroll anchor;
+    // those temporary positions must not replace the visitor's saved location.
+    const loadingCatalog = document.querySelector("[data-catalog-base]") && !document.documentElement.hasAttribute("data-catalog-ready");
+    if (isList() && !loadingCatalog) scrollPositions.set(history.state?.listEntry, window.scrollY);
   }, { passive: true });
   window.addEventListener("pagehide", () => {
     if (isList()) history.replaceState({ ...history.state, listScrollY: window.scrollY }, "", location.href);
