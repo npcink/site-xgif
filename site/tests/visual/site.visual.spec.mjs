@@ -184,7 +184,7 @@ test("image library matches the approved visual baseline", async ({ page }, test
     maskColor: "#d9d4ca",
     mask: [
       page.locator(".masonry-grid"),
-      page.locator("[data-visible-count]"),
+      page.locator(".filter-count"),
     ],
   });
 });
@@ -207,7 +207,7 @@ test("image library filtered state matches the approved visual baseline", async 
     maskColor: "#d9d4ca",
     mask: [
       page.locator(".masonry-grid"),
-      page.locator("[data-visible-count]"),
+      page.locator(".filter-count"),
     ],
   });
 });
@@ -222,7 +222,7 @@ test("search results match the approved visual baseline", async ({ page }, testI
     maskColor: "#d9d4ca",
     mask: [
       page.locator("[data-filter-list]"),
-      page.locator("[data-visible-count]"),
+      page.locator(".filter-count"),
     ],
   });
 });
