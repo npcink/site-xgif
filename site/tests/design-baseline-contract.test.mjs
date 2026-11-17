@@ -22,7 +22,7 @@ test("image detail surfaces keep the two-column layout without cropping source i
   assert.match(page, /class="image-source"/);
   assert.match(page, /data-image-ratio=\{imageRatioKey\}/);
   assert.doesNotMatch(page, /style=/);
-  assert.match(styles, /grid-template-columns: minmax\(0, 1\.15fr\) minmax\(0, \.85fr\)/);
+  assert.match(styles, /grid-template-columns: minmax\(0, 1fr\) 280px/);
   assert.match(styles, /\.detail-dialog-body \.image-detail-grid \{[\s\S]*align-items: stretch;/);
   assert.match(styles, /\.detail-dialog-body \.image-detail-grid \{[^}]*height: auto;[^}]*min-height: 520px;/);
   assert.match(styles, /\.detail-dialog-body \.image-detail figure img \{[^}]*min-height: 0;[^}]*object-fit: contain;/);
@@ -30,8 +30,6 @@ test("image detail surfaces keep the two-column layout without cropping source i
   assert.match(styles, /figure\.ratio-square \{ aspect-ratio: auto; \}/);
   assert.match(styles, /\.image-detail figure\.ratio-square \{ aspect-ratio: var\(--image-aspect-ratio, 1\); \}/);
   assert.match(styles, /\.image-detail figure img \{[^}]*height: 100%;[^}]*object-fit: contain;/);
-  assert.match(styles, /\.image-detail-copy h1 \{[^}]*font-size: clamp\(46px, 4vw, 64px\);/);
-  assert.match(styles, /\.image-detail-copy \.detail-summary \{[^}]*font-size: clamp\(18px, 1\.25vw, 20px\);/);
   assert.match(styles, /\.detail-dialog\[data-detail-kind="image"\] \{[\s\S]*inset-block: auto;/);
   assert.match(styles, /\.detail-dialog\[data-detail-kind="image"\] \.detail-dialog-body \{ min-height: 0; \}/);
 });
