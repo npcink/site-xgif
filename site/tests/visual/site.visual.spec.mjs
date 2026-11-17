@@ -164,8 +164,9 @@ test("image dialog matches the approved visual baseline", async ({ page }, testI
   // original-evidence manifest is rebuilt. Keep the dialog shell and primary
   // image under visual review without making content selection a layout baseline.
   await expect(page).toHaveScreenshot(`image-dialog-${testInfo.project.name}.png`, {
-    // Hide the changing archive behind the dialog while preserving viewport size.
-    style: "body > :not(dialog) { visibility: hidden !important; }",
+    // The blur can retain a composited archive even after it is hidden. Disable
+    // only that backdrop effect so new content cannot change this shell baseline.
+    style: "body > :not(dialog) { visibility: hidden !important; } dialog::backdrop { backdrop-filter: none !important; }",
     animations: "disabled",
     fullPage: false,
     maskColor: "#d9d4ca",
