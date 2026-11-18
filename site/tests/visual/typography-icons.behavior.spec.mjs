@@ -18,7 +18,7 @@ test("Chinese page headings retain readable spacing across shared surfaces", asy
         const size = parseFloat(style.fontSize);
         return {
           leading: parseFloat(style.lineHeight) / size,
-          tracking: parseFloat(style.letterSpacing) / size,
+          tracking: style.letterSpacing === "normal" ? 0 : parseFloat(style.letterSpacing) / size,
           overflow: document.documentElement.scrollWidth - innerWidth,
         };
       });
