@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { waitForCatalog } from "./archive-helpers.mjs";
+import { catalogItems, waitForCatalog } from "./archive-helpers.mjs";
 
 test("caching cards leaves distant images unfetched until scrolling or restoring their page", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
@@ -157,7 +157,73 @@ test("a late search response neither overwrites the newest query nor downloads o
   } finally { release(); }
 });
 
-test("superseded search stops scheduling further card batches", async ({ page }) => {
+test("search fills an available card request slot without waiting for slower fragments", async ({ page }) => {
+  let releaseOne, releaseAll;
+  const one = new Promise(resolve => { releaseOne = resolve; });
+  const all = new Promise(resolve => { releaseAll = resolve; });
+  const requests = [];
+  await page.route("**/catalog/**/cards/articles/*", async route => {
+    requests.push(route.request().url());
+    await (requests.length === 2 ? one : all);
+    await route.continue();
+  });
+  try {
+    await page.goto("/articles");
+    await waitForCatalog(page);
+    const cards = page.locator("main .article-card");
+    const initial = await cards.evaluateAll(items => items.map(item => item.dataset.catalogId));
+    await page.getByRole("textbox", { name: "筛选文章" }).fill("学习");
+    await expect.poll(() => requests.length).toBe(4);
+    releaseOne();
+    // The three other requests and the replacement are still held.
+    await expect.poll(() => requests.length, { timeout: 3000 }).toBe(5);
+    expect(await cards.evaluateAll(items => items.map(item => item.dataset.catalogId))).toEqual(initial);
+    releaseAll();
+    await expect(page).toHaveURL(/q=/);
+    await waitForCatalog(page);
+    const matches = (await catalogItems(page, "articles", true)).filter(item => item.text.includes("学习"));
+    await expect(page.locator("[data-visible-count]")).toHaveText(String(matches.length));
+    expect(await cards.evaluateAll(items => items.map(item => item.dataset.catalogId))).toEqual(matches.slice(0, 12).map(item => item.id));
+    expect(new Set(requests).size).toBe(requests.length);
+  } finally { releaseOne(); releaseAll(); }
+});
+
+test("a failed card request stops refills and retry reuses successful fragments", async ({ page }) => {
+  let failOne, releaseRest;
+  const failure = new Promise(resolve => { failOne = resolve; });
+  const rest = new Promise(resolve => { releaseRest = resolve; });
+  const requests = [];
+  await page.route("**/catalog/**/cards/articles/*", async route => {
+    requests.push(route.request().url());
+    if (requests.length === 1) {
+      await failure;
+      return route.fulfill({ status: 503, body: "unavailable" });
+    }
+    await rest;
+    await route.continue();
+  });
+  try {
+    await page.goto("/articles");
+    await waitForCatalog(page);
+    await page.getByRole("textbox", { name: "筛选文章" }).fill("学习");
+    await expect.poll(() => requests.length).toBe(4);
+    failOne();
+    const retry = page.getByRole("button", { name: "重试加载" });
+    await expect(retry).toBeVisible();
+    releaseRest();
+    await page.waitForLoadState("networkidle");
+    expect(requests).toHaveLength(4);
+    await expect(page).not.toHaveURL(/q=/);
+    const firstBatch = [...requests];
+    await retry.click();
+    await expect(page).toHaveURL(/q=/);
+    await waitForCatalog(page);
+    expect(requests.filter(url => url === firstBatch[0])).toHaveLength(2);
+    for (const url of firstBatch.slice(1)) expect(requests.filter(request => request === url)).toHaveLength(1);
+  } finally { failOne(); releaseRest(); }
+});
+
+test("superseded search stops scheduling further card requests", async ({ page }) => {
   let release;
   const gate = new Promise(resolve => { release = resolve; });
   const cardRequests = [];

@@ -55,20 +55,27 @@ export function createCatalog(root) {
     },
     async nodes(items, isCurrent = () => true) {
       const pages = [...new Set(items.filter(item => !cards.has(`${base}/${kind}/${item.id}`)).map(item => item.page))];
-      // Bound concurrency for scattered search results; unused images have no src.
-      for (let start = 0; start < pages.length; start += 4) {
-        if (!isCurrent()) return null;
-        await Promise.all(pages.slice(start, start + 4).map(page => load(`${base}/cards/${kind}/${page}`, async response => {
-          const document = new DOMParser().parseFromString(await response.text(), "text/html");
-          const fragment = document.querySelector("[data-catalog-fragment]");
-          if (fragment?.dataset.revision !== revision || fragment.dataset.kind !== kind) throw new Error("catalog-fragment");
-          for (const card of fragment.children) {
-            if (!ID.test(card.dataset.catalogId)) throw new Error("catalog-card");
-            const key = `${base}/${kind}/${card.dataset.catalogId}`;
-            if (!cards.has(key)) cards.set(key, card);
-          }
-        })));
-      }
+      const loadPage = page => load(`${base}/cards/${kind}/${page}`, async response => {
+        const document = new DOMParser().parseFromString(await response.text(), "text/html");
+        const fragment = document.querySelector("[data-catalog-fragment]");
+        if (fragment?.dataset.revision !== revision || fragment.dataset.kind !== kind) throw new Error("catalog-fragment");
+        for (const card of fragment.children) {
+          if (!ID.test(card.dataset.catalogId)) throw new Error("catalog-card");
+          const key = `${base}/${kind}/${card.dataset.catalogId}`;
+          if (!cards.has(key)) cards.set(key, card);
+        }
+      });
+      // Refill each request slot as it becomes free, without waiting for slower siblings.
+      let next = 0, failed = false;
+      const fillSlot = async () => {
+        try {
+          while (!failed && isCurrent() && next < pages.length) await loadPage(pages[next++]);
+        } catch (error) {
+          failed = true;
+          throw error;
+        }
+      };
+      await Promise.all(Array.from({ length: Math.min(pages.length, 4) }, fillSlot));
       if (!isCurrent()) return null;
       return items.map(item => {
         const card = cards.get(`${base}/${kind}/${item.id}`)?.cloneNode(true);
