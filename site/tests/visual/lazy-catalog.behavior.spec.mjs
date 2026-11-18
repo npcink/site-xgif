@@ -87,9 +87,58 @@ test("failed page fetch preserves the current cards and retries without losing B
   expect(await cards.evaluateAll(items => items.map(item => item.getAttribute("href")))).toEqual(before);
 });
 
-test("a late search response cannot overwrite the newest query", async ({ page }) => {
+test("cold search starts its full-text request before the metadata response completes", async ({ page }) => {
   let release;
   const gate = new Promise(resolve => { release = resolve; });
+  let searchStarted = false;
+  page.on("request", request => { if (/\/search-images\.json$/.test(request.url())) searchStarted = true; });
+  await page.route("**/catalog/**/images.json", async route => { await gate; await route.continue(); });
+  await page.goto("/images");
+  await waitForCatalog(page);
+  expect(searchStarted).toBe(false);
+  try {
+    await page.getByRole("textbox", { name: "筛选图片" }).fill("CUP 5080");
+    await expect.poll(() => searchStarted, { timeout: 2000 }).toBe(true);
+    release();
+    await expect(page.locator("[data-visible-count]")).toHaveText("1");
+    await expect(page.locator("main .image-card")).toHaveAttribute("aria-label", /CUP 5080/);
+  } finally { release(); }
+});
+
+test("metadata retry reuses a full-text request that is already in flight", async ({ page }) => {
+  let release;
+  const gate = new Promise(resolve => { release = resolve; });
+  let fail = true, metadataRequests = 0, searchRequests = 0;
+  await page.route("**/catalog/**/images.json", route => {
+    metadataRequests += 1;
+    return fail ? route.fulfill({ status: 503, body: "unavailable" }) : route.continue();
+  });
+  await page.route("**/catalog/**/search-images.json", async route => {
+    searchRequests += 1;
+    await gate;
+    await route.continue();
+  });
+  await page.goto("/images");
+  await waitForCatalog(page);
+  try {
+    await page.getByRole("textbox", { name: "筛选图片" }).fill("CUP 5080");
+    await expect(page.getByRole("button", { name: "重试加载" })).toBeVisible();
+    await expect.poll(() => searchRequests).toBe(1);
+    fail = false;
+    await page.getByRole("button", { name: "重试加载" }).click();
+    await expect.poll(() => metadataRequests).toBe(2);
+    release();
+    await expect(page.locator("[data-visible-count]")).toHaveText("1");
+    await expect(page.locator("main .image-card")).toHaveAttribute("aria-label", /CUP 5080/);
+    expect(searchRequests).toBe(1);
+  } finally { release(); }
+});
+
+test("a late search response neither overwrites the newest query nor downloads obsolete cards", async ({ page }) => {
+  let release;
+  const gate = new Promise(resolve => { release = resolve; });
+  const cardRequests = [];
+  page.on("request", request => { if (/\/cards\/images\/\d+$/.test(request.url())) cardRequests.push(request.url()); });
   await page.route("**/catalog/**/search-images.json", async route => { await gate; await route.continue(); });
   await page.goto("/images");
   await waitForCatalog(page);
@@ -103,6 +152,37 @@ test("a late search response cannot overwrite the newest query", async ({ page }
     await expect(page.locator("main .image-card")).toHaveCount(1);
     await expect(page).toHaveURL(/q=CUP\+5080$/);
     await expect(page.locator("main .image-card")).toHaveAttribute("aria-label", /CUP 5080/);
+    await page.waitForLoadState("networkidle");
+    expect(cardRequests).toEqual([]);
+  } finally { release(); }
+});
+
+test("superseded search stops scheduling further card batches", async ({ page }) => {
+  let release;
+  const gate = new Promise(resolve => { release = resolve; });
+  const cardRequests = [];
+  await page.route("**/catalog/**/cards/articles/*", async route => {
+    cardRequests.push(route.request().url());
+    await gate;
+    await route.continue();
+  });
+  await page.goto("/articles");
+  await waitForCatalog(page);
+  const input = page.getByRole("textbox", { name: "筛选文章" });
+  try {
+    await input.fill("学习");
+    await expect.poll(() => cardRequests.length).toBe(4);
+    await input.fill("不存在的过期搜索回归用例");
+    await expect(page.locator("[data-visible-count]")).toHaveText("0");
+    release();
+    await page.waitForLoadState("networkidle");
+    expect(cardRequests).toHaveLength(4);
+    await expect(page.locator("[data-empty]")).toBeVisible();
+    // Completed requests remain useful to a later query, without a refetch.
+    const firstBatch = [...cardRequests];
+    await input.fill("学习");
+    await expect(page.locator("[data-visible-count]")).not.toHaveText("0");
+    for (const url of firstBatch) expect(cardRequests.filter(request => request === url)).toHaveLength(1);
   } finally { release(); }
 });
 

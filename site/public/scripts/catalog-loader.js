@@ -41,17 +41,23 @@ export function createCatalog(root) {
     root, grid,
     total: Number(root.dataset.catalogTotal),
     async matches({ query, source, media, sourceOnly }) {
-      records ??= await json(kind);
-      if (query || (source && !sourceOnly)) search ??= new Map((await json(`search-${kind}`)).map(item => [item.id, item.text]));
+      const needsSearch = query || (source && !sourceOnly);
+      const [loadedRecords, loadedSearch] = await Promise.all([
+        records ?? json(kind),
+        needsSearch ? search ?? json(`search-${kind}`).then(items => new Map(items.map(item => [item.id, item.text]))) : null,
+      ]);
+      records = loadedRecords;
+      if (needsSearch) search = loadedSearch;
       return records.filter(item => (!tag || item.tags.includes(tag))
         && (!query || search.get(item.id).includes(query))
         && (!source || (sourceOnly ? item.source === source : search.get(item.id).includes(source)))
         && (!media || (item.mediaTypes || "").split(" ").includes(media)));
     },
-    async nodes(items) {
+    async nodes(items, isCurrent = () => true) {
       const pages = [...new Set(items.filter(item => !cards.has(`${base}/${kind}/${item.id}`)).map(item => item.page))];
       // Bound concurrency for scattered search results; unused images have no src.
       for (let start = 0; start < pages.length; start += 4) {
+        if (!isCurrent()) return null;
         await Promise.all(pages.slice(start, start + 4).map(page => load(`${base}/cards/${kind}/${page}`, async response => {
           const document = new DOMParser().parseFromString(await response.text(), "text/html");
           const fragment = document.querySelector("[data-catalog-fragment]");
@@ -63,6 +69,7 @@ export function createCatalog(root) {
           }
         })));
       }
+      if (!isCurrent()) return null;
       return items.map(item => {
         const card = cards.get(`${base}/${kind}/${item.id}`)?.cloneNode(true);
         if (!card) throw new Error("catalog-card-missing");

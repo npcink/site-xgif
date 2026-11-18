@@ -39,6 +39,7 @@ function updateControls() {
 
 async function apply({ push = false, scrollY, write = true, scrollRoot, restore } = {}) {
   const run = ++generation;
+  const isCurrent = () => run === generation;
   document.documentElement.removeAttribute("data-catalog-ready");
   const query = input?.value.trim().toLowerCase() || "";
   const filters = { query, source: chipFilter, media: mediaFilter, sourceOnly };
@@ -57,11 +58,12 @@ async function apply({ push = false, scrollY, write = true, scrollRoot, restore 
       scopes.forEach(({ catalog }) => catalog.root.setAttribute("aria-busy", "true"));
       results = await Promise.all(scopes.map(async scope => {
         const matches = await scope.catalog.matches(filters);
+        if (!isCurrent()) return null;
         const { start, end } = scope.pager.bounds(matches.length);
         const selected = matches.slice(start, end);
         const ids = [...scope.catalog.grid.children].map(card => card.dataset.catalogId);
         const same = ids.length === selected.length && selected.every((item, index) => item.id === ids[index]);
-        return { ...scope, total: matches.length, nodes: same ? null : await scope.catalog.nodes(selected) };
+        return { ...scope, total: matches.length, nodes: same ? null : await scope.catalog.nodes(selected, isCurrent) };
       }));
     }
     if (run !== generation) return;
