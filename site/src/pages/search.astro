@@ -23,7 +23,7 @@ const catalog = await getCatalog();
     <h1>想找什么？</h1>
     <label class="search-page-input">
       <Icon name="search" />
-      <input data-filter-input placeholder="输入文章正文、图片说明、标签或来源…" autofocus aria-label="搜索内容" />
+      <input data-filter-input placeholder="正文、图片说明、标签或来源" autofocus aria-label="搜索内容" />
       <button type="button" data-clear aria-label="清空搜索"><Icon name="close" /></button>
     </label>
     <p class="filter-count" aria-live="polite">找到 <span data-visible-count>{articles.length + images.length}</span> 条内容</p>

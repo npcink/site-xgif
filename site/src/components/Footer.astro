@@ -3,10 +3,14 @@ import { siteConfig } from "../config/site";
 ---
 
 <footer>
-  <div class="footer-brand">{siteConfig.brand.base}<span>{siteConfig.brand.suffix}</span></div>
-  <p>有趣的信息，被认真地整理。</p>
-  <div class="footer-links">
-    {siteConfig.footerNavigation.map((link) => <a href={link.href}>{link.label}</a>)}
+  <div class="footer-main">
+    <div class="footer-identity">
+      <div class="footer-brand">{siteConfig.brand.base}<span>{siteConfig.brand.suffix}</span></div>
+      <p>有趣的信息，被认真地整理。</p>
+    </div>
+    <div class="footer-links">
+      {siteConfig.footerNavigation.map((link) => <a href={link.href}>{link.label}</a>)}
+    </div>
   </div>
   <div class="footer-bottom">
     <span>© {new Date().getFullYear()} {siteConfig.name}</span>
