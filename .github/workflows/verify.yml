@@ -31,6 +31,15 @@ jobs:
           cache: npm
           cache-dependency-path: site/package-lock.json
       - run: npm ci
+      # Restore after npm ci, which removes node_modules. Cache only public image
+      # derivatives, never Astro's content store, drafts, or local tool data.
+      - name: Cache image transformations
+        uses: actions/cache@v4
+        with:
+          path: site/node_modules/.astro/assets
+          key: xgif-images-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('site/package-lock.json', 'site/astro.config.mjs', 'site/src/lib/display-image-service.mjs', 'site/src/components/DisplayImage.astro') }}-${{ github.sha }}
+          restore-keys: |
+            xgif-images-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('site/package-lock.json', 'site/astro.config.mjs', 'site/src/lib/display-image-service.mjs', 'site/src/components/DisplayImage.astro') }}-
       - run: npm run test && npm run test:visual:linux && npm run test:gallery
       - run: npm run check:deploy
       - name: Upload visual diff artifacts
