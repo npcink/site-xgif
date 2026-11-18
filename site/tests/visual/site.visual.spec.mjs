@@ -138,6 +138,13 @@ async function openSearchState(page, query) {
   await page.locator("[data-filter-input]").blur();
 }
 
+async function useReferenceFallbackFonts(page) {
+  // These references captured font-display: optional's cold fallback state.
+  // Network timing must not switch the reference capture to the warm font face.
+  // Delayed and warm custom fonts have separate behavior coverage.
+  await page.route("**/*.woff2", route => route.abort());
+}
+
 test("homepage matches the approved visual baseline", async ({ page }, testInfo) => {
   await page.goto("/", { waitUntil: "networkidle" });
   await waitForImages(page);
@@ -211,6 +218,7 @@ test("image library filtered state matches the approved visual baseline", async 
 });
 
 test("search results match the approved visual baseline", async ({ page }, testInfo) => {
+  await useReferenceFallbackFonts(page);
   await openSearchState(page, "海边");
   await expect(page.locator("[data-empty]")).toBeHidden();
 
@@ -251,6 +259,7 @@ test("article detail matches the approved visual baseline", async ({ page }, tes
 });
 
 test("tag index matches the approved visual baseline", async ({ page }, testInfo) => {
+  await useReferenceFallbackFonts(page);
   await page.goto("/tags", { waitUntil: "networkidle" });
   await expect(page.getByRole("heading", { name: /从一个词/ })).toBeVisible();
 
