@@ -88,7 +88,7 @@ npm run test:production
 
 ## 访问统计
 
-统计替换候选（未部署）：移除爱站加载器，沿用正式域名已启用的免费 Cloudflare Web Analytics 自动注入，不手工再安装 beacon。当前 Cloudflare 模式排除欧盟访客；页面 `noindex` 不控制边缘注入范围，本地及部署预览无手工统计。收藏动作汇总独立保留。线上控制台配置和真实响应需在授权发布后分别核验；说明见 [ADR-030](docs/decisions/ADR-030-image-loading-and-static-asset-caching.md)。
+已于 2026-11-18 部署：移除爱站加载器，沿用正式域名已启用的免费 Cloudflare Web Analytics 自动注入，不手工再安装 beacon。当前 Cloudflare 模式排除欧盟访客；页面 `noindex` 不控制边缘注入范围，本地及部署预览无手工统计。收藏动作汇总独立保留。线上浏览器已核验只注入一份 Cloudflare beacon；说明见 [ADR-030](docs/decisions/ADR-030-image-loading-and-static-asset-caching.md)。
 
 `public/_headers` 仅允许 Cloudflare 从 `https://static.cloudflareinsights.com` 加载统计脚本，向同源 `/cdn-cgi/rum` 或 `https://cloudflareinsights.com` 上报，已移除爱站域名。保留对内联脚本和动态代码执行的限制。变更统计服务或启用额外功能时，应重新验证所需地址和 CSP，不放行通配域名。
 
@@ -110,7 +110,7 @@ Cloudflare Worker 连接 GitHub 仓库 `npcink/site-xgif`，使用以下配置�
 | Build command | `npm run build` |
 | Deploy command | `npx wrangler deploy` |
 
-`wrangler.jsonc` 将静态资源目录固定为 `./dist`，没有 `main` Worker 脚本。部署只上传 Astro 构建产物，不执行应用运行时代码，也不需要 KV、R2、D1、构建变量或 `workflow/.env`。
+`wrangler.jsonc` 将 Astro 静态资源目录固定为 `./dist`。`worker/index.mjs` 仅处理同源收藏动作汇总，使用已配置的 D1 和限流绑定；公开正文与图片仍由静态资源服务，不运行 CMS。部署不携带 `workflow/.env` 或私有内容。
 
 Node.js 版本由 `site/.node-version` 固定，Wrangler 版本由 `package-lock.json` 固定。首次部署先验证 Cloudflare 提供的 `*.workers.dev` 地址，再从 Worker 的 Domains & Routes 添加 `www.xgif.cn`。不要把 `workflow/` 部署到线上；它只在本机写入内容并执行 Git 操作。
 
