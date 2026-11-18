@@ -32,7 +32,7 @@ The test suite compares these viewports:
 
 It covers the homepage, the `confused` image dialog, and this second discovery batch:
 
-- Image library: default archive and the `无语` mood filter.
+- Image library: default archive and a keyword search for `无语`.
 - Search: a populated `打工` result and the `不存在内容` empty state.
 - Article detail: the direct `how-memes-speak` reading route.
 - Tags: the complete tag index, plus separate article and related-image captures from the mixed-content `AI` result route.
@@ -69,6 +69,8 @@ Then inspect and commit only the affected screenshots with the related CSS or co
 - Viewport-safe sizing using `svh` on mobile.
 
 ## Review rule
+
+2026-11-18：图片列表标题改为按空间自然换行，移除情绪快捷按钮。桌面和手机分别更新默认及关键词搜索状态，共 4 张 Linux 基线；截图容差和遮罩范围未变。
 
 2026-11-18：共用版式复查后，更新 9 张 Linux 基线，覆盖首页搜索提示、窄屏图片库及标签索引的首屏装饰、窄屏搜索、桌面和手机的标签结果标题区。搜索空态沿用搜索结果的冷字体基线，避免 `font-display: optional` 按请求时序切换字体；另有字体加载行为检查。截图容差和遮罩范围未变。
 
