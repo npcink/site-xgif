@@ -1,6 +1,29 @@
 import { expect, test } from "@playwright/test";
 import { waitForCatalog } from "./archive-helpers.mjs";
 
+test("caching cards leaves distant images unfetched until scrolling or restoring their page", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const requests = new Set();
+  page.on("request", request => { if (request.resourceType() === "image") requests.add(request.url()); });
+  await page.goto("/images", { waitUntil: "networkidle" });
+  await waitForCatalog(page);
+  const firstPage = await page.locator("main .image-card").evaluateAll(cards => cards.map(card => card.getAttribute("href")));
+  const last = page.locator("main .image-card img").last();
+  const sources = await last.evaluate(image => [image.src, ...image.srcset.split(",").map(candidate => new URL(candidate.trim().split(/\s+/)[0], location.href).href)]);
+  expect(sources.some(source => requests.has(source))).toBe(false);
+  await last.scrollIntoViewIfNeeded();
+  await expect.poll(() => last.evaluate(image => image.complete && image.naturalWidth > 0)).toBe(true);
+  expect(requests.has(await last.evaluate(image => image.currentSrc))).toBe(true);
+  await page.getByRole("navigation", { name: "图片分页" }).getByRole("button", { name: "下一页" }).click();
+  await waitForCatalog(page);
+  await page.getByRole("navigation", { name: "图片分页" }).getByRole("button", { name: "上一页" }).click();
+  await waitForCatalog(page);
+  expect(await page.locator("main .image-card").evaluateAll(cards => cards.map(card => card.getAttribute("href")))).toEqual(firstPage);
+  const first = page.locator("main .image-card img").first();
+  await first.scrollIntoViewIfNeeded();
+  await expect.poll(() => first.evaluate(image => image.complete && image.naturalWidth > 0)).toBe(true);
+});
+
 test("ordinary browsing downloads one page and defers both search indexes", async ({ page }) => {
   const requests = [];
   page.on("request", request => { if (new URL(request.url()).pathname.startsWith("/catalog/")) requests.push(new URL(request.url()).pathname); });
