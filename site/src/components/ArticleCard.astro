@@ -6,9 +6,10 @@ interface Props {
   headingLevel?: "h2" | "h3";
   article: CollectionEntry<"articles">;
   index?: number;
+  includeSearchText?: boolean;
 }
 
-const { article, index = 0 } = Astro.props;
+const { article, index = 0, includeSearchText = false } = Astro.props;
 const Heading = Astro.props.headingLevel || "h3";
 const accents = ["coral", "sage", "blue", "yellow"];
 const accent = accents[index % accents.length];
@@ -25,7 +26,7 @@ const { Content } = await render(article);
   data-search-item
   data-catalog-id={article.data.contentId}
   data-source={article.data.source.toLowerCase()}
-  data-search={`${article.body || ""} ${article.data.title} ${article.data.summary} ${article.data.source} ${article.data.tags.join(" ")}`.toLowerCase()}
+  data-search={includeSearchText ? `${article.body || ""} ${article.data.title} ${article.data.summary} ${article.data.source} ${article.data.tags.join(" ")}`.toLowerCase() : undefined}
 >
   <div class="article-meta">
     <span>{article.data.source}</span>

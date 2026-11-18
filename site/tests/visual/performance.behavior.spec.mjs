@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { waitForCatalog } from "./archive-helpers.mjs";
+import { catalogItems, waitForCatalog } from "./archive-helpers.mjs";
 
 test("default lists stay visible while the filter module is still downloading", async ({ page }) => {
   let release;
@@ -47,10 +47,14 @@ test("cold search starts with filtered results and stays stable", async ({ page 
     }).observe({ type: "layout-shift", buffered: true });
   });
   await page.goto("/search?q=AI", { waitUntil: "networkidle" });
+  await waitForCatalog(page);
   await expect(page.locator("html")).not.toHaveAttribute("data-filter-pending");
   const visible = page.locator("[data-search-item]:visible");
-  expect(await visible.count()).toBeGreaterThan(0);
-  for (const text of await visible.evaluateAll((items) => items.map((item) => item.dataset.search))) expect(text).toContain("ai");
+  const actual = await visible.evaluateAll(items => items.map(item => item.dataset.catalogId));
+  const expected = (await Promise.all([catalogItems(page, "articles", true), catalogItems(page, "images", true)]))
+    .flatMap(items => items.filter(item => item.text.includes("ai")).slice(0, 24).map(item => item.id));
+  expect(expected.length).toBeGreaterThan(0);
+  expect(actual).toEqual(expected);
   expect(await page.evaluate(() => window.searchShifts.reduce((sum, value) => sum + value, 0))).toBeLessThan(0.1);
 });
 

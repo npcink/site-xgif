@@ -18,7 +18,7 @@ for (const route of ["/", "/articles?page=2", "/images?media=animated", "/search
     const href = await link.getAttribute("href");
     await link.scrollIntoViewIfNeeded();
     const scrollY = await page.evaluate(() => window.scrollY);
-    const visibleIds = await page.locator("main [data-search-item]:visible").evaluateAll((items) => items.map((item) => item.dataset.search));
+    const visibleIds = await page.locator("main [data-search-item]:visible").evaluateAll((items) => items.map((item) => item.dataset.catalogId));
     await link.click();
     const dialog = page.locator("[data-detail-dialog]");
     await expect(dialog.locator("[data-detail-content]")).toHaveAttribute("data-content-id", href.slice(1));
@@ -28,7 +28,7 @@ for (const route of ["/", "/articles?page=2", "/images?media=animated", "/search
     await expect(link).toBeFocused();
     expect(page.url()).toBe(origin);
     await expect.poll(() => page.evaluate((before) => Math.abs(window.scrollY - before), scrollY)).toBeLessThanOrEqual(2);
-    expect(await page.locator("main [data-search-item]:visible").evaluateAll((items) => items.map((item) => item.dataset.search))).toEqual(visibleIds);
+    expect(await page.locator("main [data-search-item]:visible").evaluateAll((items) => items.map((item) => item.dataset.catalogId))).toEqual(visibleIds);
     await page.goForward();
     await expect(dialog.locator("[data-detail-content]")).toHaveAttribute("data-content-id", href.slice(1));
     await expect(dialog).toHaveAttribute("aria-busy", "false");

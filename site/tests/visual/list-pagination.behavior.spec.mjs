@@ -76,10 +76,10 @@ test("search and tag sections paginate independently and keep image results reac
   const images = page.locator("main .image-card:visible");
   await expect(articles).toHaveCount(24);
   await expect(images).toHaveCount(24);
-  const articleIds = await articles.evaluateAll(items => items.map(item => item.dataset.search));
+  const articleIds = await articles.evaluateAll(items => items.map(item => item.dataset.catalogId));
   await page.getByRole("navigation", { name: "搜索图片分页" }).getByRole("button", { name: "下一页" }).click();
   await expect(page).toHaveURL(/articlesPage=2&imagesPage=3$/);
-  expect(await articles.evaluateAll(items => items.map(item => item.dataset.search))).toEqual(articleIds);
+  expect(await articles.evaluateAll(items => items.map(item => item.dataset.catalogId))).toEqual(articleIds);
   await page.getByRole("textbox", { name: "搜索内容" }).fill("CUP 5080");
   await expect.poll(() => new URL(page.url()).searchParams.has("articlesPage")).toBe(false);
   await expect.poll(() => new URL(page.url()).searchParams.has("imagesPage")).toBe(false);
@@ -127,12 +127,12 @@ test("favorites pagination preserves the full export and clamps the last page af
 test("article page navigation also restores its previous page through Back", async ({ page }) => {
   await page.goto("/articles?page=2");
   await waitForCatalog(page);
-  const before = await page.locator("main .article-card:visible").evaluateAll(items => items.map(item => item.dataset.search));
+  const before = await page.locator("main .article-card:visible").evaluateAll(items => items.map(item => item.dataset.catalogId));
   await page.getByRole("navigation", { name: "文章分页" }).getByRole("button", { name: "下一页" }).click();
   await expect(page).toHaveURL(/page=3$/);
   await page.goBack();
   await expect(page).toHaveURL(/page=2$/);
-  expect(await page.locator("main .article-card:visible").evaluateAll(items => items.map(item => item.dataset.search))).toEqual(before);
+  expect(await page.locator("main .article-card:visible").evaluateAll(items => items.map(item => item.dataset.catalogId))).toEqual(before);
 });
 
 test("page number buttons keep keyboard focus after navigation", async ({ page }) => {
