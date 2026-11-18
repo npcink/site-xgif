@@ -76,3 +76,21 @@ test("header icons align, keep usable targets and survive favorite and menu stat
   await expect(favoriteIcon).toHaveCSS("fill", "none");
   await expect(page.locator(".header-favorites [data-favorites-count]")).toBeHidden();
 });
+
+
+test("shared search fields keep their height and a single visible focus boundary", async ({ page }) => {
+  for (const width of [320, 390, 900, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    for (const [route, selector] of [["/", ".search-box"], ["/images", ".inline-search"], ["/articles", ".inline-search"], ["/search", ".search-page-input"]]) {
+      await page.goto(route);
+      const field = page.locator(selector);
+      const input = field.locator("input");
+      await input.focus();
+      expect((await field.boundingBox()).height).toBeGreaterThanOrEqual(60);
+      await expect(field).toHaveCSS("outline-style", "solid");
+      await expect(input).toHaveCSS("outline-style", "none");
+      await input.fill("测试");
+      expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1);
+    }
+  }
+});

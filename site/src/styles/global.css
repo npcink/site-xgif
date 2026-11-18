@@ -154,9 +154,9 @@ button { color: inherit; }
 .section-heading h2 { font-size: clamp(42px, 5.6vw, 76px); line-height: 1.18; letter-spacing: -.035em; margin: 15px 0 0; }
 .section-heading > p { max-width: 350px; color: var(--muted); line-height: 1.7; margin: 0; font-size: 14px; }
 .search-panel { max-width: 1200px; margin: 0 auto 32px; display: flex; border: 1px solid var(--ink); background: #f9f6ef; }
-.search-box { flex: 1; height: 62px; display: flex; align-items: center; gap: 12px; padding: 0 20px; }
+.search-box { flex: 1; min-height: 62px; display: flex; align-items: center; gap: 12px; padding: 0 20px; }
 
-.search-box input { width: 100%; border: 0; background: transparent; font-size: 16px; }
+.search-box input { min-width: 0; flex: 1; width: 100%; border: 0; background: transparent; font-size: 16px; }
 .search-box button, .search-page-input button { display: grid; place-items: center; min-width: 44px; min-height: 44px; padding: 0; border: 0; background: transparent; cursor: pointer; }
 .search-submit { border: 0; border-left: 1px solid var(--ink); background: var(--ink); color: var(--paper); padding: 0 26px; font-size: 13px; font-weight: 750; cursor: pointer; }
 .search-submit:hover { background: var(--coral); color: var(--paper); }
@@ -994,6 +994,7 @@ html[data-filter-pending] .filter-count { visibility: hidden; }
 .header-search, .header-favorites { min-width: 44px; min-height: 44px; justify-content: center; }
 .article-footer a { display: inline-flex; align-items: center; min-height: 44px; }
 .search-box:focus-within, .inline-search:focus-within, .search-page-input:focus-within { outline: 3px solid var(--coral); outline-offset: 3px; }
+.search-box input:focus-visible, .inline-search input:focus-visible, .search-page-input input:focus-visible { outline: none; }
 .archive-pagination button { min-height: 44px; min-width: 44px; }
 .archive-pagination [data-page-numbers] { flex-wrap: nowrap; }
 .archive-pagination .page-gap { align-self: center; }
