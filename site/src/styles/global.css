@@ -943,11 +943,13 @@ body.detail-dialog-open { overflow: hidden; }
 .image-count { display: inline-block; margin-bottom: 12px; padding: 6px 9px; background: var(--paper); color: var(--ink); font-size: 11px; font-weight: 700; border-radius: 2px; }
 .public-image-gallery { min-width: 0; display: flex; flex-direction: column; background: var(--paper-deep); }
 .public-image-gallery:focus-visible { outline: 2px solid var(--ink); outline-offset: 4px; }
-.image-detail .public-image-gallery .gallery-stage { aspect-ratio: auto; height: clamp(280px, 50vw, 600px); min-height: 0; background: var(--ink); }
+/* A gallery figure is a flex child; single-image alignment must not shrink it. */
+.image-detail .public-image-gallery .gallery-stage { align-self: stretch; width: 100%; aspect-ratio: auto; height: clamp(280px, 50vw, 600px); min-height: 0; background: var(--ink); }
 .gallery-stage { touch-action: pan-y; }
 .gallery-stage [data-gallery-slide] { height: 100%; width: 100%; display: block; }
 .gallery-stage [data-gallery-slide][hidden] { display: none; }
-.image-detail .gallery-stage img { border: 0; height: 100%; width: 100%; object-fit: contain; }
+/* Keep the image tied to its stage, including the phone/tablet dialog heights. */
+.image-detail .public-image-gallery .gallery-stage img { border: 0; height: 100%; width: 100%; object-fit: contain; }
 .gallery-controls { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 12px; }
 .gallery-controls button { min-height: 44px; padding: 8px; font: inherit; font-size: 12px; border: 0; background: transparent; cursor: pointer; }
 .gallery-controls button:disabled { opacity: .35; cursor: default; }
