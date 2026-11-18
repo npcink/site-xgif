@@ -104,7 +104,7 @@ test("image discovery and search retain filterable archive states", async () => 
   assert.match(images, /class="archive-toolbar"/);
   assert.match(images, /data-filter-input/);
   assert.match(images, /data-filter-list/);
-  assert.match(images, /data-filter=/);
+  assert.match(images, /data-media-filter=/);
   assert.match(search, /class="search-page"/);
   assert.match(search, /data-clear/);
   assert.match(search, /data-search-group/);

@@ -113,12 +113,6 @@ async function waitForImages(page) {
     .every((image) => image.complete && image.naturalWidth > 0));
 }
 
-async function hideMoodLabelsForScreenshot(page) {
-  await page.locator('.filter-chips button[data-filter]:not([data-filter=""])').evaluateAll((buttons) => {
-    for (const button of buttons) button.style.setProperty("color", "transparent", "important");
-  });
-}
-
 async function openImageDialog(page) {
   // Offscreen CDN requests do not determine whether this dialog is ready.
   await imageArchiveFor(page, "20260723-z4xw");
@@ -182,7 +176,6 @@ test("image dialog matches the approved visual baseline", async ({ page }, testI
 test("image library matches the approved visual baseline", async ({ page }, testInfo) => {
   await page.goto("/images", { waitUntil: "networkidle" });
   await waitForImages(page);
-  await hideMoodLabelsForScreenshot(page);
 
   await expect(page).toHaveScreenshot(`image-library-${testInfo.project.name}.png`, {
     animations: "disabled",
@@ -200,11 +193,11 @@ test("image library filtered state matches the approved visual baseline", async 
   await waitForImages(page);
   const moodMatches = (await catalogItems(page, "images", true)).filter(item => item.text.includes("无语")).length;
   expect(moodMatches).toBeGreaterThan(0);
-  await page.getByRole("button", { name: "无语" }).click();
-  await expect(page.getByRole("button", { name: "无语" })).toHaveClass(/active/);
+  const input = page.getByRole("textbox", { name: "筛选图片" });
+  await input.fill("无语");
+  await input.blur();
   await expect(page.locator("[data-visible-count]")).toHaveText(String(moodMatches));
   await expect(page.locator(".masonry-grid .image-card:visible")).toHaveCount(Math.min(24, moodMatches));
-  await hideMoodLabelsForScreenshot(page);
 
   await expect(page).toHaveScreenshot(`image-library-filtered-${testInfo.project.name}.png`, {
     animations: "disabled",

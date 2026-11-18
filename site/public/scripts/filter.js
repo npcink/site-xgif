@@ -20,7 +20,8 @@ const scopes = [...document.querySelectorAll("[data-list-scope]")].map(root => {
 
 function readUrl() {
   const params = new URLSearchParams(location.search);
-  if (input instanceof HTMLInputElement) input.value = params.get("q") || "";
+  // Old image mood links used `source`; show that term in the search field.
+  if (input instanceof HTMLInputElement) input.value = params.get("q") || (mediaChips.length ? params.get("source") : "") || "";
   chipFilter = params.get("source") || "";
   if (!chips.some(chip => (chip.dataset.filter || "") === chipFilter)) chipFilter = "";
   mediaFilter = mediaChips.length && ["static", "animated"].includes(params.get("media")) ? params.get("media") : "";

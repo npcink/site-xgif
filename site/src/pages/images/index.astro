@@ -12,14 +12,13 @@ import { sortByDate } from "../../lib/content";
 const images = sortByDate(
   (await getCollection("images")).filter((entry) => !entry.data.draft && entry.data.public),
 );
-const moods = Array.from(new Set(images.flatMap((entry) => entry.data.mood)));
 const catalog = await getCatalog();
 ---
 
 <BaseLayout title={pageTitle("图片与表情包")} description="按情绪、场景和标签整理的图片、GIF 与表情包。">
   <section class="archive-hero image-archive-hero">
     <p class="section-kicker">REACTIONS / 图片与表情包</p>
-    <h1>不想解释，<br /><em>就发张图。</em></h1>
+    <h1><span>不想解释，</span><wbr /><em>就发张图。</em></h1>
     <p>按情绪、场景和主题整理，找到刚好能表达这一刻的图片。</p>
   </section>
 
@@ -34,10 +33,6 @@ const catalog = await getCatalog();
         <Icon name="search" />
         <input data-filter-input placeholder="搜索情绪、场景或标签…" aria-label="筛选图片" />
       </label>
-      <div class="filter-chips image-filter-chips">
-        <button class="active" data-filter="">全部情绪</button>
-        {moods.map((mood) => <button data-filter={mood.toLowerCase()}>{mood}</button>)}
-      </div>
     </div>
     <p class="filter-count" aria-live="polite"><span data-page-summary></span><span data-visible-count>{images.length}</span> 项内容</p>
     <CatalogStatus />

@@ -259,6 +259,22 @@ footer { padding: 65px 7vw 28px; background: var(--paper); }
 .footer-links { display: flex; flex-wrap: wrap; gap: 0 24px; font-size: 13px; font-weight: 700; }
 .footer-links a { min-height: 44px; display: inline-flex; align-items: center; white-space: nowrap; }
 .footer-bottom { border-top: 1px solid var(--line); padding-top: 20px; display: flex; justify-content: space-between; color: var(--muted); font-family: var(--font-geist-mono); font-size: 9px; letter-spacing: .04em; }
+.back-to-top {
+  position: fixed;
+  inset-inline-end: max(16px, env(safe-area-inset-right));
+  inset-block-end: max(16px, calc(env(safe-area-inset-bottom) + 8px));
+  z-index: 19;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--ink);
+  background: var(--paper);
+  cursor: pointer;
+}
+.back-to-top:hover { background: var(--ink); color: var(--paper); }
+body.detail-dialog-open .back-to-top { display: none; }
 
 body.detail-dialog-open { overflow: hidden; }
 .detail-dialog {
@@ -470,6 +486,8 @@ body.detail-dialog-open { overflow: hidden; }
   max-width: 920px;
 }
 .archive-hero h1 em { color: var(--coral); font-style: normal; }
+.archive-hero.image-archive-hero h1 { font-size: 40px; letter-spacing: 0; }
+.image-archive-hero h1 > span, .image-archive-hero h1 > em { display: inline-block; }
 .archive-hero > p:last-child { max-width: 520px; color: var(--muted); line-height: 1.7; }
 .archive-content { padding: 36px 5vw 120px; max-width: 1320px; margin: 0 auto; }
 .archive-toolbar { display: flex; align-items: stretch; border: 1px solid var(--ink); background: #f9f6ef; margin-bottom: 18px; }
@@ -1008,19 +1026,18 @@ html[data-filter-pending] .filter-count { visibility: hidden; }
 .archive-pagination [data-page-numbers] { flex-wrap: nowrap; }
 .archive-pagination .page-gap { align-self: center; }
 @media (max-width: 600px) {
-  /* Show two rows of moods at once and keep the remaining choices touch-scrollable. */
-  .image-filter-chips {
-    display: grid;
-    grid-auto-flow: column;
-    grid-auto-columns: minmax(82px, 1fr);
-    grid-template-rows: repeat(2, minmax(50px, auto));
-    overflow-x: auto;
-    overflow-y: hidden;
-    scrollbar-width: thin;
-  }
-  .image-filter-chips button { min-width: 82px; min-height: 50px; padding: 0 10px; }
   .archive-pagination { gap: 6px; }
   .archive-pagination button { padding: 0 8px; }
   .archive-pagination > [data-page-prev], .archive-pagination > [data-page-next] { flex-basis: calc(50% - 6px); }
   .archive-pagination > [data-page-numbers] { order: 1; width: 100%; }
+}
+
+@media (max-width: 459px) {
+  .archive-hero.image-archive-hero h1 { font-size: 30px; }
+}
+@media (min-width: 1050px) {
+  .archive-hero.image-archive-hero h1 { font-size: 52px; }
+}
+@media (min-width: 1320px) {
+  .archive-hero.image-archive-hero h1 { font-size: 66px; }
 }
