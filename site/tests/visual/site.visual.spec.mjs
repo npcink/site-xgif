@@ -234,6 +234,7 @@ test("search results match the approved visual baseline", async ({ page }, testI
 });
 
 test("search empty state matches the approved visual baseline", async ({ page }, testInfo) => {
+  await useReferenceFallbackFonts(page);
   await openSearchState(page, "不存在内容");
   await expect(page.getByRole("heading", { name: "这次真的什么都没搜到" })).toBeVisible();
 
