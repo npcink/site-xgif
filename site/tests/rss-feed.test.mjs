@@ -61,5 +61,5 @@ test("public pages advertise the RSS feed and robots points to the canonical sit
     /<link rel="alternate" type="application\/rss\+xml" title="xgif\.cn 文章" href="https:\/\/www\.xgif\.cn\/rss\.xml">/u,
   );
   assert.match(home, /<a href="\/rss\.xml">RSS<\/a>/u);
-  assert.match(robots, /^User-agent: \*\nAllow: \/\nSitemap: https:\/\/www\.xgif\.cn\/sitemap\.xml\n$/u);
+  assert.match(robots, /^User-agent: \*\nAllow: \/\nDisallow: \/catalog\/\nSitemap: https:\/\/www\.xgif\.cn\/sitemap\.xml\n$/u);
 });

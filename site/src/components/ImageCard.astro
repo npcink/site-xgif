@@ -10,9 +10,11 @@ interface Props {
   recommendation?: boolean;
   hidden?: boolean;
   priority?: boolean;
+  deferred?: boolean;
+  layout?: "archive" | "home" | "search";
 }
 
-const { item, recommendation = false, hidden = false, priority = false } = Astro.props;
+const { item, recommendation = false, hidden = false, priority = false, deferred = false } = Astro.props;
 const Heading = Astro.props.headingLevel || "h3";
 const imageCount = item.data.images?.length || 1;
 const href = contentHref(item);
@@ -30,6 +32,7 @@ const containsAnimation = ["animated", "mixed"].includes(mediaType);
   hidden={hidden}
   data-media-types={mediaFilterValues(item.data)}
   data-search-item
+  data-catalog-id={item.data.contentId}
   data-search={`${item.data.title} ${item.data.description} ${item.data.source} ${item.data.tags.join(" ")} ${item.data.mood.join(" ")} ${item.data.scenes.join(" ")}`.toLowerCase()}
 >
   <DisplayImage
@@ -38,10 +41,12 @@ const containsAnimation = ["animated", "mixed"].includes(mediaType);
     width={item.data.width}
     height={item.data.height}
     priority={priority}
+    deferCard={deferred}
     animated={item.data.images?.[0]?.animated ?? item.data.animated}
+    layout={Astro.props.layout}
   />
   <div class="image-copy">
-    {(imageCount > 1 || containsAnimation) && <span class="image-count">{imageCount > 1 ? `共 ${imageCount} 张${containsAnimation ? " · 含动图" : ""}` : "动图"}</span>}
+    {(imageCount > 1 || containsAnimation) && <span class="image-count">{imageCount > 1 ? `共 ${imageCount} 张${containsAnimation ? " · 含动图" : ""}` : "动图 · 点开播放"}</span>}
     <div class="image-tags">
       {item.data.tags.slice(0, 2).map((tag) => <span>#{tag}</span>)}
     </div>

@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { expect, test } from "@playwright/test";
+import { catalogItems, waitForCatalog } from "./archive-helpers.mjs";
 
 const headers = await readFile(new URL("../../public/_headers", import.meta.url), "utf8");
 const policy = headers.match(/Content-Security-Policy: (.+)/u)[1];
@@ -21,6 +22,11 @@ test.beforeEach(async ({ page, baseURL }) => {
     contentType: "image/svg+xml", body: '<svg xmlns="http://www.w3.org/2000/svg" width="600" height="600"/>',
   }));
   await page.route("https://images.unsplash.com/**", (route) => route.abort());
+});
+
+test.afterEach(async ({ page }) => {
+  // Assertions are complete; late fixture responses can be cancelled at teardown.
+  await page.unrouteAll({ behavior: "ignoreErrors" });
 });
 
 async function expectPacked(grid) {
@@ -60,6 +66,11 @@ test("feeds fill the shortest column under CSP and repack after filtering and re
   expect(await feed.locator(".home-feed-item").evaluateAll((items) => items.map((item) => item.textContent))).toEqual(order);
 
   await page.goto(`${origin}/tags/${encodeURIComponent("幽默")}`);
+  await waitForCatalog(page);
+  const inlineIndex = (await catalogItems(page, "articles")).filter(item => item.tags.includes("幽默")).findIndex(item => item.id === "20260721-nzrl");
+  expect(inlineIndex).toBeGreaterThanOrEqual(0);
+  await page.goto(`${origin}/tags/${encodeURIComponent("幽默")}?articlesPage=${Math.floor(inlineIndex / 24) + 1}`);
+  await waitForCatalog(page);
   const articles = page.locator(".article-grid");
   await expectPacked(articles);
   await expect(articles.locator('[data-inline-content-id="20260721-nzrl"] .article-inline-text')).toBeVisible();
@@ -84,6 +95,10 @@ test("feeds fill the shortest column under CSP and repack after filtering and re
   await expectPacked(articles);
   await page.goto(`${origin}/images`);
   const images = page.locator(".masonry-grid").first();
+  await expectPacked(images);
+  await page.getByRole("navigation", { name: "图片分页" }).getByRole("button", { name: "下一页" }).click();
+  await expect(page).toHaveURL(/page=2/u);
+  await expect(images.locator(".image-card:visible")).toHaveCount(24);
   await expectPacked(images);
   await page.getByRole("button", { name: "动图", exact: true }).click();
   await expectPacked(images);

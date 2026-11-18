@@ -1,3 +1,4 @@
+import { imageArchiveFor, catalogItems, waitForCatalog } from "./archive-helpers.mjs";
 import { expect, test } from "@playwright/test";
 
 test.beforeEach(async ({ page }) => {
@@ -11,7 +12,7 @@ test.beforeEach(async ({ page }) => {
 test("image dialogs retain both recommendation types and avoid already viewed content", async ({ page }) => {
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
-  await page.goto("/images");
+  const archiveUrl = await imageArchiveFor(page, "20260725-gxez");
   await page.locator('a[data-detail-link][href="/20260725-gxez"]').click();
   const dialog = page.locator("[data-detail-dialog]");
   await expect(dialog).toHaveAttribute("aria-busy", "false");
@@ -37,15 +38,18 @@ test("image dialogs retain both recommendation types and avoid already viewed co
   await page.goForward();
   await expect(dialog).toHaveAttribute("aria-busy", "false");
   await dialog.getByRole("button", { name: "关闭详情" }).click();
-  await expect(page).toHaveURL("/images");
+  await expect(page).toHaveURL(archiveUrl);
   await expect(dialog).not.toBeVisible();
   expect(errors).toEqual([]);
 });
 
 async function openArticleFromArchive(page, id) {
   await page.goto("/articles");
+  await waitForCatalog(page);
+  const item = (await catalogItems(page, "articles")).find(item => item.id === id);
+  if (!item) throw new Error(`Missing public fixture ${id}`);
   const link = page.locator(`a[data-detail-link][href="/${id}"]`).first();
-  await page.getByRole("textbox", { name: "筛选文章" }).fill((await link.textContent()).trim());
+  await page.getByRole("textbox", { name: "筛选文章" }).fill(item.title);
   await expect(link).toBeVisible();
   await link.click();
 }
@@ -163,7 +167,7 @@ test("weak image matches stay absent in both a standalone page and a loaded dial
   await page.goto("/20260723-2wfr");
   await expect(page.locator("main [data-detail-content]")).toHaveAttribute("data-content-id", "20260723-2wfr");
   await expect(page.locator("main [data-recommendations]")).toHaveCount(0);
-  await page.goto("/images");
+  await imageArchiveFor(page, "20260723-2wfr");
   await page.locator('a[data-detail-link][href="/20260723-2wfr"]').click();
   const dialog = page.locator("[data-detail-dialog]");
   await expect(dialog).toHaveAttribute("aria-busy", "false");

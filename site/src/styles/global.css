@@ -172,6 +172,7 @@ button { color: inherit; }
 .archive-pagination button { background: transparent; border: 1px solid var(--line); min-height: 40px; min-width: 40px; padding: 0 12px; }
 .archive-pagination button.active { background: var(--ink); border-color: var(--ink); color: var(--paper); }
 .archive-pagination button:disabled { cursor: not-allowed; opacity: .45; }
+.catalog-status { margin-top: 20px; }
 .content-section { max-width: 1200px; margin: 78px auto 0; }
 .content-title { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 1px solid var(--ink); padding-bottom: 16px; margin-bottom: 22px; }
 .content-title h2, .content-title h3 { font-size: 30px; letter-spacing: -.04em; margin: 0; }
@@ -661,6 +662,7 @@ body.detail-dialog-open { overflow: hidden; }
 .search-page-input input { flex: 1; border: 0; background: transparent; font-size: 20px; min-width: 0; }
 .search-page-input button { border: 0; background: transparent; font-size: 28px; cursor: pointer; }
 .search-page .filter-count { margin: 18px 0 0; }
+.search-group > .filter-count { margin: 0 0 24px; }
 .search-group { margin-top: 75px; }
 
 .legal-page { max-width: 1200px; margin: 0 auto; padding: 92px 5vw 130px; }

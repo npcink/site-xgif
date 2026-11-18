@@ -91,6 +91,7 @@ function openContent(root) {
 
 window.addEventListener("xgif:detail-opened", (event) => openContent(event.detail.root));
 window.addEventListener("xgif:detail-closed", () => { updateRecommendations(); refreshObservers(); });
+window.addEventListener("xgif:list-updated", refreshObservers);
 document.addEventListener("visibilitychange", refreshObservers);
 window.addEventListener("pagehide", () => {
   impressionObserver.disconnect();

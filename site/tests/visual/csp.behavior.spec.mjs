@@ -1,3 +1,4 @@
+import { imageArchiveFor } from "./archive-helpers.mjs";
 import { readFile } from "node:fs/promises";
 import { expect, test } from "@playwright/test";
 
@@ -39,7 +40,7 @@ test("image dimensions work under production CSP on direct pages and dialogs", a
   }
   await page.goto(`${origin}/20261112-6ix8`);
   await checkRatio(page.locator("main .image-detail"), "648 / 486");
-  await page.goto(`${origin}/images`);
+  await imageArchiveFor(page, "20261112-6ix8", `${origin}/images`);
   await page.locator('a[data-detail-link][href="/20261112-6ix8"]').first().click();
   const dialog = page.locator("[data-detail-dialog]");
   await expect(dialog).toHaveAttribute("aria-busy", "false");

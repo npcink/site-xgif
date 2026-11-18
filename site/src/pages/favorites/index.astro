@@ -2,6 +2,7 @@
 import { getCollection } from "astro:content";
 import { pageTitle } from "../../config/site";
 import BaseLayout from "../../layouts/BaseLayout.astro";
+import ListPagination from "../../components/ListPagination.astro";
 import { contentHref } from "../../lib/content";
 
 const [articles, images] = await Promise.all([
@@ -46,6 +47,7 @@ const safeCatalog = JSON.stringify(catalog).replaceAll("<", "\\u003c");
 
     <p class="favorites-status" data-favorites-status role="status" aria-live="polite" hidden></p>
     <div class="favorites-list" data-favorites-list></div>
+    <ListPagination label="收藏分页" />
     <div class="favorites-empty" data-favorites-empty hidden>
       <span aria-hidden="true">♡</span>
       <h2>收藏夹还是空的</h2>

@@ -2,7 +2,7 @@
   if (!("ResizeObserver" in window)) return;
 
   document.querySelectorAll(".home-feed, .article-grid, .masonry-grid").forEach((grid) => {
-    const items = Array.from(grid.children);
+    let items = Array.from(grid.children);
     let frame = 0;
 
     const layout = () => {
@@ -42,8 +42,15 @@
     sizes.observe(grid);
     items.forEach((item) => sizes.observe(item));
     // Filtering and pagination hide cards without changing their source order.
-    new MutationObserver(schedule).observe(grid, {
-      attributes: true, attributeFilter: ["hidden"], subtree: true,
+    new MutationObserver(records => {
+      if (records.some(record => record.type === "childList" && record.target === grid)) {
+        items.forEach(item => sizes.unobserve(item));
+        items = Array.from(grid.children);
+        items.forEach(item => sizes.observe(item));
+      }
+      schedule();
+    }).observe(grid, {
+      attributes: true, attributeFilter: ["hidden"], subtree: true, childList: true,
     });
     document.fonts.ready.then(schedule);
     window.addEventListener("pageshow", schedule);

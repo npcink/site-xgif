@@ -11,14 +11,17 @@ interface Props {
   detail?: boolean;
   priority?: boolean;
   deferred?: boolean;
+  deferCard?: boolean;
   animated?: boolean;
+  layout?: "archive" | "home" | "search";
 }
 
-const { src, alt, width, height, thumbnail = false, detail = false, priority = false, deferred = false, animated = false } = Astro.props;
+const { src, alt, width, height, thumbnail = false, detail = false, priority = false, deferred = false, deferCard = false, animated = false, layout = "archive" } = Astro.props;
 const localImages = import.meta.glob<ImageMetadata>("/public/images/**/*.{jpg,jpeg,png,webp,gif}", { eager: true, import: "default" });
 const local = localImages[`/public${src}`];
 const canOptimize = Boolean(local || (src.startsWith("https://img.xgif.cn/memes/") && width && height));
-const candidates = thumbnail ? [120] : animated ? (detail ? [480, 640] : [320, 480]) : detail ? [640, 960, 1280] : [320, 640, 960];
+const firstFrame = thumbnail || (animated && !detail);
+const candidates = thumbnail ? [120] : animated && detail ? [480, 640] : detail ? [640, 960, 1280] : [320, 640, 960];
 const widths = [...new Set(candidates.map((size) => Math.min(size, width || size)))];
 const display = canOptimize ? await getImage({
   src: local || src,
@@ -27,18 +30,29 @@ const display = canOptimize ? await getImage({
   widths,
   format: "webp",
   quality: 82,
+  firstFrame,
 }) : undefined;
 const displaySrc = display?.src || src;
 const srcset = display?.srcSet.attribute || undefined;
-const sizes = thumbnail ? "60px" : detail ? "(max-width: 900px) 90vw, 55vw" : "(max-width: 600px) 92vw, (max-width: 900px) 45vw, 40vw";
+// Match CSS columns and container caps. Lazy images use their measured slot where
+// sizes=auto is supported, including narrower recommendation and dialog surfaces.
+const containerThird = layout === "search" ? "400px" : "440px";
+const cardSizes = layout === "home"
+  ? "(max-width: 600px) calc(100vw - 34px), (max-width: 700px) calc(90vw - 2px), calc(min(45vw, 600px) - 12px)"
+  : `(max-width: 600px) calc(90vw - 2px), (max-width: 900px) calc(45vw - 12px), calc(min(33.333vw, ${containerThird}) - 3.333vw - 15.334px)`;
+const fallbackSizes = thumbnail ? "60px" : detail ? "(max-width: 900px) 90vw, 55vw" : cardSizes;
+const sizes = priority || thumbnail ? fallbackSizes : `auto, ${fallbackSizes}`;
 ---
 
 <img
-  src={deferred ? undefined : displaySrc}
-  srcset={deferred ? undefined : srcset}
+  src={deferred || deferCard ? undefined : displaySrc}
+  srcset={deferred || deferCard ? undefined : srcset}
+  data-card-src={deferCard ? displaySrc : undefined}
+  data-card-srcset={deferCard ? srcset : undefined}
   data-gallery-src={deferred ? displaySrc : undefined}
   data-gallery-srcset={deferred ? srcset : undefined}
   sizes={sizes}
+  data-animation-poster={animated && !detail ? "" : undefined}
   alt={alt}
   width={width}
   height={height}

@@ -1,0 +1,14 @@
+---
+interface Props {
+  label: string;
+  pageSize?: number;
+  pageParam?: string;
+}
+const { label, pageSize = 24, pageParam = "page" } = Astro.props;
+---
+
+<nav class="archive-pagination" data-pagination data-page-size={pageSize} data-page-param={pageParam} aria-label={label} hidden>
+  <button type="button" data-page-prev>上一页</button>
+  <div data-page-numbers></div>
+  <button type="button" data-page-next>下一页</button>
+</nav>

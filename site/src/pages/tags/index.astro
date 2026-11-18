@@ -24,7 +24,7 @@ const tags = allTags(articles, images).map((tag) => ({
       <a href={`/tags/${encodeURIComponent(tag.name)}`}>
         <span class="tag-order">{String(index + 1).padStart(2, "0")}</span>
         <strong>{tag.name}</strong>
-        <span>{tag.articles} 篇文章 · {tag.images} 张图片</span>
+        <span>{tag.articles} 篇文章 · {tag.images} 项图片内容</span>
         <b>↗</b>
       </a>
     ))}

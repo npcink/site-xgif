@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { imageArchiveFor, catalogItems } from "./archive-helpers.mjs";
 
 test.beforeEach(async ({ page }) => {
   await page.route("https://img.xgif.cn/**", async (route) => {
@@ -87,12 +88,14 @@ test("homepage discovery distinguishes featured filtering from full-site search"
   await expect(page).toHaveURL(/\/search\?q=AI$/);
   await expect(page.locator("[data-filter-input]")).toHaveValue("AI");
   await expect(page.locator("html")).not.toHaveAttribute("data-filter-pending");
-  const searchMatches = await page.locator("[data-search-item]").evaluateAll((cards) =>
-    cards.filter((card) => card.dataset.search.includes("ai")).length);
+  const articleMatches = (await catalogItems(page, "articles", true)).filter(item => item.text.includes("ai")).length;
+  const imageMatches = (await catalogItems(page, "images", true)).filter(item => item.text.includes("ai")).length;
+  const searchMatches = articleMatches + imageMatches;
   expect(searchMatches).toBeGreaterThan(0);
   expect(searchMatches).toBeGreaterThanOrEqual(homeMatches);
   await expect(page.locator("[data-visible-count]")).toHaveText(String(searchMatches));
-  await expect(page.locator("[data-search-item]:visible")).toHaveCount(searchMatches);
+  const visibleMatches = Math.min(24, articleMatches) + Math.min(24, imageMatches);
+  await expect(page.locator("[data-search-item]:visible")).toHaveCount(visibleMatches);
   await page.goBack();
   await expect(page).toHaveURL(/\/$/);
   await expect(input).toHaveValue("AI");
@@ -118,7 +121,7 @@ async function hideMoodLabelsForScreenshot(page) {
 
 async function openImageDialog(page) {
   // Offscreen CDN requests do not determine whether this dialog is ready.
-  await page.goto("/images", { waitUntil: "domcontentloaded" });
+  await imageArchiveFor(page, "20260723-z4xw");
   await waitForImages(page);
   await page.locator('a[href="/20260723-z4xw"][data-detail-link]').click();
   const dialog = page.getByRole("dialog", { name: "去摧毁金融区吧" });
@@ -133,6 +136,13 @@ async function openSearchState(page, query) {
   await waitForImages(page);
   await expect(page.locator("[data-filter-input]")).toHaveValue(query);
   await page.locator("[data-filter-input]").blur();
+}
+
+async function useReferenceFallbackFonts(page) {
+  // These references captured font-display: optional's cold fallback state.
+  // Network timing must not switch the reference capture to the warm font face.
+  // Delayed and warm custom fonts have separate behavior coverage.
+  await page.route("**/*.woff2", route => route.abort());
 }
 
 test("homepage matches the approved visual baseline", async ({ page }, testInfo) => {
@@ -188,13 +198,12 @@ test("image library matches the approved visual baseline", async ({ page }, test
 test("image library filtered state matches the approved visual baseline", async ({ page }, testInfo) => {
   await page.goto("/images", { waitUntil: "networkidle" });
   await waitForImages(page);
-  const moodMatches = await page.locator(".masonry-grid .image-card").evaluateAll((cards) =>
-    cards.filter((card) => card.dataset.search.includes("无语")).length);
+  const moodMatches = (await catalogItems(page, "images", true)).filter(item => item.text.includes("无语")).length;
   expect(moodMatches).toBeGreaterThan(0);
   await page.getByRole("button", { name: "无语" }).click();
   await expect(page.getByRole("button", { name: "无语" })).toHaveClass(/active/);
   await expect(page.locator("[data-visible-count]")).toHaveText(String(moodMatches));
-  await expect(page.locator(".masonry-grid .image-card:visible")).toHaveCount(moodMatches);
+  await expect(page.locator(".masonry-grid .image-card:visible")).toHaveCount(Math.min(24, moodMatches));
   await hideMoodLabelsForScreenshot(page);
 
   await expect(page).toHaveScreenshot(`image-library-filtered-${testInfo.project.name}.png`, {
@@ -209,6 +218,7 @@ test("image library filtered state matches the approved visual baseline", async 
 });
 
 test("search results match the approved visual baseline", async ({ page }, testInfo) => {
+  await useReferenceFallbackFonts(page);
   await openSearchState(page, "海边");
   await expect(page.locator("[data-empty]")).toBeHidden();
 
@@ -235,6 +245,10 @@ test("search empty state matches the approved visual baseline", async ({ page },
 
 test("article detail matches the approved visual baseline", async ({ page }, testInfo) => {
   await page.goto("/20260710-vfks", { waitUntil: "networkidle" });
+  // Optional fonts may remain on the fallback face for a cold document. Warm the
+  // actual fonts before the reference capture; cold-load CLS is tested separately.
+  await page.evaluate(() => document.fonts.ready);
+  await page.reload({ waitUntil: "networkidle" });
   await waitForImages(page);
   await expect(page.getByRole("heading", { level: 1, name: "我总想用海边那天，盖过父亲后来病痛中的模样" })).toBeVisible();
 
@@ -245,6 +259,7 @@ test("article detail matches the approved visual baseline", async ({ page }, tes
 });
 
 test("tag index matches the approved visual baseline", async ({ page }, testInfo) => {
+  await useReferenceFallbackFonts(page);
   await page.goto("/tags", { waitUntil: "networkidle" });
   await expect(page.getByRole("heading", { name: /从一个词/ })).toBeVisible();
 
