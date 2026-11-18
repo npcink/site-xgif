@@ -1,4 +1,5 @@
 ---
+import Icon from "./Icon.astro";
 import { imageMediaType, mediaFilterValues } from "../lib/image-media.mjs";
 import type { CollectionEntry } from "astro:content";
 import { contentHref } from "../lib/content";
@@ -52,5 +53,5 @@ const containsAnimation = ["animated", "mixed"].includes(mediaType);
     </div>
     <Heading class="sr-only">{item.data.title}</Heading>
   </div>
-  <span class="open-mark" aria-hidden="true">↗</span>
+  <span class="open-mark" aria-hidden="true"><Icon name="arrow-up-right" /></span>
 </a>

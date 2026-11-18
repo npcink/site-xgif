@@ -1,4 +1,5 @@
 ---
+import Icon from "../../components/Icon.astro";
 import { getCollection } from "astro:content";
 import ImageCard from "../../components/ImageCard.astro";
 import ListPagination from "../../components/ListPagination.astro";
@@ -30,7 +31,7 @@ const catalog = await getCatalog();
     </div>
     <div class="archive-toolbar">
       <label class="inline-search">
-        <span>⌕</span>
+        <Icon name="search" />
         <input data-filter-input placeholder="搜索情绪、场景或标签…" aria-label="筛选图片" />
       </label>
       <div class="filter-chips image-filter-chips">
@@ -44,7 +45,7 @@ const catalog = await getCatalog();
       {images.slice(0, 24).map((item) => <ImageCard item={item} headingLevel="h2" />)}
     </div>
     <ListPagination label="图片分页" />
-    <noscript><p><a href="/browse/images/1">逐页浏览全部图片 →</a></p></noscript>
+    <noscript><p><a href="/browse/images/1">逐页浏览全部图片 <Icon name="arrow-right" class="inline-icon" /></a></p></noscript>
     <div class="empty-state" data-empty hidden>
       <span>¯\_(ツ)_/¯</span><h2>这次真的没有找到</h2><p>换个情绪或场景试试。</p>
     </div>

@@ -1,4 +1,5 @@
 ---
+import Icon from "../../components/Icon.astro";
 import { getCollection } from "astro:content";
 import ArticleCard from "../../components/ArticleCard.astro";
 import ListPagination from "../../components/ListPagination.astro";
@@ -23,7 +24,7 @@ const catalog = await getCatalog();
   <section class="archive-content" data-list-scope data-catalog-base={catalog.base} data-catalog-kind="articles" data-catalog-total={articles.length}>
     <div class="archive-toolbar">
       <label class="inline-search">
-        <span>⌕</span>
+        <Icon name="search" />
         <input data-filter-input placeholder="搜索正文、标题、来源或标签…" aria-label="筛选文章" />
       </label>
       <div class="filter-chips" data-filter-kind="source">
@@ -39,7 +40,7 @@ const catalog = await getCatalog();
       {articles.slice(0, 12).map((article, index) => <ArticleCard article={article} index={index} headingLevel="h2" />)}
     </div>
     <ListPagination label="文章分页" pageSize={12} />
-    <noscript><p><a href="/browse/articles/1">逐页浏览全部文章 →</a></p></noscript>
+    <noscript><p><a href="/browse/articles/1">逐页浏览全部文章 <Icon name="arrow-right" class="inline-icon" /></a></p></noscript>
     <div class="empty-state" data-empty hidden>
       <span>¯\_(ツ)_/¯</span><h2>暂时没有匹配的文章</h2><p>换个更短的关键词试试。</p>
     </div>

@@ -13,7 +13,7 @@ test("image detail surfaces keep the two-column layout without cropping source i
     read("src/styles/global.css"),
   ]);
 
-  assert.match(dialog, /<b aria-hidden="true">×<\/b>/);
+  assert.match(dialog, /<Icon name="close"\s*\/>/);
   assert.doesNotMatch(dialog, /<span>关闭<\/span>/);
   assert.match(await read("src/components/DisplayImage.astro"), /referrerpolicy="no-referrer"/);
   assert.match(imageCard, /<DisplayImage/);

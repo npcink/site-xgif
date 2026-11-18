@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 import { waitForCatalog } from "./archive-helpers.mjs";
 
 test("image archive keeps its gutters and exposes every mood filter on narrow screens", async ({ page }) => {
-  for (const width of [1200, 900, 600, 390, 320]) {
+  for (const width of [1920, 1440, 1200, 900, 600, 390, 320]) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto("/images?q=躺在‘色泽黄亮，外酥内糯’招牌下的橘猫");
     await waitForCatalog(page);

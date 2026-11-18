@@ -1,4 +1,5 @@
 ---
+import Icon from "../components/Icon.astro";
 import BaseLayout from "../layouts/BaseLayout.astro";
 import { pageTitle } from "../config/site";
 ---
@@ -19,7 +20,7 @@ import { pageTitle } from "../config/site";
     <p>推荐进入可见区域才计为“看见”；文字末尾停留至少 1.5 秒才计数，这不能证明已经读完。</p>
     <p>这里只反映你当前标签页的使用情况，不代表全站访客表现。</p>
     <button class="primary-button" type="button" data-export-activity>导出本次记录</button>
-    <a class="activity-continue" href="/">继续逛 →</a>
+    <a class="activity-continue" href="/">继续逛 <Icon name="arrow-right" class="inline-icon" /></a>
     <p data-activity-status role="status"></p>
     <noscript><p>启用 JavaScript 后，才能记录和查看本次浏览。</p></noscript>
   </section>

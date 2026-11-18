@@ -1,4 +1,5 @@
 ---
+import Icon from "../../../components/Icon.astro";
 import BaseLayout from "../../../layouts/BaseLayout.astro";
 import ArticleCard from "../../../components/ArticleCard.astro";
 import ImageCard from "../../../components/ImageCard.astro";
@@ -20,7 +21,7 @@ const label = kind === "articles" ? "文章" : "图片";
 ---
 <BaseLayout title={pageTitle(`${label} · 第 ${page} 页`)} noindex>
   <section class="archive-content">
-    <a href={`/${kind}`}>← 返回{label}库</a>
+    <a href={`/${kind}`}><Icon name="arrow-left" class="inline-icon" /> 返回{label}库</a>
     <h1>{label} · 第 {page} 页</h1>
     <p>显示 {total ? start + 1 : 0}–{Math.min(start + size, total)}，共 {total} 项</p>
     <div class={kind === "articles" ? "article-grid" : "masonry-grid"}>
@@ -29,9 +30,9 @@ const label = kind === "articles" ? "文章" : "图片";
         : catalog.images.slice(start, start + size).map(item => <ImageCard item={item} headingLevel="h2" />)}
     </div>
     <nav class="archive-pagination" aria-label={`${label}逐页浏览`}>
-      {page > 1 && <a href={`/browse/${kind}/${page - 1}`}>← 上一页</a>}
+      {page > 1 && <a href={`/browse/${kind}/${page - 1}`}><Icon name="arrow-left" class="inline-icon" /> 上一页</a>}
       <span>{page} / {pages}</span>
-      {page < pages && <a href={`/browse/${kind}/${page + 1}`}>下一页 →</a>}
+      {page < pages && <a href={`/browse/${kind}/${page + 1}`}>下一页 <Icon name="arrow-right" class="inline-icon" /></a>}
     </nav>
   </section>
 </BaseLayout>

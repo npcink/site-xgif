@@ -1,4 +1,5 @@
 ---
+import Icon from "./Icon.astro";
 interface Props {
   contentId: string;
   kind: "article" | "image";
@@ -19,6 +20,6 @@ const { contentId, kind, title, href } = Astro.props;
   data-content-href={href}
   aria-pressed="false"
 >
-  <span class="favorite-toggle-mark" aria-hidden="true">♡</span>
+  <Icon name="heart" class="favorite-toggle-mark" />
   <span data-favorite-label>收藏</span>
 </button>

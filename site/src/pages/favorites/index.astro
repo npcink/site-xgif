@@ -1,4 +1,5 @@
 ---
+import Icon from "../../components/Icon.astro";
 import { getCollection } from "astro:content";
 import { pageTitle } from "../../config/site";
 import BaseLayout from "../../layouts/BaseLayout.astro";
@@ -49,10 +50,10 @@ const safeCatalog = JSON.stringify(catalog).replaceAll("<", "\\u003c");
     <div class="favorites-list" data-favorites-list></div>
     <ListPagination label="收藏分页" />
     <div class="favorites-empty" data-favorites-empty hidden>
-      <span aria-hidden="true">♡</span>
+      <Icon name="heart" />
       <h2>收藏夹还是空的</h2>
       <p>打开任意文章或图片详情，点击“收藏”即可加入这里。</p>
-      <a href="/articles">去逛文章 →</a>
+      <a href="/articles">去逛文章 <Icon name="arrow-right" class="inline-icon" /></a>
     </div>
   </section>
   <script is:inline type="application/json" data-favorites-catalog set:html={safeCatalog}></script>

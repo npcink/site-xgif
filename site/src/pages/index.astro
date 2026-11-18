@@ -1,4 +1,5 @@
 ---
+import Icon from "../components/Icon.astro";
 import { getCollection } from "astro:content";
 import ArticleCard from "../components/ArticleCard.astro";
 import ImageCard from "../components/ImageCard.astro";
@@ -33,7 +34,7 @@ for (let index = 0; index < Math.max(homeImages.length, Math.ceil(homeArticles.l
         收集好图和有趣文字，留给想歇一会儿的你。
       </p>
       <div class="hero-actions">
-        <a href="/images">找张表情包 →</a>
+        <a href="/images">找张表情包 <Icon name="arrow-right" class="inline-icon" /></a>
       </div>
     </div>
 
@@ -43,7 +44,7 @@ for (let index = 0; index < Math.max(homeImages.length, Math.ceil(homeArticles.l
         <span class="mini-label">READ · {featured.data.readTime.toUpperCase()}</span>
         <h2>{featured.data.title}</h2>
         <p>{featured.data.summary}</p>
-        <a href={contentHref(featured)} data-detail-link data-detail-kind="article">阅读全文 <span>→</span></a>
+        <a href={contentHref(featured)} data-detail-link data-detail-kind="article">阅读全文 <span><Icon name="arrow-right" class="inline-icon" /></span></a>
       </div>
     </div>}
   </section>
@@ -58,9 +59,9 @@ for (let index = 0; index < Math.max(homeImages.length, Math.ceil(homeArticles.l
   <section class="explore" id="discover">
     <div class="search-panel" data-home-discovery>
       <label class="search-box">
-        <span aria-hidden="true">⌕</span>
+        <Icon name="search" />
         <input data-home-filter-input placeholder="筛选首页精选；按 Enter 搜索全站…" aria-label="筛选首页精选内容" />
-        <button type="button" data-home-filter-clear aria-label="清空搜索" hidden>×</button>
+        <button type="button" data-home-filter-clear aria-label="清空搜索" hidden><Icon name="close" /></button>
       </label>
       <div class="view-tabs" role="group" aria-label="内容类型">
         <button class="active" type="button" data-home-view="all" aria-pressed="true">全部</button>
@@ -69,13 +70,13 @@ for (let index = 0; index < Math.max(homeImages.length, Math.ceil(homeArticles.l
       </div>
     </div>
     <p class="home-search-scope">
-      当前只筛选首页精选；<a href="/search" data-home-global-search>搜索全部 {articles.length + images.length} 条内容 →</a>
+      当前只筛选首页精选；<a href="/search" data-home-global-search>搜索全部 {articles.length + images.length} 条内容 <Icon name="arrow-right" class="inline-icon" /></a>
     </p>
     <p class="result-note" data-home-result-note aria-live="polite" hidden>首页精选中，关于“<span data-home-query></span>”找到 <strong data-home-visible-count>0</strong> 条内容</p>
 
     <div class="home-feed-heading">
       <h2>最近收藏</h2>
-      <div><a href="/articles">全部文章 →</a><a href="/images">全部图片 →</a></div>
+      <div><a href="/articles">全部文章 <Icon name="arrow-right" class="inline-icon" /></a><a href="/images">全部图片 <Icon name="arrow-right" class="inline-icon" /></a></div>
     </div>
     <div class="home-feed">
       {feed.map((entry, index) => (
@@ -102,7 +103,7 @@ for (let index = 0; index < Math.max(homeImages.length, Math.ceil(homeArticles.l
     <div class="tag-cloud">
       {popularTags.map((tag, index) => (
         <a href={`/tags/${encodeURIComponent(tag)}`}>
-          <span>{String(index + 1).padStart(2, "0")}</span> {tag} <b>↗</b>
+          <span>{String(index + 1).padStart(2, "0")}</span> {tag} <b><Icon name="arrow-up-right" class="inline-icon" /></b>
         </a>
       ))}
     </div>
@@ -117,7 +118,7 @@ for (let index = 0; index < Math.max(homeImages.length, Math.ceil(homeArticles.l
     </div>
     <div class="newsletter-placeholder">
       <span>无需注册 · 不采集联系方式</span>
-      <a href="/articles">浏览全部文章 <span>→</span></a>
+      <a href="/articles">浏览全部文章 <span><Icon name="arrow-right" class="inline-icon" /></span></a>
     </div>
   </section>
   <script is:inline src="/scripts/home-discovery.js"></script>

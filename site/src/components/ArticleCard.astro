@@ -1,4 +1,5 @@
 ---
+import Icon from "./Icon.astro";
 import { render, type CollectionEntry } from "astro:content";
 import { contentHref, formatShortDate, publicArticleNote } from "../lib/content";
 
@@ -39,6 +40,6 @@ const { Content } = await render(article);
   </div>
   <div class="article-footer">
     <span>{article.data.readTime}</span>
-    <a href={href} data-detail-link data-detail-kind="article">{isShortForm ? "接着看" : "阅读全文"} <span aria-hidden="true">→</span></a>
+    <a href={href} data-detail-link data-detail-kind="article">{isShortForm ? "接着看" : "阅读全文"} <span aria-hidden="true"><Icon name="arrow-right" class="inline-icon" /></span></a>
   </div>
 </article>
