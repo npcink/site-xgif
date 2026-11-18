@@ -38,3 +38,20 @@ test("built pages reference versioned scripts and ratio CSS with immutable cache
   assert.match(headers, /\/static\/\*\n  Cache-Control: public, max-age=31536000, immutable/);
   assert.match(headers, /\/_astro\/\*\n  Cache-Control: public, max-age=31536000, immutable/);
 });
+
+test("filtered lists preload their versioned module graph without adding it to unrelated pages", async () => {
+  const root = new URL("../dist/", import.meta.url);
+  for (const name of ["images", "articles", "search", "tags/哲学"]) {
+    const html = await readFile(new URL(`${name}/index.html`, root), "utf8");
+    const hints = [...html.matchAll(/<link\b[^>]*rel="modulepreload"[^>]*href="([^"]+)"/g)].map(match => match[1]);
+    assert.equal(hints.length, 3);
+    for (const file of ["filter.js", "list-pagination.js", "catalog-loader.js"]) {
+      const url = hints.find(href => href.endsWith(`/scripts/${file}`));
+      assert.match(url, /^\/static\/[a-f0-9]{20}\/scripts\//);
+      assert.ok((await readFile(new URL(`.${url}`, root))).length);
+      if (file === "filter.js") assert.ok(html.includes(`type="module" src="${url}"`));
+    }
+  }
+  const home = await readFile(new URL("index.html", root), "utf8");
+  assert.doesNotMatch(home, /rel="modulepreload"/);
+});

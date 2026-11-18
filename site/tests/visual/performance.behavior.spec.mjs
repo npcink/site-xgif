@@ -1,6 +1,44 @@
 import { expect, test } from "@playwright/test";
 import { waitForCatalog } from "./archive-helpers.mjs";
 
+test("default lists stay visible while the filter module is still downloading", async ({ page }) => {
+  let release;
+  let gate;
+  await page.route("**/scripts/filter.js", async route => { await gate; await route.continue(); });
+  try {
+    for (const path of ["/images", "/articles", "/search", "/tags/哲学", "/images?page=1&q=%20&media=all"]) {
+      gate = new Promise(resolve => { release = resolve; });
+      await page.goto(path, { waitUntil: "commit" });
+      const list = page.locator("[data-filter-list]").first();
+      await list.waitFor({ state: "attached" });
+      // Read immediately: a polling assertion could pass after the 4s fallback.
+      expect(await list.evaluate(node => getComputedStyle(node).visibility)).toBe("visible");
+      expect(await page.locator("html").getAttribute("data-catalog-ready")).toBeNull();
+      release();
+      await waitForCatalog(page);
+    }
+  } finally { release?.(); }
+});
+
+test("query and page links keep the initial list hidden until the requested results arrive", async ({ page }) => {
+  let release;
+  let gate;
+  await page.route("**/scripts/filter.js", async route => { await gate; await route.continue(); });
+  try {
+    for (const path of ["/search?q=AI", "/images?media=animated", "/articles?page=2", "/search?articlesPage=2&imagesPage=2"]) {
+      gate = new Promise(resolve => { release = resolve; });
+      await page.goto(path, { waitUntil: "commit" });
+      const list = page.locator("[data-filter-list]").first();
+      await list.waitFor({ state: "attached" });
+      expect(await list.evaluate(node => getComputedStyle(node).visibility)).toBe("hidden");
+      release();
+      await waitForCatalog(page);
+      await expect(list).toBeVisible();
+      await expect(page).toHaveURL(new URL(path, page.url()).href);
+    }
+  } finally { release?.(); }
+});
+
 test("cold search starts with filtered results and stays stable", async ({ page }) => {
   await page.addInitScript(() => {
     window.searchShifts = [];
