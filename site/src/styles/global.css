@@ -436,7 +436,7 @@ body.detail-dialog-open { overflow: hidden; }
 
 .archive-hero {
   min-height: 0;
-  padding: 48px 8vw 40px;
+  padding: 48px 5vw 40px;
   border-bottom: 1px solid var(--ink);
   position: relative;
   overflow: hidden;
@@ -911,7 +911,7 @@ body.detail-dialog-open { overflow: hidden; }
   .detail-dialog-body > .image-detail > .related-section,
   .detail-dialog-body > .image-detail > .article-recommendations { padding: 24px 20px; }
   .related-section .content-title h2 { font-size: 24px; }
-  .archive-hero { min-height: 0; padding: 36px 22px 28px; }
+  .archive-hero { min-height: 0; padding: 36px 16px 28px; }
   .archive-hero::after { width: 210px; right: -80px; top: 32px; opacity: .55; }
   .archive-hero h1 { font-size: clamp(30px, 8.3vw, 46px); position: relative; z-index: 1; }
   .archive-toolbar { flex-direction: column; }
@@ -997,6 +997,17 @@ html[data-filter-pending] .filter-count { visibility: hidden; }
 .archive-pagination [data-page-numbers] { flex-wrap: nowrap; }
 .archive-pagination .page-gap { align-self: center; }
 @media (max-width: 600px) {
+  /* Show two rows of moods at once and keep the remaining choices touch-scrollable. */
+  .image-filter-chips {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(82px, 1fr);
+    grid-template-rows: repeat(2, minmax(50px, auto));
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: thin;
+  }
+  .image-filter-chips button { min-width: 82px; min-height: 50px; padding: 0 10px; }
   .archive-pagination { gap: 6px; }
   .archive-pagination button { padding: 0 8px; }
   .archive-pagination > [data-page-prev], .archive-pagination > [data-page-next] { flex-basis: calc(50% - 6px); }

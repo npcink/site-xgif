@@ -33,7 +33,7 @@ const catalog = await getCatalog();
         <span>⌕</span>
         <input data-filter-input placeholder="搜索情绪、场景或标签…" aria-label="筛选图片" />
       </label>
-      <div class="filter-chips">
+      <div class="filter-chips image-filter-chips">
         <button class="active" data-filter="">全部情绪</button>
         {moods.map((mood) => <button data-filter={mood.toLowerCase()}>{mood}</button>)}
       </div>
