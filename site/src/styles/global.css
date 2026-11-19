@@ -299,8 +299,6 @@ body.detail-dialog-open { overflow: hidden; }
 .detail-dialog-body .detail-grid aside { top: 18px; }
 .detail-dialog[data-detail-kind="article"] { width: min(980px, calc(100vw - 48px)); }
 .article-detail-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 24px; }
-/* Keep the row stable when the 44px favorite control becomes available. */
-main .article-detail-actions:has(.primary-button) { min-height: 44px; }
 .article-detail-actions .dialog-full-link { display: none; }
 .detail-dialog-body .article-detail-actions .dialog-full-link { display: inline-flex; align-items: center; gap: 4px; min-height: 44px; }
 .detail-dialog[data-detail-kind="article"] .detail-header {

@@ -22,7 +22,12 @@ test("list overlays reuse one dialog and Back/Forward restore the matching conte
 });
 
 test("standalone recommendations navigate as pages and Back restores the original page", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/20260722-3u91");
+  // A cold document may retain a fallback face with font-display: optional.
+  // Compare navigation on the same warm font layout, as the reference does.
+  await page.evaluate(() => document.fonts.ready);
+  await page.reload({ waitUntil: "networkidle" });
   await page.evaluate(() => document.fonts.ready);
   const next = page.locator("main .article-recommendation:visible").first();
   const href = await next.getAttribute("href");
