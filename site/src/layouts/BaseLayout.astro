@@ -28,6 +28,7 @@ const siteUrl = Astro.site ?? new URL(siteConfig.url);
 const canonical = new URL(Astro.url.pathname, siteUrl);
 const socialImage = new URL(image, siteUrl);
 const rssUrl = new URL(siteConfig.rss.path, siteUrl);
+const hasFilters = ["/search", "/articles", "/images"].includes(Astro.url.pathname) || Astro.url.pathname.startsWith("/tags/");
 ---
 
 <!doctype html>
@@ -41,6 +42,10 @@ const rssUrl = new URL(siteConfig.rss.path, siteUrl);
     {noindex && <meta name="robots" content="noindex" />}
     <link rel="canonical" href={canonical} />
     <link rel="stylesheet" href="/image-ratios.css" />
+    {/* Discover the filter graph before reaching its module at the end of the list. */}
+    {hasFilters && ["filter.js", "list-pagination.js", "catalog-loader.js"].map(name =>
+      <link rel="modulepreload" href={`/scripts/${name}`} />
+    )}
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="alternate" type="application/rss+xml" title={siteConfig.rss.title} href={rssUrl} />
     <meta property="og:type" content={pageType} />
@@ -54,7 +59,7 @@ const rssUrl = new URL(siteConfig.rss.path, siteUrl);
     <meta name="twitter:image" content={socialImage} />
     {jsonLd && <script is:inline type="application/ld+json" set:html={JSON.stringify(jsonLd)} />}
     <title>{title}</title>
-    {(["/search", "/articles", "/images"].includes(Astro.url.pathname) || Astro.url.pathname.startsWith("/tags/")) && <script is:inline src="/scripts/filter-init.js"></script>}
+    {hasFilters && <script is:inline src="/scripts/filter-init.js"></script>}
   </head>
   <body>
     <Header />
@@ -66,8 +71,8 @@ const rssUrl = new URL(siteConfig.rss.path, siteUrl);
     <DetailDialog />
     <script is:inline defer src="/scripts/back-to-top.js"></script>
     <script is:inline type="module" src="/scripts/discovery.js"></script>
-    <script is:inline src="/scripts/content-actions.js"></script>
-    <script is:inline src="/scripts/image-gallery.js"></script>
+    <script is:inline defer src="/scripts/content-actions.js"></script>
+    <script is:inline defer src="/scripts/image-gallery.js"></script>
     <script is:inline defer src="/scripts/masonry.js"></script>
     <script is:inline type="module" src="/scripts/favorites.js"></script>
   </body>

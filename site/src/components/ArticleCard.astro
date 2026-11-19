@@ -25,7 +25,6 @@ const { Content } = await render(article);
   data-search-item
   data-catalog-id={article.data.contentId}
   data-source={article.data.source.toLowerCase()}
-  data-search={`${article.body || ""} ${article.data.title} ${article.data.summary} ${article.data.source} ${article.data.tags.join(" ")}`.toLowerCase()}
 >
   <div class="article-meta">
     <span>{article.data.source}</span>

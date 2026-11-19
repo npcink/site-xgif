@@ -36,11 +36,17 @@ test("card sizes follow responsive columns on first load and after pagination", 
     await page.goto("/images");
     await waitForCatalog(page);
     const image = page.locator("main .image-card img").first();
-    await expect(image).toHaveAttribute("sizes", /^auto, /);
-    const firstSizes = await image.getAttribute("sizes");
+    await expect(image).toHaveAttribute("loading", "eager");
+    await expect(image).toHaveAttribute("fetchpriority", "high");
+    expect(await page.locator('main .image-card img[fetchpriority="high"]').count()).toBe(1);
+    const lazyImage = page.locator("main .image-card img").nth(1);
+    await expect(lazyImage).toHaveAttribute("sizes", /^auto, /);
+    const firstSizes = await lazyImage.getAttribute("sizes");
     await page.getByRole("navigation", { name: "图片分页" }).getByRole("button", { name: "下一页" }).click();
     await waitForCatalog(page);
     await expect(page.locator("main .image-card img").first()).toHaveAttribute("sizes", firstSizes);
+    await expect(page.locator("main .image-card img").first()).toHaveAttribute("loading", "lazy");
+    expect(await page.locator('main .image-card img[fetchpriority="high"]').count()).toBe(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   }
 });

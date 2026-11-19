@@ -22,3 +22,15 @@ test("initial archives contain one page, search starts empty, and deferred cards
     assert.match(fragment, /data-card-src=/u);
   }
 });
+
+test("article cards do not duplicate the searchable text from the index", async () => {
+  const articleTags = html => html.match(/<article\b[^>]*\bclass="article-card\b[^>]*>/gu) || [];
+  const archive = await read("articles/index.html");
+  const base = archive.match(/data-catalog-base="([^"]+)"/u)[1].slice(1);
+  for (const name of ["index.html", "articles/index.html", "tags/哲学/index.html",
+    "browse/articles/2/index.html", `${base}/cards/articles/2/index.html`]) {
+    const tags = articleTags(await read(name));
+    assert.ok(tags.length > 0, name);
+    assert.ok(tags.every(tag => !/\sdata-search=/u.test(tag)), name);
+  }
+});

@@ -37,7 +37,7 @@ const catalog = await getCatalog();
     <p class="filter-count" aria-live="polite"><span data-page-summary></span><span data-visible-count>{images.length}</span> 项内容</p>
     <CatalogStatus />
     <div class="masonry-grid" data-filter-list>
-      {images.slice(0, 24).map((item) => <ImageCard item={item} headingLevel="h2" />)}
+      {images.slice(0, 24).map((item, index) => <ImageCard item={item} headingLevel="h2" priority={index === 0} />)}
     </div>
     <ListPagination label="图片分页" />
     <noscript><p><a href="/browse/images/1">逐页浏览全部图片 <Icon name="arrow-right" class="inline-icon" /></a></p></noscript>
