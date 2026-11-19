@@ -1,94 +1,29 @@
 (() => {
   const root = document.querySelector("[data-home-discovery]");
-  if (!root) return;
+  const controls = root?.querySelector("[data-home-views]");
+  if (!controls) return;
 
-  const input = root.querySelector("[data-home-filter-input]");
-  const clear = root.querySelector("[data-home-filter-clear]");
-  const tabs = Array.from(root.querySelectorAll("[data-home-view]"));
-  const sections = Array.from(document.querySelectorAll("[data-home-section]"));
-  const note = document.querySelector("[data-home-result-note]");
-  const queryLabel = document.querySelector("[data-home-query]");
-  const visibleCount = document.querySelector("[data-home-visible-count]");
-  const globalSearch = document.querySelector("[data-home-global-search]");
-  const empty = document.querySelector("[data-home-empty]");
-  const reset = document.querySelector("[data-home-reset]");
+  const buttons = [...controls.querySelectorAll("[data-home-view]")];
+  const items = [...root.querySelectorAll("[data-home-section]")];
+  const links = root.querySelectorAll("[data-home-more]");
+  const status = root.querySelector("[data-home-status]");
+  let selected = null;
 
-  if (!(input instanceof HTMLInputElement)) return;
-
-  let view = "all";
-
-  const apply = () => {
-    const query = input.value.trim().toLowerCase();
-    let visible = 0;
-    const counts = { articles: 0, images: 0 };
-
-    sections.forEach((section) => {
-      const kind = section.dataset.homeSection;
-      const viewMatches = view === "all" || view === kind;
-      const sectionCards = Array.from(section.querySelectorAll("[data-search-item]"));
-      let sectionVisible = 0;
-
-      sectionCards.forEach((card) => {
-        const matches = !query || (card.dataset.search || "").includes(query);
-        card.hidden = !viewMatches || !matches;
-        if (viewMatches && matches) sectionVisible += 1;
-      });
-
-      section.hidden = !viewMatches || sectionVisible === 0;
-      const sectionCount = section.querySelector("[data-home-section-count]");
-      if (sectionCount) sectionCount.textContent = String(sectionVisible).padStart(2, "0");
-      visible += sectionVisible;
-      counts[kind] += sectionVisible;
+  for (const button of buttons) {
+    button.addEventListener("click", () => {
+      if (button === selected) return;
+      selected = button;
+      const view = button.dataset.homeView;
+      const matches = (kind) => view === "all" || view === kind;
+      let count = 0;
+      for (const item of items) {
+        item.hidden = !matches(item.dataset.homeSection);
+        if (!item.hidden) count += 1;
+      }
+      for (const link of links) link.hidden = !matches(link.dataset.homeMore);
+      for (const tab of buttons) tab.setAttribute("aria-pressed", String(tab === button));
+      if (status) status.textContent = `${button.textContent.trim()}：显示 ${count} 条更新`;
     });
-
-    root.querySelectorAll("[data-home-count]").forEach((counter) => {
-      counter.textContent = String(counts[counter.dataset.homeCount] || 0).padStart(2, "0");
-    });
-
-    clear.hidden = !query;
-    if (note) note.hidden = !query;
-    if (queryLabel) queryLabel.textContent = input.value.trim();
-    if (visibleCount) visibleCount.textContent = String(visible);
-    if (globalSearch instanceof HTMLAnchorElement) {
-      globalSearch.href = query ? `/search?q=${encodeURIComponent(input.value.trim())}` : "/search";
-    }
-    if (empty) empty.hidden = visible !== 0;
-  };
-
-  input.addEventListener("input", apply);
-  input.addEventListener("keydown", (event) => {
-    if (event.key !== "Enter") return;
-    event.preventDefault();
-    const query = input.value.trim();
-    window.location.href = query ? `/search?q=${encodeURIComponent(query)}` : "/search";
-  });
-  clear?.addEventListener("click", () => {
-    input.value = "";
-    input.focus();
-    apply();
-  });
-  tabs.forEach((tab) => {
-    tab.addEventListener("click", () => {
-      view = tab.dataset.homeView || "all";
-      tabs.forEach((item) => {
-        const active = item === tab;
-        item.classList.toggle("active", active);
-        item.setAttribute("aria-pressed", String(active));
-      });
-      apply();
-    });
-  });
-  reset?.addEventListener("click", () => {
-    input.value = "";
-    view = "all";
-    tabs.forEach((tab) => {
-      const active = tab.dataset.homeView === view;
-      tab.classList.toggle("active", active);
-      tab.setAttribute("aria-pressed", String(active));
-    });
-    input.focus();
-    apply();
-  });
-  window.addEventListener("pageshow", apply);
-  apply();
+  }
+  controls.hidden = buttons.length < 2;
 })();

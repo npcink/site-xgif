@@ -22,19 +22,31 @@ test("list overlays reuse one dialog and Back/Forward restore the matching conte
 });
 
 test("standalone recommendations navigate as pages and Back restores the original page", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/20260722-3u91");
+  // A cold document may retain a fallback face with font-display: optional.
+  // Compare navigation on the same warm font layout, as the reference does.
+  await page.evaluate(() => document.fonts.ready);
+  await page.reload({ waitUntil: "networkidle" });
+  await page.evaluate(() => document.fonts.ready);
   const next = page.locator("main .article-recommendation:visible").first();
   const href = await next.getAttribute("href");
-  await next.scrollIntoViewIfNeeded();
-  const scrollY = await page.evaluate(() => window.scrollY);
+  // Playwright may scroll again while making the link clickable. Record the
+  // position at navigation, after any actionability scroll has taken place.
+  await next.evaluate(link => link.addEventListener("click", () => {
+    sessionStorage.setItem("test:recommendation-scroll", String(window.scrollY));
+  }, { once: true }));
   await next.click();
   await expect(page).toHaveURL(href);
+  const scrollY = await page.evaluate(() => sessionStorage.getItem("test:recommendation-scroll"));
+  expect(Number(scrollY)).toBeGreaterThan(0);
   await expect(page.locator("main [data-detail-content]")).toHaveAttribute("data-content-id", href.slice(1));
   await expect(page.locator("[data-detail-dialog]")).not.toBeVisible();
   await page.goBack();
   await expect(page.locator("main [data-detail-content]")).toHaveAttribute("data-content-id", "20260722-3u91");
   await expect(page.locator("[data-detail-dialog]")).not.toBeVisible();
-  await expect.poll(() => page.evaluate((before) => Math.abs(window.scrollY - before), scrollY)).toBeLessThanOrEqual(2);
+  await page.evaluate(() => document.fonts.ready);
+  await expect.poll(() => page.evaluate((before) => Math.abs(window.scrollY - before), Number(scrollY))).toBeLessThanOrEqual(2);
   await page.goForward();
   await expect(page.locator("main [data-detail-content]")).toHaveAttribute("data-content-id", href.slice(1));
   await expect(page.locator("[data-detail-dialog]")).not.toBeVisible();

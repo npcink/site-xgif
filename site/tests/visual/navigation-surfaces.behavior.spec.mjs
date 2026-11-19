@@ -1,4 +1,4 @@
-import { imageArchiveFor } from "./archive-helpers.mjs";
+import { imageArchiveFor, waitForCatalog } from "./archive-helpers.mjs";
 import { expect, test } from "@playwright/test";
 
 test.beforeEach(async ({ page }) => {
@@ -56,6 +56,32 @@ test("favorites open full pages and Back restores the saved list", async ({ page
   await expect(page.locator("[data-detail-dialog]")).not.toBeVisible();
 });
 
+test("activity page keeps the header as its only home entry", async ({ page }) => {
+  await page.goto("/activity");
+  await expect(page.locator("main a[href='/']")).toHaveCount(0);
+  await expect(page.locator(".site-header .brand")).toHaveAttribute("href", "/");
+});
+
+test("article cards and detail views offer one entry for each action", async ({ page }) => {
+  const href = "/20260710-vfks";
+  const source = 'a[href="https://jandan.net/t/6175953"]';
+  await page.goto(`/search?q=${encodeURIComponent("海边")}`);
+  await waitForCatalog(page);
+  const card = page.locator(`.article-card[data-catalog-id="${href.slice(1)}"]`);
+  await expect(card.locator(`a[href="${href}"]`)).toHaveCount(1);
+  await card.getByRole("heading").getByRole("link").press("Enter");
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.locator(source)).toBeVisible();
+  await expect(dialog.locator(source)).toHaveCount(1);
+  await expect(dialog.locator("[data-favorite-toggle]")).toHaveCount(1);
+  await dialog.getByRole("link", { name: "打开独立文章页" }).click();
+  const detail = page.locator("main [data-detail-content]");
+  await expect(detail.locator(source)).toBeVisible();
+  await expect(detail.locator(source)).toHaveCount(1);
+  await expect(detail.locator("[data-favorite-toggle]")).toHaveCount(1);
+  await expect(detail.getByRole("link", { name: "打开独立文章页" })).toHaveCount(0);
+});
+
 test("long image copy and real galleries have one vertical scroller at phone, tablet and desktop widths", async ({ page }) => {
   for (const width of [390, 768, 1280]) {
     await page.setViewportSize({ width, height: 720 });
@@ -85,6 +111,8 @@ test("Back retains the selected image of a gallery", async ({ page }) => {
   await expect(dialog).toHaveAttribute("aria-busy", "false");
   await dialog.getByRole("button", { name: "下一张图片" }).click();
   await expect(dialog.locator("[data-gallery-counter]")).toHaveText("2 / 3");
+  await expect(dialog.locator("[data-gallery-stage] a")).toHaveCount(0);
+  await expect(dialog.locator("[data-gallery-original]")).toHaveAttribute("href", await dialog.locator('[data-gallery-index="1"]').getAttribute("href"));
   const original = await dialog.locator("[data-gallery-original]").getAttribute("href");
   const next = dialog.locator('a[data-recommendation-id]:visible').first();
   const href = await next.getAttribute("href");

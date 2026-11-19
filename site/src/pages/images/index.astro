@@ -1,4 +1,5 @@
 ---
+import Icon from "../../components/Icon.astro";
 import { getCollection } from "astro:content";
 import ImageCard from "../../components/ImageCard.astro";
 import ListPagination from "../../components/ListPagination.astro";
@@ -11,32 +12,27 @@ import { sortByDate } from "../../lib/content";
 const images = sortByDate(
   (await getCollection("images")).filter((entry) => !entry.data.draft && entry.data.public),
 );
-const moods = Array.from(new Set(images.flatMap((entry) => entry.data.mood)));
 const catalog = await getCatalog();
 ---
 
 <BaseLayout title={pageTitle("图片与表情包")} description="按情绪、场景和标签整理的图片、GIF 与表情包。">
   <section class="archive-hero image-archive-hero">
     <p class="section-kicker">REACTIONS / 图片与表情包</p>
-    <h1>不想解释，<br /><em>就发张图。</em></h1>
+    <h1><span>不想解释，</span><wbr /><em>就发张图。</em></h1>
     <p>按情绪、场景和主题整理，找到刚好能表达这一刻的图片。</p>
   </section>
 
   <section class="archive-content" data-list-scope data-catalog-base={catalog.base} data-catalog-kind="images" data-catalog-total={images.length}>
-    <div class="media-filter" role="group" aria-label="图片类型">
+    <div class="media-filter" role="group" aria-label="图片类型" data-filter-controls hidden>
       <button type="button" data-media-filter="" aria-pressed="true" class="active">全部</button>
       <button type="button" data-media-filter="static" aria-pressed="false">静态图</button>
       <button type="button" data-media-filter="animated" aria-pressed="false">动图</button>
     </div>
-    <div class="archive-toolbar">
+    <div class="archive-toolbar" data-filter-controls hidden>
       <label class="inline-search">
-        <span>⌕</span>
+        <Icon name="search" />
         <input data-filter-input placeholder="搜索情绪、场景或标签…" aria-label="筛选图片" />
       </label>
-      <div class="filter-chips">
-        <button class="active" data-filter="">全部情绪</button>
-        {moods.map((mood) => <button data-filter={mood.toLowerCase()}>{mood}</button>)}
-      </div>
     </div>
     <p class="filter-count" aria-live="polite"><span data-page-summary></span><span data-visible-count>{images.length}</span> 项内容</p>
     <CatalogStatus />
@@ -44,7 +40,7 @@ const catalog = await getCatalog();
       {images.slice(0, 24).map((item) => <ImageCard item={item} headingLevel="h2" />)}
     </div>
     <ListPagination label="图片分页" />
-    <noscript><p><a href="/browse/images/1">逐页浏览全部图片 →</a></p></noscript>
+    <noscript><p><a href="/browse/images/1">逐页浏览全部图片 <Icon name="arrow-right" class="inline-icon" /></a></p></noscript>
     <div class="empty-state" data-empty hidden>
       <span>¯\_(ツ)_/¯</span><h2>这次真的没有找到</h2><p>换个情绪或场景试试。</p>
     </div>

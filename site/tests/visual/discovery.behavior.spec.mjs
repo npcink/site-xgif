@@ -89,16 +89,28 @@ test("articles show the full summary above the body and tags after it", async ({
   await checkReadingOrder(dialog.locator(".article-detail"));
 });
 
-test("home places a real image near the first screen and alternates text with images", async ({ page }) => {
+test("home filters recent updates and offers the matching full archive", async ({ page }) => {
   await page.goto("/");
-  const distance = await page.locator(".home-feed .image-card").first().evaluate((card) => card.getBoundingClientRect().top);
-  expect(distance).toBeLessThan(1000);
+  await expect(page.locator(".home-feed .image-card").first()).toBeInViewport();
   await expect(page.locator(".home-feed-item").first()).toHaveAttribute("data-home-section", "images");
   const kinds = await page.locator(".home-feed-item").evaluateAll((items) => items.slice(0, 4).map((item) => item.dataset.homeSection));
   expect(kinds).toEqual(["images", "articles", "articles", "images"]);
-  await page.getByRole("button", { name: /图片 \/ GIF/ }).click();
+  const images = page.getByRole("button", { name: "图片 / GIF", exact: true });
+  const articles = page.getByRole("button", { name: "文章", exact: true });
+  const more = page.getByRole("navigation", { name: "浏览完整列表" });
+  await images.focus();
+  await images.press("Enter");
+  await expect(images).toHaveAttribute("aria-pressed", "true");
   await expect(page.locator('[data-home-section="articles"]:visible')).toHaveCount(0);
   await expect(page.locator('[data-home-section="images"]:visible')).toHaveCount(6);
+  await expect(more.getByRole("link")).toHaveText(["全部图片"]);
+  await articles.click();
+  await expect(page.locator('[data-home-section="images"]:visible')).toHaveCount(0);
+  await expect(page.locator('[data-home-section="articles"]:visible')).toHaveCount(8);
+  await expect(more.getByRole("link")).toHaveText(["全部文章"]);
+  await page.getByRole("button", { name: "全部", exact: true }).click();
+  await expect(page.locator(".home-feed-item:visible")).toHaveCount(14);
+  await expect(more.getByRole("link")).toHaveText(["全部文章", "全部图片"]);
 });
 
 test("short general content appears inline while adult content keeps its summary", async ({ page }) => {
@@ -142,7 +154,39 @@ test("storage denial leaves recommendations and navigation usable", async ({ pag
   await next.click();
   await expect(page.locator("main [data-detail-content]")).toHaveAttribute("data-content-id", href.slice(1));
   await page.goto("/activity");
-  await expect(page.locator("[data-activity-status]")).toContainText("未允许保存记录");
+  await expect(page.getByRole("status").filter({ hasText: "未允许保存记录" })).toBeVisible();
+  await expect(page.locator(".activity-stats")).toBeHidden();
+  await expect(page.getByRole("button", { name: "导出本次记录" })).toBeHidden();
+});
+
+test("without JavaScript, personal pages and image details offer usable paths", async ({ browser, baseURL }) => {
+  const context = await browser.newContext({ javaScriptEnabled: false });
+  try {
+    const page = await context.newPage();
+    await page.goto(`${baseURL}/favorites`);
+    const note = page.locator("noscript .no-script-note");
+    await expect(note).toBeVisible();
+    await expect(note).toContainText("启用 JavaScript 后即可查看");
+    await page.getByRole("main").getByRole("link", { name: "浏览图片" }).click();
+    await expect(page).toHaveURL(/\/images$/);
+
+    await page.goto(`${baseURL}/activity`);
+    await expect(note).toBeVisible();
+    await expect(note).toContainText("启用 JavaScript 后，才能记录");
+    await expect(page.locator(".activity-stats")).toBeHidden();
+    await expect(page.getByRole("button", { name: "导出本次记录" })).toBeHidden();
+
+    await page.goto(`${baseURL}/20261117-mpyo`);
+    const gallery = page.locator("[data-image-gallery]");
+    await expect(gallery.locator("[data-gallery-slide]").first()).toBeVisible();
+    await expect(gallery.getByRole("button", { name: "下一张图片" })).toBeHidden();
+    await expect(page.getByRole("button", { name: "收藏" })).toBeHidden();
+    await expect(page.getByRole("button", { name: "复制链接" })).toBeHidden();
+    await expect(gallery.getByRole("link", { name: "第 2 张" })).toHaveAttribute("href", /^https:\/\/img\.xgif\.cn\//);
+    await expect(page.getByRole("link", { name: /查看.*原图/ })).toBeVisible();
+  } finally {
+    await context.close();
+  }
 });
 
 
@@ -151,6 +195,11 @@ test("static navigation and initial recommendations work without JavaScript", as
   const page = await context.newPage();
   await page.route("https://img.xgif.cn/**", (route) => route.abort());
   try {
+    await page.goto(`${baseURL}/`);
+    await expect(page.getByRole("heading", { name: "最近更新", level: 1 })).toBeVisible();
+    await expect(page.getByRole("group", { name: "内容类型" })).toBeHidden();
+    await expect(page.locator(".home-feed-item:visible")).toHaveCount(14);
+    await expect(page.getByRole("navigation", { name: "浏览完整列表" }).getByRole("link")).toHaveCount(2);
     await page.goto(`${baseURL}/20260725-gxez`);
     await expect(page.getByRole("heading", { name: "接着看图片" })).toBeVisible();
     const next = page.locator('main a[data-recommendation-id][data-detail-kind="image"]:visible').first();

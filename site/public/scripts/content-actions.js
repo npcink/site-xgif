@@ -19,3 +19,4 @@ document.addEventListener("click", async (event) => {
     if (status) status.textContent = "请复制下面的链接";
   }
 });
+document.documentElement.setAttribute("data-copy-available", "");

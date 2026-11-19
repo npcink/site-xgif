@@ -1,4 +1,5 @@
 ---
+import Icon from "./Icon.astro";
 import { siteConfig } from "../config/site";
 
 const pathname = Astro.url.pathname;
@@ -17,20 +18,18 @@ const pathname = Astro.url.pathname;
   </nav>
   <div class="header-tools">
     <a class="header-favorites" href="/favorites" aria-current={pathname.startsWith("/favorites") ? "page" : undefined}>
-      收藏 <span data-favorites-count hidden>0</span>
+      <Icon name="heart" /><span class="header-tool-label">收藏</span> <span data-favorites-count hidden>0</span>
     </a>
     <a class="header-search" href="/search">
-      <span aria-hidden="true">⌕</span> 搜一搜
+      <Icon name="search" /><span class="header-tool-label">搜一搜</span>
     </a>
   </div>
   <details class="mobile-nav">
-    <summary>菜单 <span aria-hidden="true">+</span></summary>
+    <summary><span class="sr-only">菜单</span><Icon name="menu" /><Icon name="close" /></summary>
     <nav aria-label="移动端主导航">
       {siteConfig.mainNavigation.map((link) => (
         <a href={link.href} aria-current={pathname.startsWith(link.href) ? "page" : undefined}>{link.label}</a>
       ))}
-      <a href="/favorites">本地收藏 <span data-favorites-count hidden>0</span></a>
-      <a href="/search">搜索内容</a>
     </nav>
   </details>
 </header>

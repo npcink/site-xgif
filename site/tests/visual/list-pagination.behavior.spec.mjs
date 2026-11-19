@@ -70,15 +70,19 @@ test("image filters search every page, reset pagination and clamp malformed or o
 });
 
 test("search and tag sections paginate independently and keep image results reachable", async ({ page }) => {
-  await page.goto("/search?articlesPage=2&imagesPage=2");
+  await page.goto(`/search?q=${encodeURIComponent("生活")}&articlesPage=2`);
   await waitForCatalog(page);
   const articles = page.locator("main .article-card:visible");
   const images = page.locator("main .image-card:visible");
   await expect(articles).toHaveCount(24);
   await expect(images).toHaveCount(24);
+  const imageJump = page.getByRole("link", { name: "看图片" });
+  await imageJump.press("Enter");
+  await expect(page.locator("#search-images")).toBeFocused();
+  await expect(images.first()).toBeInViewport();
   const articleIds = await articles.evaluateAll(items => items.map(item => item.dataset.search));
   await page.getByRole("navigation", { name: "搜索图片分页" }).getByRole("button", { name: "下一页" }).click();
-  await expect(page).toHaveURL(/articlesPage=2&imagesPage=3$/);
+  await expect(page).toHaveURL(/articlesPage=2&imagesPage=2$/);
   expect(await articles.evaluateAll(items => items.map(item => item.dataset.search))).toEqual(articleIds);
   await page.getByRole("textbox", { name: "搜索内容" }).fill("CUP 5080");
   await expect.poll(() => new URL(page.url()).searchParams.has("articlesPage")).toBe(false);
@@ -92,6 +96,54 @@ test("search and tag sections paginate independently and keep image results reac
   await expect(page.locator("main .article-card:visible")).toHaveCount(Math.min(24, total - 24));
   await expect(page.getByRole("navigation", { name: "标签文章分页" }).locator('[aria-current="page"]')).toHaveText("2");
   await expect(page.locator("main .image-card:visible").first()).toBeVisible();
+});
+
+test("result summaries give each count once and reserve ranges for paginated groups", async ({ page }) => {
+  await page.setViewportSize({ width: 553, height: 672 });
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/tags/生活");
+  await waitForCatalog(page);
+  const scope = kind => page.locator(`[data-list-scope][data-catalog-kind="${kind}"]`);
+  const total = async kind => Number(await scope(kind).getAttribute("data-catalog-total"));
+  const jumps = page.getByRole("navigation", { name: "标签内容" });
+  const imageJump = jumps.getByRole("link", { name: `${await total("images")} 项图片` });
+  await expect(jumps.getByRole("link", { name: `${await total("articles")} 篇文章` })).toHaveAttribute("href", "#tag-articles");
+  await expect(page.locator(".tag-results .filter-count, .tag-results .content-title")).toHaveCount(0);
+  await page.evaluate(() => document.fonts.ready);
+  const first = await scope("articles").locator(".article-card").first().boundingBox();
+  expect(first.y).toBeLessThan(672 * 0.42);
+  await imageJump.press("Enter");
+  await expect(page).toHaveURL(/#tag-images$/);
+  await expect(scope("images")).toBeFocused();
+  await expect(scope("images").locator(".image-card").first()).toBeInViewport();
+  await page.goBack();
+  await expect(page).toHaveURL(/\/tags\/[^#]+$/);
+  await page.getByRole("navigation", { name: "标签文章分页" }).getByRole("button", { name: "下一页" }).click();
+  await expect(scope("articles").locator("[data-page-summary]")).toHaveText("显示 25–48");
+  await expect(scope("images").locator("[data-page-summary]")).toHaveText("显示 1–24");
+
+  await page.goto("/tags/反应图");
+  await expect(page.getByRole("navigation", { name: "标签内容" })).toHaveCount(0);
+  const singleTypeTotal = await page.locator('[data-catalog-kind="images"]').getAttribute("data-catalog-total");
+  await expect(page.locator(".tag-result-count")).toHaveText(`${singleTypeTotal} 项图片`);
+  await expect(scope("images").locator(".image-card").first()).toBeVisible();
+
+  await page.goto(`/search?q=${encodeURIComponent("海边")}`);
+  await waitForCatalog(page);
+  await expect(scope("articles").locator("[data-group-total]")).toBeVisible();
+  await expect(scope("images").locator("[data-group-total]")).toBeVisible();
+  await page.getByRole("textbox", { name: "搜索内容" }).fill("CUP 5080");
+  await expect(page.locator(".search-page > .filter-count")).toHaveText("找到 1 条内容");
+  await expect(scope("images").locator("[data-group-count]")).toHaveText("1");
+  await expect(scope("articles")).toBeHidden();
+  await expect(scope("images").locator("[data-page-summary]")).toBeEmpty();
+
+  await page.goto("/images?q=CUP%205080");
+  await waitForCatalog(page);
+  await expect(page.locator(".archive-content .filter-count")).toHaveText("1 项内容");
+  await page.goto("/favorites");
+  await expect(page.locator("[data-favorites-empty]")).toBeVisible();
+  await expect(page.locator("[data-favorites-summary]")).toBeHidden();
 });
 
 test("favorites pagination preserves the full export and clamps the last page after removal", async ({ page }, testInfo) => {
@@ -149,6 +201,8 @@ test("static image pages remain traversable without JavaScript", async ({ browse
   const page = await context.newPage();
   await page.goto(`${baseURL}/images?page=2`);
   await expect(page.locator("main .image-card:visible")).toHaveCount(24);
+  await expect(page.getByRole("group", { name: "图片类型" })).toBeHidden();
+  await expect(page.getByRole("textbox", { name: "筛选图片" })).toBeHidden();
   await expect(page.locator("[data-pagination]")).not.toBeVisible();
   await page.getByRole("link", { name: "逐页浏览全部图片" }).click();
   await expect(page).toHaveURL(/\/browse\/images\/1$/);
@@ -158,5 +212,10 @@ test("static image pages remain traversable without JavaScript", async ({ browse
   await expect(page).toHaveURL(/\/browse\/images\/2$/);
   await expect(page.locator("main .image-card:visible")).toHaveCount(24);
   expect(await visibleHrefs(page.locator("main .image-card"))).not.toEqual(before);
+  await page.goto(`${baseURL}/articles`);
+  await expect(page.getByRole("textbox", { name: "筛选文章" })).toBeHidden();
+  await page.getByRole("link", { name: "逐页浏览全部文章" }).click();
+  await expect(page).toHaveURL(/\/browse\/articles\/1$/);
+  await expect(page.locator("main .article-card").first()).toBeVisible();
   await context.close();
 });

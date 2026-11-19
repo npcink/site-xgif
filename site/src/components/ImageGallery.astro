@@ -1,4 +1,5 @@
 ---
+import Icon from "./Icon.astro";
 import DisplayImage from "./DisplayImage.astro";
 interface Props {
   images: { src: string; width?: number; height?: number; altText?: string; animated?: boolean }[];
@@ -7,18 +8,18 @@ interface Props {
 const { images, title } = Astro.props;
 ---
 
-<section class="public-image-gallery" data-image-gallery data-current="0" tabindex="0" aria-label={`${title}，共 ${images.length} 张图片，使用左右方向键切换`}>
+<section class="public-image-gallery" data-image-gallery data-current="0" aria-label={`${title}，共 ${images.length} 张图片`}>
   <figure class="gallery-stage" data-gallery-stage>
     {images.map((image, index) => (
-      <a href={image.src} target="_blank" rel="noreferrer" data-gallery-slide hidden={index !== 0} aria-label={`查看第 ${index + 1} 张原图`}>
+      <div data-gallery-slide hidden={index !== 0}>
         <DisplayImage src={image.src} alt={image.altText || `${title} · 第 ${index + 1} 张`} width={image.width} height={image.height} animated={image.animated} detail priority={index === 0} deferred={index !== 0} />
-      </a>
+      </div>
     ))}
   </figure>
-  <div class="gallery-controls">
-    <button type="button" data-gallery-step="-1" disabled aria-label="上一张图片">← 上一张</button>
+  <div class="gallery-controls" hidden>
+    <button type="button" data-gallery-step="-1" disabled aria-label="上一张图片"><Icon name="arrow-left" class="inline-icon" /> 上一张</button>
     <span data-gallery-counter role="status" aria-live="polite">1 / {images.length}</span>
-    <button type="button" data-gallery-step="1" aria-label="下一张图片">下一张 →</button>
+    <button type="button" data-gallery-step="1" aria-label="下一张图片">下一张 <Icon name="arrow-right" class="inline-icon" /></button>
   </div>
   <nav class="gallery-thumbnails" aria-label="选择图集图片">
     {images.map((image, index) => (

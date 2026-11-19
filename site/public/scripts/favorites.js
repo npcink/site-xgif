@@ -22,9 +22,7 @@ function updateInterface() {
     const key = `${button.dataset.contentKind}:${button.dataset.contentId}`;
     const isFavorite = keys.has(key);
     button.setAttribute("aria-pressed", String(isFavorite));
-    const mark = button.querySelector(".favorite-toggle-mark");
     const label = button.querySelector("[data-favorite-label]");
-    if (mark) mark.textContent = isFavorite ? "♥" : "♡";
     if (label) label.textContent = isFavorite ? "已收藏" : "收藏";
   });
 
@@ -89,3 +87,4 @@ if (dialogBody) {
 }
 
 updateInterface();
+document.documentElement.setAttribute("data-favorite-controls-ready", "");

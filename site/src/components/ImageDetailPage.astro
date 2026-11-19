@@ -1,4 +1,5 @@
 ---
+import Icon from "./Icon.astro";
 import { getCollection, render, type CollectionEntry } from "astro:content";
 import ArticleRecommendations from "./ArticleRecommendations.astro";
 import ImageGallery from "./ImageGallery.astro";
@@ -43,7 +44,7 @@ const imageRatioKey =
 ---
 
 <article class="detail-page image-detail" data-detail-content data-detail-kind="image" data-content-id={item.data.contentId}>
-  <a class="back-link" href="/images">← 返回图片库</a>
+  <a class="back-link" href="/images"><Icon name="arrow-left" class="inline-icon" /> 返回图片库</a>
   <div class="image-detail-grid">
     {images.length > 1 ? <ImageGallery images={images} title={item.data.title} /> : (
     <figure
@@ -61,7 +62,7 @@ const imageRatioKey =
     </figure>
     )}
     <div class="image-detail-copy">
-      <p class="section-kicker">REACTION / {images.length > 1 ? `图集 · ${images.length} 张${containsAnimation ? " · 含动图" : ""}` : containsAnimation ? "动图详情" : "图片详情"}</p>
+      <p class="section-kicker">REACTION / {images.length > 1 ? (containsAnimation ? "图集 · 含动图" : "图集") : containsAnimation ? "动图详情" : "图片详情"}</p>
       <h1 class="sr-only">{item.data.title}</h1>
       <dl>
         <div><dt>分类</dt><dd>{item.data.category}</dd></div>
@@ -78,7 +79,7 @@ const imageRatioKey =
           title={item.data.title}
           href={canonicalPath}
         />
-        <a class="image-original-link" data-gallery-original href={item.data.image} target="_blank" rel="noreferrer">查看 / 保存原图 ↗</a>
+        <a class="image-original-link" data-gallery-original href={item.data.image} target="_blank" rel="noreferrer">查看 / 保存原图 <Icon name="arrow-up-right" class="inline-icon" /></a>
         <button class="copy-link-button" type="button" data-copy-url={canonicalPath}>复制链接</button>
       </div>
       <p class="image-save-hint">打开原图后，可长按或右键保存。</p>

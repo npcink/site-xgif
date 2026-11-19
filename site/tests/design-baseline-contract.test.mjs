@@ -13,7 +13,7 @@ test("image detail surfaces keep the two-column layout without cropping source i
     read("src/styles/global.css"),
   ]);
 
-  assert.match(dialog, /<b aria-hidden="true">×<\/b>/);
+  assert.match(dialog, /<Icon name="close"\s*\/>/);
   assert.doesNotMatch(dialog, /<span>关闭<\/span>/);
   assert.match(await read("src/components/DisplayImage.astro"), /referrerpolicy="no-referrer"/);
   assert.match(imageCard, /<DisplayImage/);
@@ -44,8 +44,7 @@ test("home and discovery routes preserve the editorial visual hierarchy", async 
     read("public/scripts/home-discovery.js"),
   ]);
 
-  assert.match(home, /class="hero"/);
-  assert.match(home, /class="tag-ticker"/);
+  assert.match(home, /<h1[^>]*>最近更新<\/h1>/);
   assert.match(home, /class="home-feed"/);
   assert.match(imageCard, /class:list=\{\["image-card", item\.data\.ratio\]\}/);
   assert.doesNotMatch(imageCard, /class="image-shade"/);
@@ -55,27 +54,13 @@ test("home and discovery routes preserve the editorial visual hierarchy", async 
   assert.match(styles, /@fontsource-variable\/geist/);
   assert.match(styles, /font-family: var\(--font-geist-sans\)/);
   assert.match(styles, /font-family: var\(--font-geist-mono\)/);
-  assert.match(styles, /\.hero \{[\s\S]*min-height: 0;/);
   assert.match(home, /data-home-discovery/);
   assert.match(home, /data-home-view="articles"/);
   assert.match(home, /data-home-view="images"/);
-  assert.match(home, /data-home-global-search/);
-  assert.match(home, /data-home-count/);
-  assert.match(home, /class="newsletter-placeholder"/);
+  assert.doesNotMatch(home, /data-home-filter-input|最近收藏/);
   assert.match(homeDiscovery, /data-home-section/);
-  assert.match(homeDiscovery, /window\.location\.href/);
-  assert.match(homeDiscovery, /data-home-count/);
-  assert.doesNotMatch(home, /data-newsletter-form/);
-  assert.doesNotMatch(homeDiscovery, /newsletterForm/);
-});
-
-test("visual baseline keeps the desktop search and honest update layout contracts", async () => {
-  const styles = await read("src/styles/global.css");
-
-  assert.match(styles, /\.search-panel \{[^}]*max-width: 1200px;[^}]*display: flex;[^}]*border: 1px solid var\(--ink\)/);
-  assert.match(styles, /\.view-tabs \{ display: flex; border-left: 1px solid var\(--ink\); \}/);
-  assert.match(styles, /\.newsletter \{[^}]*grid-template-columns: 110px 1fr minmax\(320px, \.7fr\)/);
-  assert.match(styles, /\.newsletter-placeholder \{[^}]*display: flex;/);
+  assert.doesNotMatch(homeDiscovery, /window\.location\.href/);
+  assert.doesNotMatch(home, /newsletter|不用订阅/);
 });
 
 test("production assets define a defensive Cloudflare header policy", async () => {
@@ -85,13 +70,6 @@ test("production assets define a defensive Cloudflare header policy", async () =
   assert.match(headers, /frame-ancestors 'none'/);
   assert.match(headers, /Strict-Transport-Security:/);
   assert.match(headers, /X-Content-Type-Options: nosniff/);
-});
-
-test("mobile hero leaves room for actual content", async () => {
-  const styles = await read("src/styles/global.css");
-
-  assert.match(styles, /@media \(max-width: 600px\) \{[\s\S]*\.hero-copy \{ padding: 26px 20px 24px;/);
-  assert.match(styles, /\.hero-feature \{ display: none; \}/);
 });
 
 test("image discovery and search retain filterable archive states", async () => {
@@ -104,7 +82,7 @@ test("image discovery and search retain filterable archive states", async () => 
   assert.match(images, /class="archive-toolbar"/);
   assert.match(images, /data-filter-input/);
   assert.match(images, /data-filter-list/);
-  assert.match(images, /data-filter=/);
+  assert.match(images, /data-media-filter=/);
   assert.match(search, /class="search-page"/);
   assert.match(search, /data-clear/);
   assert.match(search, /data-search-group/);
@@ -124,9 +102,9 @@ test("article archive keeps filtering, URL state, and bounded pagination togethe
   assert.match(articles, /data-pagination data-page-size="12"/);
   assert.match(articles, /data-page-summary/);
   assert.match(articles, /aria-live="polite"/);
-  assert.match(filter, /\["source", chipFilter\]/);
+  assert.match(articles, /<select[^>]+data-source-filter[^>]+aria-label=/);
   assert.match(pager, /url\.searchParams\.set\(parameter/);
-  assert.match(filter, /button\.setAttribute\("aria-pressed"/);
+  assert.match(filter, /writeListUrl/);
   assert.match(styles, /\.archive-pagination/);
 });
 
@@ -159,7 +137,7 @@ test("article dialogs support complete reading while direct pages retain source-
     read("src/styles/global.css"),
   ]);
 
-  assert.match(articlePage, /class="dialog-article-actions"/);
+  assert.match(articlePage, /class="article-detail-actions"/);
   assert.match(articlePage, /class="dialog-full-link"/);
   assert.match(articlePage, /const dialogTitleSize = titleLength <= 12/);
   assert.match(articlePage, /`dialog-title--\$\{dialogTitleSize\}`/);
@@ -175,7 +153,7 @@ test("article dialogs support complete reading while direct pages retain source-
   assert.match(styles, /\.dialog-title--short \{[\s\S]*font-size: clamp\(48px, 6\.4vw, 68px\);/);
   assert.match(styles, /\.dialog-title--longest \{[\s\S]*font-size: clamp\(38px, 4\.2vw, 44px\);/);
   assert.match(styles, /\.article-detail \.detail-header h1\.dialog-title--longest,[\s\S]*\.detail-dialog\[data-detail-kind="article"\] \.detail-header h1\.dialog-title--longest/);
-  assert.match(styles, /\[data-detail-kind="article"\] \.dialog-article-actions \{[\s\S]*display: flex;/);
+  assert.match(styles, /\.article-detail-actions \{[^}]*display: flex;/);
   assert.match(styles, /\.article-detail \.detail-header h1 \{[^}]*font-size: clamp\(44px, 4\.4vw, 68px\);[^}]*text-wrap: balance;/);
   assert.match(styles, /\.article-detail \.detail-header \{ max-width: 980px; margin-inline: auto;/);
   assert.match(styles, /\.article-detail \.detail-summary \{[^}]*border-left: 3px solid var\(--coral\);[^}]*max-width: 900px;/);

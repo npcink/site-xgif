@@ -18,7 +18,7 @@ export function createCatalog(root) {
   if (!/^\/catalog\/[a-f0-9]{20}$/.test(base) || !["articles", "images"].includes(kind)) throw new Error("catalog-config");
   const revision = base.split("/").at(-1);
   const grid = root.querySelector(".article-grid, .masonry-grid");
-  const imageSizes = grid.querySelector("img")?.getAttribute("sizes");
+  const imageSizes = root.dataset.catalogImageSizes || grid.querySelector("img")?.getAttribute("sizes");
   for (const card of grid.children) cards.set(`${base}/${kind}/${card.dataset.catalogId}`, card.cloneNode(true));
   let records;
   let search;
