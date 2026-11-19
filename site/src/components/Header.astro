@@ -30,8 +30,6 @@ const pathname = Astro.url.pathname;
       {siteConfig.mainNavigation.map((link) => (
         <a href={link.href} aria-current={pathname.startsWith(link.href) ? "page" : undefined}>{link.label}</a>
       ))}
-      <a href="/favorites">本地收藏 <span data-favorites-count hidden>0</span></a>
-      <a href="/search">搜索内容</a>
     </nav>
   </details>
 </header>

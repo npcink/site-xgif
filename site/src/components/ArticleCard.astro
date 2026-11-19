@@ -1,5 +1,4 @@
 ---
-import Icon from "./Icon.astro";
 import { render, type CollectionEntry } from "astro:content";
 import { contentHref, formatShortDate, publicArticleNote } from "../lib/content";
 
@@ -30,16 +29,12 @@ const { Content } = await render(article);
 >
   <div class="article-meta">
     <span>{article.data.source}</span>
-    <time datetime={article.data.pubDate.toISOString()}>{formatShortDate(article.data.pubDate)}</time>
+    <span class="article-card-timing"><time datetime={article.data.pubDate.toISOString()}>{formatShortDate(article.data.pubDate)}</time> · {article.data.readTime}</span>
   </div>
   <Heading><a href={href} data-detail-link data-detail-kind="article">{article.data.title}</a></Heading>
   {isShortForm ? <div class="article-inline-text prose"><Content /><span data-reading-end aria-hidden="true"></span></div> : <p>{article.data.summary}</p>}
   {editorNote && <blockquote>{editorNote}</blockquote>}
   <div class="card-tags">
     {article.data.tags.map((tag) => <a href={`/tags/${encodeURIComponent(tag)}`}>#{tag}</a>)}
-  </div>
-  <div class="article-footer">
-    <span>{article.data.readTime}</span>
-    <a href={href} data-detail-link data-detail-kind="article">{isShortForm ? "接着看" : "阅读全文"} <span aria-hidden="true"><Icon name="arrow-right" class="inline-icon" /></span></a>
   </div>
 </article>

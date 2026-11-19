@@ -4,13 +4,19 @@ let storage;
 try { storage = window.sessionStorage; } catch { /* Display the unavailable state below. */ }
 
 function update() {
+  const status = document.querySelector("[data-activity-status]");
+  if (!storage) {
+    status.hidden = false;
+    status.textContent = "浏览器未允许保存记录，无法跨页面汇总。";
+    return;
+  }
   const metrics = readMetrics(storage);
   document.querySelectorAll("[data-metric]").forEach((element) => {
     element.textContent = String(metrics[element.dataset.metric] || 0);
   });
   const rate = metrics.recommendationImpressions ? metrics.recommendationClicks / metrics.recommendationImpressions * 100 : 0;
   document.querySelector("[data-click-rate]").textContent = `${rate.toFixed(1)}%`;
-  if (!storage) document.querySelector("[data-activity-status]").textContent = "浏览器未允许保存记录，无法跨页面汇总。";
+  document.querySelectorAll("[data-activity-details]").forEach(element => { element.hidden = false; });
 }
 
 document.querySelector("[data-export-activity]")?.addEventListener("click", () => {

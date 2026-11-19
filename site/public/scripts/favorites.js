@@ -87,3 +87,4 @@ if (dialogBody) {
 }
 
 updateInterface();
+document.documentElement.setAttribute("data-favorite-controls-ready", "");

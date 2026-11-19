@@ -81,7 +81,7 @@ test("header icons align, keep usable targets and survive favorite and menu stat
 test("shared search fields keep their height and a single visible focus boundary", async ({ page }) => {
   for (const width of [320, 390, 900, 1440]) {
     await page.setViewportSize({ width, height: 900 });
-    for (const [route, selector] of [["/", ".search-box"], ["/images", ".inline-search"], ["/articles", ".inline-search"], ["/search", ".search-page-input"]]) {
+    for (const [route, selector] of [["/images", ".inline-search"], ["/articles", ".inline-search"], ["/search", ".search-page-input"]]) {
       await page.goto(route);
       const field = page.locator(selector);
       const input = field.locator("input");

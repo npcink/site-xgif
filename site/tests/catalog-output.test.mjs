@@ -4,8 +4,8 @@ import { readFile } from "node:fs/promises";
 
 const read = file => readFile(new URL(`../dist/${file}`, import.meta.url), "utf8");
 
-test("initial lists contain one page; deferred fragments have no active image sources", async () => {
-  for (const [name, count] of [["articles", 12], ["images", 24], ["search", 48]]) {
+test("initial archives contain one page, search starts empty, and deferred cards have no active image sources", async () => {
+  for (const [name, count] of [["articles", 12], ["images", 24], ["search", 0]]) {
     const html = await read(`${name}/index.html`);
     assert.equal((html.match(/data-search-item/g) || []).length, count, name);
     const base = html.match(/data-catalog-base="([^"]+)"/)[1].slice(1);

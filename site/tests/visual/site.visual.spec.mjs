@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { imageArchiveFor, catalogItems } from "./archive-helpers.mjs";
+import { imageArchiveFor, catalogItems, waitForCatalog } from "./archive-helpers.mjs";
 
 test.beforeEach(async ({ page }) => {
   await page.route("https://img.xgif.cn/**", async (route) => {
@@ -69,22 +69,13 @@ test("key pages satisfy the basic accessibility contract", async ({ page }) => {
   }
 });
 
-test("homepage discovery distinguishes featured filtering from full-site search", async ({ page }) => {
+test("homepage search opens the full catalog", async ({ page }) => {
   await page.goto("/", { waitUntil: "networkidle" });
-  const input = page.getByRole("textbox", { name: "筛选首页精选内容" });
-  await expect(page.locator('[data-home-count="articles"]')).toHaveText("08");
-  await expect(page.locator('[data-home-count="images"]')).toHaveText("06");
-  const homeImageMatches = await page.locator(".home-feed .image-card").evaluateAll((cards) =>
-    cards.filter((card) => card.dataset.search.includes("ai")).length);
-  const homeArticleMatches = await page.locator(".home-feed .article-card").evaluateAll((cards) =>
-    cards.filter((card) => card.dataset.search.includes("ai")).length);
-  const homeMatches = homeImageMatches + homeArticleMatches;
-  await input.fill("AI");
-  await expect(page.locator("[data-home-visible-count]")).toHaveText(String(homeMatches));
-  await expect(page.locator('[data-home-section="articles"]:visible')).toHaveCount(homeArticleMatches);
-  await expect(page.locator('[data-home-count="images"]')).toHaveText(String(homeImageMatches).padStart(2, "0"));
-  await expect(page.locator("[data-home-global-search]")).toHaveAttribute("href", "/search?q=AI");
-  await input.press("Enter");
+  await expect(page.locator("main").getByRole("textbox")).toHaveCount(0);
+  await page.getByRole("link", { name: "搜一搜", exact: true }).click();
+  await expect(page).toHaveURL(/\/search\/?$/);
+  await waitForCatalog(page);
+  await page.locator("[data-filter-input]").fill("AI");
   await expect(page).toHaveURL(/\/search\?q=AI$/);
   await expect(page.locator("[data-filter-input]")).toHaveValue("AI");
   await expect(page.locator("html")).not.toHaveAttribute("data-filter-pending");
@@ -92,16 +83,9 @@ test("homepage discovery distinguishes featured filtering from full-site search"
   const imageMatches = (await catalogItems(page, "images", true)).filter(item => item.text.includes("ai")).length;
   const searchMatches = articleMatches + imageMatches;
   expect(searchMatches).toBeGreaterThan(0);
-  expect(searchMatches).toBeGreaterThanOrEqual(homeMatches);
   await expect(page.locator("[data-visible-count]")).toHaveText(String(searchMatches));
   const visibleMatches = Math.min(24, articleMatches) + Math.min(24, imageMatches);
   await expect(page.locator("[data-search-item]:visible")).toHaveCount(visibleMatches);
-  await page.goBack();
-  await expect(page).toHaveURL(/\/$/);
-  await expect(input).toHaveValue("AI");
-  await expect(page.locator("[data-home-visible-count]")).toHaveText(String(homeMatches));
-  await expect(page.locator('[data-home-section="articles"]:visible')).toHaveCount(homeArticleMatches);
-  await expect(page.locator('[data-home-count="images"]')).toHaveText(String(homeImageMatches).padStart(2, "0"));
 });
 
 async function waitForImages(page) {
@@ -149,15 +133,7 @@ test("homepage matches the approved visual baseline", async ({ page }, testInfo)
     animations: "disabled",
     fullPage: false,
     maskColor: "#d9d4ca",
-    mask: [
-      page.locator(".hero-feature"),
-      page.locator(".ticker-track"),
-      page.locator('[data-home-section="articles"]'),
-      page.locator('[data-home-count="articles"]'),
-      page.locator('[data-home-section="images"]'),
-      page.locator('[data-home-count="images"]'),
-      page.locator('[data-home-global-search]'),
-    ],
+    mask: [page.locator(".home-feed-item")],
   });
 });
 
@@ -220,8 +196,8 @@ test("search results match the approved visual baseline", async ({ page }, testI
     fullPage: false,
     maskColor: "#d9d4ca",
     mask: [
-      page.locator("[data-filter-list]"),
-      page.locator(".filter-count"),
+      page.locator(".search-page [data-search-item]"),
+      page.locator(".search-page [data-group-count]"),
     ],
   });
 });
@@ -229,7 +205,7 @@ test("search results match the approved visual baseline", async ({ page }, testI
 test("search empty state matches the approved visual baseline", async ({ page }, testInfo) => {
   await useReferenceFallbackFonts(page);
   await openSearchState(page, "不存在内容");
-  await expect(page.getByRole("heading", { name: "这次真的什么都没搜到" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "没有找到相关内容" })).toBeVisible();
 
   await expect(page).toHaveScreenshot(`search-empty-${testInfo.project.name}.png`, {
     animations: "disabled",
@@ -275,7 +251,7 @@ test("tag results match the approved visual baseline", async ({ page }, testInfo
     fullPage: false,
     maskColor: "#d9d4ca",
     mask: [
-      page.locator(".tag-detail-hero > p:last-child"),
+      page.locator(".tag-jump-links"),
       page.locator(".tag-results"),
     ],
   });
@@ -283,17 +259,17 @@ test("tag results match the approved visual baseline", async ({ page }, testInfo
 
 test("tag related images match the approved visual baseline", async ({ page }, testInfo) => {
   await page.goto("/tags/反转", { waitUntil: "networkidle" });
-  const relatedImages = page.getByRole("heading", { name: "相关图片" });
-  await relatedImages.scrollIntoViewIfNeeded();
+  const relatedImages = page.getByRole("region", { name: "相关图片" });
+  await relatedImages.evaluate(element => element.scrollIntoView({ block: "start", behavior: "instant" }));
   await waitForImages(page);
-  await expect(relatedImages).toBeVisible();
+  await expect(relatedImages.locator(".image-card").first()).toBeInViewport();
 
   await expect(page).toHaveScreenshot(`tag-related-images-${testInfo.project.name}.png`, {
     animations: "disabled",
     fullPage: false,
     maskColor: "#d9d4ca",
     mask: [
-      page.locator(".tag-detail-hero > p:last-child"),
+      page.locator(".tag-jump-links"),
       page.locator(".tag-results"),
     ],
   });

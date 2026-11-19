@@ -1,6 +1,7 @@
 ---
 import { getImage } from "astro:assets";
 import type { ImageMetadata } from "astro";
+import { cardImageSizes } from "../lib/card-image-sizes.mjs";
 
 interface Props {
   src: string;
@@ -36,11 +37,7 @@ const displaySrc = display?.src || src;
 const srcset = display?.srcSet.attribute || undefined;
 // Match CSS columns and container caps. Lazy images use their measured slot where
 // sizes=auto is supported, including narrower recommendation and dialog surfaces.
-const containerThird = layout === "search" ? "400px" : "440px";
-const cardSizes = layout === "home"
-  ? "(max-width: 600px) calc(100vw - 34px), (max-width: 700px) calc(90vw - 2px), calc(min(45vw, 600px) - 12px)"
-  : `(max-width: 600px) calc(90vw - 2px), (max-width: 900px) calc(45vw - 12px), calc(min(33.333vw, ${containerThird}) - 3.333vw - 15.334px)`;
-const fallbackSizes = thumbnail ? "60px" : detail ? "(max-width: 900px) 90vw, 55vw" : cardSizes;
+const fallbackSizes = thumbnail ? "60px" : detail ? "(max-width: 900px) 90vw, 55vw" : cardImageSizes(layout);
 const sizes = priority || thumbnail ? fallbackSizes : `auto, ${fallbackSizes}`;
 ---
 

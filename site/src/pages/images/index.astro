@@ -23,12 +23,12 @@ const catalog = await getCatalog();
   </section>
 
   <section class="archive-content" data-list-scope data-catalog-base={catalog.base} data-catalog-kind="images" data-catalog-total={images.length}>
-    <div class="media-filter" role="group" aria-label="图片类型">
+    <div class="media-filter" role="group" aria-label="图片类型" data-filter-controls hidden>
       <button type="button" data-media-filter="" aria-pressed="true" class="active">全部</button>
       <button type="button" data-media-filter="static" aria-pressed="false">静态图</button>
       <button type="button" data-media-filter="animated" aria-pressed="false">动图</button>
     </div>
-    <div class="archive-toolbar">
+    <div class="archive-toolbar" data-filter-controls hidden>
       <label class="inline-search">
         <Icon name="search" />
         <input data-filter-input placeholder="搜索情绪、场景或标签…" aria-label="筛选图片" />

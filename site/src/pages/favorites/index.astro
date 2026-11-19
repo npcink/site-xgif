@@ -30,12 +30,19 @@ const safeCatalog = JSON.stringify(catalog).replaceAll("<", "\\u003c");
 <BaseLayout title={pageTitle("本地收藏")} description="保存在当前浏览器中的 XGIF 文章与图片收藏。" noindex>
   <section class="favorites-page" data-favorites-page>
     <header class="favorites-heading">
-      <p class="section-kicker">LOCAL / 本地收藏</p>
-      <h1>留住想再看一眼的内容。</h1>
-      <p>收藏只保存在当前浏览器。你可以导出 JSON 备份，再在另一台设备上合并或覆盖导入。</p>
+      <h1>本地收藏</h1>
+      <p>收藏只保存在当前浏览器。</p>
     </header>
 
-    <div class="favorites-toolbar" aria-label="收藏管理">
+    <noscript>
+      <p class="no-script-note">启用 JavaScript 后即可查看保存在此浏览器的收藏。</p>
+      <nav class="tag-jump-links" aria-label="浏览内容">
+        <a href="/articles">浏览文章</a>
+        <a href="/images">浏览图片</a>
+      </nav>
+    </noscript>
+
+    <div class="favorites-toolbar" aria-label="收藏管理" hidden>
       <p data-favorites-summary>正在读取本地收藏…</p>
       <div class="favorites-actions">
         <button type="button" data-favorites-export>导出 JSON</button>
@@ -43,8 +50,8 @@ const safeCatalog = JSON.stringify(catalog).replaceAll("<", "\\u003c");
         <button class="quiet-button" type="button" data-favorites-import="replace">覆盖导入</button>
         <button class="quiet-button" type="button" data-favorites-clear-unavailable hidden>清理不可用项</button>
       </div>
-      <input type="file" accept="application/json,.json" data-favorites-file hidden />
     </div>
+    <input type="file" accept="application/json,.json" data-favorites-file hidden />
 
     <p class="favorites-status" data-favorites-status role="status" aria-live="polite" hidden></p>
     <div class="favorites-list" data-favorites-list></div>
@@ -53,7 +60,10 @@ const safeCatalog = JSON.stringify(catalog).replaceAll("<", "\\u003c");
       <Icon name="heart" />
       <h2>收藏夹还是空的</h2>
       <p>打开任意文章或图片详情，点击“收藏”即可加入这里。</p>
-      <a href="/articles">去逛文章 <Icon name="arrow-right" class="inline-icon" /></a>
+      <div class="favorites-empty-actions">
+        <a href="/articles">去逛文章 <Icon name="arrow-right" class="inline-icon" /></a>
+        <button type="button" data-favorites-import="merge">导入备份</button>
+      </div>
     </div>
   </section>
   <script is:inline type="application/json" data-favorites-catalog set:html={safeCatalog}></script>

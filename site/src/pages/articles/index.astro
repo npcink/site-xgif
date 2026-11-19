@@ -17,24 +17,26 @@ const catalog = await getCatalog();
 <BaseLayout title={pageTitle("文章")} description="通过编辑摘要快速了解，也可以阅读完整正文并核对来源。">
   <section class="archive-hero">
     <p class="section-kicker">ARTICLES / 文章</p>
-    <h1>先看懂重点，<br /><em>再决定是否读完。</em></h1>
+    <h1>先看懂重点，<wbr /><em>再决定是否读完。</em></h1>
     <p>保留编辑摘要、完整正文、来源链接与编辑判断。</p>
   </section>
 
   <section class="archive-content" data-list-scope data-catalog-base={catalog.base} data-catalog-kind="articles" data-catalog-total={articles.length}>
-    <div class="archive-toolbar">
+    <div class="archive-toolbar" data-filter-controls hidden>
       <label class="inline-search">
         <Icon name="search" />
         <input data-filter-input placeholder="搜正文、标题、来源或标签" aria-label="筛选文章" />
       </label>
-      <div class="filter-chips" data-filter-kind="source">
-        <button class="active" data-filter="">全部来源</button>
-        {sources.map((source) => <button data-filter={source.toLowerCase()}>{source}</button>)}
-      </div>
     </div>
-    <p class="filter-count" aria-live="polite">
-      <span data-page-summary></span><span data-visible-count>{articles.length}</span> 篇文章
-    </p>
+    <div class="archive-result-bar">
+      <p class="filter-count" aria-live="polite">
+        <span data-page-summary></span><span data-visible-count>{articles.length}</span> 篇文章
+      </p>
+      <select class="archive-source" data-source-filter aria-label="按来源筛选文章" hidden>
+        <option value="">全部来源</option>
+        {sources.map((source) => <option value={source.toLowerCase()}>{source}</option>)}
+      </select>
+    </div>
     <CatalogStatus />
     <div class="article-grid" data-filter-list>
       {articles.slice(0, 12).map((article, index) => <ArticleCard article={article} index={index} headingLevel="h2" />)}

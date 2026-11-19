@@ -16,14 +16,19 @@ export const siteConfig = {
     { href: "/tags", label: "标签" },
   ],
   footerNavigation: [
-    { href: "/articles", label: "文章" },
-    { href: "/images", label: "图片" },
-    { href: "/tags", label: "标签" },
-    { href: "/about", label: "关于" },
-    { href: "/rights", label: "版权与更正" },
-    { href: "/privacy", label: "隐私" },
-    { href: "/activity", label: "本次浏览" },
-    { href: "/rss.xml", label: "RSS" },
+    {
+      label: "实用功能",
+      links: [{ href: "/activity", label: "本次浏览" }],
+    },
+    {
+      label: "站点信息",
+      links: [
+        { href: "/about", label: "关于" },
+        { href: "/privacy", label: "隐私" },
+        { href: "/rights", label: "版权与更正" },
+        { href: "/rss.xml", label: "RSS" },
+      ],
+    },
   ],
   rss: {
     path: "/rss.xml",
