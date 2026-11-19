@@ -1,4 +1,5 @@
 ---
+import Icon from "./Icon.astro";
 import type { CollectionEntry } from "astro:content";
 import ImageCard from "./ImageCard.astro";
 
@@ -12,7 +13,7 @@ const { images, title = "接着看图片" } = Astro.props;
 
 {images.length > 0 && (
   <section class="related-section" data-recommendations data-recommendation-limit="3">
-    <div class="content-title"><h2>{title}</h2><a href="/images">更多图片 →</a></div>
+    <div class="content-title"><h2>{title}</h2><a href="/images">更多图片 <Icon name="arrow-right" class="inline-icon" /></a></div>
     <div class="masonry-grid compact-grid">
       {images.map((item, index) => <ImageCard item={item} recommendation hidden={index >= 3} />)}
     </div>

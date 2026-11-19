@@ -87,6 +87,32 @@ test("failed page fetch preserves the current cards and retries without losing B
   expect(await cards.evaluateAll(items => items.map(item => item.getAttribute("href")))).toEqual(before);
 });
 
+test("search distinguishes a pending or failed query from no results and can return to browse links", async ({ page }) => {
+  let release;
+  const gate = new Promise(resolve => { release = resolve; });
+  await page.route("**/catalog/**/search-images.json", async route => {
+    await gate;
+    await route.fulfill({ status: 503, body: "unavailable" });
+  }, { times: 1 });
+  await page.goto("/search");
+  const input = page.getByRole("textbox", { name: "搜索内容" });
+  const empty = page.getByRole("heading", { name: "没有找到相关内容" });
+  try {
+    await input.fill("AI");
+    await expect(page.locator("[data-catalog-message]")).toHaveText("正在加载结果…");
+    await expect(empty).toBeHidden();
+    release();
+    await expect(page.locator("[data-catalog-message]")).toHaveText("搜索结果加载失败，请重试。");
+    await expect(empty).toBeHidden();
+    await page.getByRole("button", { name: "重试加载" }).click();
+    await expect(page.locator("[data-search-item]:visible").first()).toBeVisible();
+    await page.getByRole("button", { name: "清空搜索" }).click();
+    await expect(input).toBeFocused();
+    await expect(page.getByRole("link", { name: "浏览文章" })).toBeVisible();
+    await expect(page.locator("[data-search-item]:visible")).toHaveCount(0);
+  } finally { release(); }
+});
+
 test("cold search starts its full-text request before the metadata response completes", async ({ page }) => {
   let release;
   const gate = new Promise(resolve => { release = resolve; });

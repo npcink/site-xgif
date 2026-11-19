@@ -1,4 +1,5 @@
 ---
+import Icon from "./Icon.astro";
 import { getCollection, render, type CollectionEntry } from "astro:content";
 import ArticleRecommendations from "./ArticleRecommendations.astro";
 import FavoriteButton from "./FavoriteButton.astro";
@@ -42,7 +43,8 @@ const sourceLabel = {
 const editorNote = publicArticleNote(article.data);
 const articleHref = contentHref(article);
 const sourcePending = article.data.sourceKind === "unknown";
-const hasArticleSidebar = tableOfContents.length > 0 || Boolean(editorNote) || Boolean(article.data.sourceUrl) || sourcePending;
+const hasSourceNote = Boolean(editorNote) || sourcePending;
+const hasArticleSidebar = tableOfContents.length > 0 || hasSourceNote;
 const titleLength = [...article.data.title].length;
 const dialogTitleSize = titleLength <= 12
   ? "short"
@@ -62,7 +64,7 @@ const dialogTitleSize = titleLength <= 12
 
 <article class="detail-page article-detail" data-detail-content data-detail-kind="article" data-content-id={article.data.contentId}>
   <header class="detail-header">
-    <a class="back-link" href="/articles">← 返回文章列表</a>
+    <a class="back-link" href="/articles"><Icon name="arrow-left" class="inline-icon" /> 返回文章列表</a>
     <div class="detail-meta">
       <span>{article.data.source}</span>
       <time datetime={article.data.pubDate.toISOString()}>{formatShortDate(article.data.pubDate)}</time>
@@ -70,17 +72,7 @@ const dialogTitleSize = titleLength <= 12
     </div>
     <h1 class:list={["article-title", `dialog-title--${dialogTitleSize}`]}>{article.data.title}</h1>
     <p class="detail-summary">{article.data.summary}</p>
-    {!preview && (
-      <div class="detail-favorite-standalone">
-        <FavoriteButton
-          contentId={article.data.contentId}
-          kind="article"
-          title={article.data.title}
-          href={articleHref}
-        />
-      </div>
-    )}
-    <div class="dialog-article-actions">
+    {(!preview || article.data.sourceUrl) && <div class="article-detail-actions">
       {!preview && (
         <FavoriteButton
           contentId={article.data.contentId}
@@ -91,11 +83,11 @@ const dialogTitleSize = titleLength <= 12
       )}
       {article.data.sourceUrl && (
         <a class="primary-button" href={article.data.sourceUrl} target="_blank" rel="noreferrer">
-          {sourceLabel} <span>↗</span>
+          {sourceLabel} <span><Icon name="arrow-up-right" class="inline-icon" /></span>
         </a>
       )}
-      {!preview && <a class="dialog-full-link" href={articleHref}>打开独立文章页 →</a>}
-    </div>
+      {!preview && <a class="dialog-full-link" href={articleHref}>打开独立文章页 <Icon name="arrow-right" class="inline-icon" /></a>}
+    </div>}
   </header>
 
   {article.data.coverImage && (
@@ -122,20 +114,13 @@ const dialogTitleSize = titleLength <= 12
           </ol>
         </nav>
       )}
-      <div class="article-source-note">
+      {hasSourceNote && <div class="article-source-note">
         <span class="section-kicker">{editorNote ? "EDITOR'S NOTE" : "SOURCE / 来源"}</span>
-        <p>{editorNote || (sourcePending
-          ? "暂未找到可核验的原始来源；如有来源线索或版权问题，请联系我们补充或下架。"
-          : "保留来源名称与原文链接，方便继续核对。")}</p>
-        {article.data.sourceUrl && (
-          <a class="primary-button" href={article.data.sourceUrl} target="_blank" rel="noreferrer">
-            {sourceLabel} <span>↗</span>
-          </a>
-        )}
+        <p>{editorNote || "暂未找到可核验的原始来源；如有来源线索或版权问题，请联系我们补充或下架。"}</p>
         {sourcePending && !article.data.sourceUrl && (
-          <a class="dialog-full-link" href="/rights">补充来源线索 / 版权反馈 →</a>
+          <a class="dialog-full-link" href="/rights">补充来源线索 / 版权反馈 <Icon name="arrow-right" class="inline-icon" /></a>
         )}
-      </div>
+      </div>}
     </aside>}
     <div class="article-reading">
       <div class="prose"><Content /></div>

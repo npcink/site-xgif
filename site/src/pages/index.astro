@@ -1,15 +1,15 @@
 ---
+import Icon from "../components/Icon.astro";
 import { getCollection } from "astro:content";
 import ArticleCard from "../components/ArticleCard.astro";
 import ImageCard from "../components/ImageCard.astro";
 import BaseLayout from "../layouts/BaseLayout.astro";
-import { contentHref, sortByDate } from "../lib/content";
+import { sortByDate } from "../lib/content";
 
 const articles = sortByDate((await getCollection("articles")).filter((entry) => !entry.data.draft));
 const images = sortByDate(
   (await getCollection("images")).filter((entry) => !entry.data.draft && entry.data.public),
 );
-const featured = articles.find((entry) => entry.data.featured) ?? articles.find((entry) => entry.data.recommendationGroup === "general") ?? articles[0];
 const homeArticles = articles.slice(0, 8);
 const homeImages = images.slice(0, 6);
 const tagCounts = new Map<string, number>();
@@ -26,99 +26,43 @@ for (let index = 0; index < Math.max(homeImages.length, Math.ceil(homeArticles.l
 ---
 
 <BaseLayout>
-  <section class="hero" id="top">
-    <div class="hero-copy reveal">
-      <h1>随手翻翻，<br /><em>总有一条对味。</em></h1>
-      <p class="hero-intro">
-        收集好图和有趣文字，留给想歇一会儿的你。
-      </p>
-      <div class="hero-actions">
-        <a href="/images">找张表情包 →</a>
+  <section class="home-discovery" id="discover" aria-labelledby="top" data-home-discovery>
+    <header class="home-feed-heading">
+      <h1 id="top">最近更新</h1>
+      <div class="view-tabs" role="group" aria-label="内容类型" data-home-views hidden>
+        <button type="button" data-home-view="all" aria-controls="home-feed" aria-pressed="true">全部</button>
+        {homeArticles.length > 0 && <button type="button" data-home-view="articles" aria-controls="home-feed" aria-pressed="false">文章</button>}
+        {homeImages.length > 0 && <button type="button" data-home-view="images" aria-controls="home-feed" aria-pressed="false">图片 / GIF</button>}
       </div>
-    </div>
-
-    {featured && <div class="hero-feature reveal-late" aria-label="先读一篇">
-      <div class="feature-topline"><span>先读一篇</span><span>{featured.data.source}</span></div>
-      <div class="feature-copy">
-        <span class="mini-label">READ · {featured.data.readTime.toUpperCase()}</span>
-        <h2>{featured.data.title}</h2>
-        <p>{featured.data.summary}</p>
-        <a href={contentHref(featured)} data-detail-link data-detail-kind="article">阅读全文 <span>→</span></a>
-      </div>
-    </div>}
-  </section>
-
-  <section class="tag-ticker" aria-label="热门标签">
-    <div class="ticker-label">常见主题</div>
-    <div class="ticker-track">
-      {popularTags.slice(0, 5).map((tag) => <a href={`/tags/${encodeURIComponent(tag)}`}>#{tag}</a>)}
-    </div>
-  </section>
-
-  <section class="explore" id="discover">
-    <div class="search-panel" data-home-discovery>
-      <label class="search-box">
-        <span aria-hidden="true">⌕</span>
-        <input data-home-filter-input placeholder="筛选首页精选；按 Enter 搜索全站…" aria-label="筛选首页精选内容" />
-        <button type="button" data-home-filter-clear aria-label="清空搜索" hidden>×</button>
-      </label>
-      <div class="view-tabs" role="group" aria-label="内容类型">
-        <button class="active" type="button" data-home-view="all" aria-pressed="true">全部</button>
-        <button type="button" data-home-view="articles" aria-pressed="false">文章 <span data-home-count="articles">08</span></button>
-        <button type="button" data-home-view="images" aria-pressed="false">图片 / GIF <span data-home-count="images">06</span></button>
-      </div>
-    </div>
-    <p class="home-search-scope">
-      当前只筛选首页精选；<a href="/search" data-home-global-search>搜索全部 {articles.length + images.length} 条内容 →</a>
-    </p>
-    <p class="result-note" data-home-result-note aria-live="polite" hidden>首页精选中，关于“<span data-home-query></span>”找到 <strong data-home-visible-count>0</strong> 条内容</p>
-
-    <div class="home-feed-heading">
-      <h2>最近收藏</h2>
-      <div><a href="/articles">全部文章 →</a><a href="/images">全部图片 →</a></div>
-    </div>
-    <div class="home-feed">
+    </header>
+    <p class="sr-only" data-home-status role="status"></p>
+    <div class="home-feed" id="home-feed">
       {feed.map((entry, index) => (
         <div class="home-feed-item" data-home-section={entry.kind}>
-          {entry.kind === "articles" ? <ArticleCard article={entry.article} index={index} includeSearchText /> : <ImageCard item={entry.image} priority={index === 0} layout="home" />}
+          {entry.kind === "articles" ? <ArticleCard article={entry.article} index={index} headingLevel="h2" /> : <ImageCard item={entry.image} priority={index === 0} layout="home" headingLevel="h2" />}
         </div>
       ))}
     </div>
-
-    <div class="empty-state" data-home-empty hidden>
-      <span>¯\_(ツ)_/¯</span>
-      <h3>这次真的什么都没搜到</h3>
-      <p>换个更短的关键词，或者从热门标签开始。</p>
-      <button type="button" data-home-reset>看看全部内容</button>
-    </div>
+    <nav class="home-feed-more" aria-label="浏览完整列表">
+      <a href="/articles" data-home-more="articles">全部文章 <Icon name="arrow-right" class="inline-icon" /></a>
+      <a href="/images" data-home-more="images">全部图片 <Icon name="arrow-right" class="inline-icon" /></a>
+    </nav>
   </section>
 
   <section class="tag-library" id="tags">
     <div class="tag-intro">
       <p class="section-kicker">INDEX / 标签索引</p>
-      <h2>沿着标签，<br />继续逛下去。</h2>
+      <h2>沿着标签，<wbr /><span>继续逛下去。</span></h2>
       <p>主题、情绪和使用场景，共同把文章与表情包连接起来。</p>
     </div>
     <div class="tag-cloud">
       {popularTags.map((tag, index) => (
         <a href={`/tags/${encodeURIComponent(tag)}`}>
-          <span>{String(index + 1).padStart(2, "0")}</span> {tag} <b>↗</b>
+          <span>{String(index + 1).padStart(2, "0")}</span> {tag} <b><Icon name="arrow-up-right" class="inline-icon" /></b>
         </a>
       ))}
     </div>
   </section>
 
-  <section class="newsletter">
-    <div class="newsletter-mark">持续<br />更新</div>
-    <div>
-      <p class="section-kicker">EDITORIAL UPDATE</p>
-      <h2>不用订阅，也能随时回来继续看。</h2>
-      <p>当前站点不收集邮箱。新内容会直接进入文章和图片索引。</p>
-    </div>
-    <div class="newsletter-placeholder">
-      <span>无需注册 · 不采集联系方式</span>
-      <a href="/articles">浏览全部文章 <span>→</span></a>
-    </div>
-  </section>
   <script is:inline defer src="/scripts/home-discovery.js"></script>
 </BaseLayout>

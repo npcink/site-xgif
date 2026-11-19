@@ -10,14 +10,14 @@ test("gallery uses real WebP assets and defers other slides while preserving ori
   const html = await readFile(new URL("20261113-ghi5/index.html", dist), "utf8");
   const gallery = html.match(/<section[^>]*data-image-gallery[\s\S]*?<\/section>/u)?.[0];
   assert.ok(gallery);
-  const slides = [...gallery.matchAll(/<a\b[^>]*data-gallery-slide[^>]*>([\s\S]*?)<\/a>/gu)];
+  const slides = [...gallery.matchAll(/<div\b[^>]*data-gallery-slide[^>]*>([\s\S]*?)<\/div>/gu)];
   assert.equal(slides.length, 8);
   for (const [index, match] of slides.entries()) {
-    assert.match(match[0], /href="https:\/\/img\.xgif\.cn\/memes\//u);
     assert.match(match[1], /(?:src|data-gallery-src)="\/_astro\/[^" ]+\.webp"/u);
     if (index) assert.doesNotMatch(match[1], /\ssrc=/u);
   }
   const thumbs = gallery.match(/<nav[\s\S]*<\/nav>/u)?.[0];
+  assert.equal([...thumbs.matchAll(/href="https:\/\/img\.xgif\.cn\/memes\//gu)].length, 8);
   const urls = [...thumbs.matchAll(/\ssrc="([^"]+)"/gu)].map((match) => match[1]);
   assert.equal(urls.length, 8);
   for (const url of urls) {

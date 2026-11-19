@@ -17,6 +17,7 @@ if (root instanceof HTMLElement && catalogNode instanceof HTMLScriptElement) {
   const summary = root.querySelector("[data-favorites-summary]");
   const status = root.querySelector("[data-favorites-status]");
   const fileInput = root.querySelector("[data-favorites-file]");
+  const toolbar = root.querySelector(".favorites-toolbar");
   const exportButton = root.querySelector("[data-favorites-export]");
   const importButtons = root.querySelectorAll("[data-favorites-import]");
   const clearUnavailable = root.querySelector("[data-favorites-clear-unavailable]");
@@ -84,11 +85,15 @@ if (root instanceof HTMLElement && catalogNode instanceof HTMLScriptElement) {
     }
 
     const unavailableCount = favorites.items.filter((item) => !knownKeys.has(favoriteKey(item))).length;
-    empty.hidden = favorites.items.length > 0;
+    const hasItems = favorites.items.length > 0;
+    empty.hidden = hasItems;
+    toolbar.hidden = !hasItems;
     if (summary instanceof HTMLElement) {
+      summary.hidden = favorites.items.length === 0;
+      const range = favorites.items.length > end - start ? `显示 ${start + 1}–${end}，` : "";
       summary.textContent = favorites.items.length
-        ? `显示 ${start + 1}–${end}，共 ${favorites.items.length} 项收藏${unavailableCount ? ` · ${unavailableCount} 项原内容不可用` : ""}`
-        : "还没有收藏";
+        ? `${range}共 ${favorites.items.length} 项收藏${unavailableCount ? ` · ${unavailableCount} 项原内容不可用` : ""}`
+        : "";
     }
     if (clearUnavailable instanceof HTMLButtonElement) {
       clearUnavailable.hidden = unavailableCount === 0;

@@ -19,17 +19,23 @@
     gallery.querySelector('[data-gallery-step="-1"]').disabled = index === 0;
     gallery.querySelector('[data-gallery-step="1"]').disabled = index === slides.length - 1;
     const original = gallery.closest("[data-detail-content]")?.querySelector("[data-gallery-original]");
-    if (original) original.href = slides[index].href;
-    // Keep the selected thumbnail visible without scrolling the surrounding page.
     const thumbnail = gallery.querySelector(`[data-gallery-index="${index}"]`);
+    if (original && thumbnail) original.href = thumbnail.href;
+    // Keep the selected thumbnail visible without scrolling the surrounding page.
     const strip = thumbnail?.parentElement;
     if (strip) strip.scrollLeft = thumbnail.offsetLeft - strip.offsetLeft - strip.clientWidth / 2 + thumbnail.clientWidth / 2;
   };
   const step = (gallery, delta) => select(gallery, Number(gallery.dataset.current || 0) + delta);
+  const enable = (gallery) => {
+    gallery.tabIndex = 0;
+    gallery.querySelector(".gallery-controls").hidden = false;
+  };
 
   window.addEventListener("xgif:detail-opened", (event) => {
     const gallery = event.detail.root.querySelector("[data-image-gallery]");
-    if (gallery && Number.isInteger(event.detail.galleryIndex)) select(gallery, event.detail.galleryIndex);
+    if (!gallery) return;
+    enable(gallery);
+    if (Number.isInteger(event.detail.galleryIndex)) select(gallery, event.detail.galleryIndex);
   });
 
   document.addEventListener("click", (event) => {
@@ -63,4 +69,5 @@
     touch = null;
   }, { passive: true });
   document.addEventListener("touchcancel", () => { touch = null; }, { passive: true });
+  document.querySelectorAll("[data-image-gallery]").forEach(enable);
 })();

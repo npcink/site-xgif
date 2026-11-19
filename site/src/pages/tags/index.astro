@@ -1,4 +1,5 @@
 ---
+import Icon from "../../components/Icon.astro";
 import { getCollection } from "astro:content";
 import { pageTitle } from "../../config/site";
 import BaseLayout from "../../layouts/BaseLayout.astro";
@@ -16,7 +17,7 @@ const tags = allTags(articles, images).map((tag) => ({
 <BaseLayout title={pageTitle("标签索引")} description="按主题、情绪和使用场景浏览文章与图片。">
   <section class="archive-hero tags-archive-hero">
     <p class="section-kicker">INDEX / 标签索引</p>
-    <h1>从一个词，<br /><em>逛到另一件事。</em></h1>
+    <h1>从一个词，<wbr /><em>逛到另一件事。</em></h1>
     <p>主题、情绪与使用场景，把不同类型的内容连接起来。</p>
   </section>
   <section class="tag-index">
@@ -25,7 +26,7 @@ const tags = allTags(articles, images).map((tag) => ({
         <span class="tag-order">{String(index + 1).padStart(2, "0")}</span>
         <strong>{tag.name}</strong>
         <span>{tag.articles} 篇文章 · {tag.images} 项图片内容</span>
-        <b>↗</b>
+        <b><Icon name="arrow-up-right" class="inline-icon" /></b>
       </a>
     ))}
   </section>

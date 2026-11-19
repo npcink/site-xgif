@@ -1,6 +1,7 @@
 ---
 import Header from "../components/Header.astro";
 import Footer from "../components/Footer.astro";
+import Icon from "../components/Icon.astro";
 import DetailDialog from "../components/DetailDialog.astro";
 import { siteConfig } from "../config/site";
 import "../styles/global.css";
@@ -66,7 +67,9 @@ const hasFilters = ["/search", "/articles", "/images"].includes(Astro.url.pathna
       <slot />
     </main>
     <Footer />
+    <button class="back-to-top" type="button" aria-label="返回顶部" title="返回顶部" hidden><Icon name="arrow-up" /></button>
     <DetailDialog />
+    <script is:inline defer src="/scripts/back-to-top.js"></script>
     <script is:inline type="module" src="/scripts/discovery.js"></script>
     <script is:inline defer src="/scripts/content-actions.js"></script>
     <script is:inline defer src="/scripts/image-gallery.js"></script>

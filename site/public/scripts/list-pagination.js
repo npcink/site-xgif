@@ -35,7 +35,7 @@ export function createPagination(root, onChange) {
       const page = Math.min(current, Math.max(1, Math.ceil(total / size)));
       return { start: (page - 1) * size, end: Math.min(page * size, total) };
     },
-    range(total) {
+    range(total, { includeTotal = summary?.dataset.pageSummary !== "range-only" } = {}) {
       const pages = Math.max(1, Math.ceil(total / size));
       current = Math.min(current, pages);
       rendered = current;
@@ -54,7 +54,9 @@ export function createPagination(root, onChange) {
         (numbers.querySelector(`[data-page="${focusedPage}"]`) || numbers.querySelector('[aria-current="page"]'))
           ?.focus({ preventScroll: true });
       }
-      if (summary) summary.textContent = `显示 ${total ? start + 1 : 0}–${end}，共 `;
+      if (summary) {
+        summary.textContent = pages > 1 ? `显示 ${start + 1}–${end}${includeTotal ? "，共 " : ""}` : "";
+      }
       return { start, end };
     },
     writeUrl(url) {

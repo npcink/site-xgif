@@ -1,50 +1,57 @@
 ---
-import { getCollection } from "astro:content";
-import ArticleCard from "../components/ArticleCard.astro";
-import ImageCard from "../components/ImageCard.astro";
+import Icon from "../components/Icon.astro";
 import ListPagination from "../components/ListPagination.astro";
 import CatalogStatus from "../components/CatalogStatus.astro";
 import { getCatalog } from "../lib/catalog";
 import { pageTitle } from "../config/site";
 import BaseLayout from "../layouts/BaseLayout.astro";
-import { sortByDate } from "../lib/content";
+import { cardImageSizes } from "../lib/card-image-sizes.mjs";
 
-const articles = sortByDate((await getCollection("articles")).filter((entry) => !entry.data.draft && !entry.data.publicationHold));
-const images = sortByDate(
-  (await getCollection("images")).filter((entry) => !entry.data.draft && entry.data.public),
-);
 const catalog = await getCatalog();
 ---
 
 <BaseLayout title={pageTitle("搜索")} description="搜索文章原文、图片说明、标签与来源。" noindex>
-  <section class="search-page">
-    <p class="section-kicker">SEARCH / 搜索</p>
-    <h1>想找什么？</h1>
-    <label class="search-page-input">
-      <span>⌕</span>
-      <input data-filter-input placeholder="输入文章正文、图片说明、标签或来源…" autofocus aria-label="搜索内容" />
-      <button type="button" data-clear aria-label="清空搜索">×</button>
-    </label>
-    <p class="filter-count" aria-live="polite">找到 <span data-visible-count>{articles.length + images.length}</span> 条内容</p>
-
-    <CatalogStatus />
-    <div data-filter-list>
-      <div class="content-section search-group" data-search-group data-list-scope data-catalog-base={catalog.base} data-catalog-kind="articles" data-catalog-total={articles.length}>
-        <div class="content-title"><h2>文章</h2><span>ARTICLES</span></div>
-        <p class="filter-count"><span data-page-summary></span><span data-group-count>{articles.length}</span> 篇文章</p>
-        <div class="article-grid">{articles.slice(0, 24).map((article, index) => <ArticleCard article={article} index={index} />)}</div>
-        <ListPagination label="搜索文章分页" pageParam="articlesPage" />
-      </div>
-      <div class="content-section image-section search-group" data-search-group data-list-scope data-catalog-base={catalog.base} data-catalog-kind="images" data-catalog-total={images.length}>
-        <div class="content-title"><h2>图片 / 表情包</h2><span>IMAGES</span></div>
-        <p class="filter-count"><span data-page-summary></span><span data-group-count>{images.length}</span> 项图片内容</p>
-        <div class="masonry-grid">{images.slice(0, 24).map((item) => <ImageCard item={item} layout="search" />)}</div>
-        <ListPagination label="搜索图片分页" pageParam="imagesPage" />
-      </div>
+  <section class="search-page" data-query-required>
+    <h1>搜索</h1>
+    <div class="search-page-input" data-filter-controls hidden>
+      <label for="site-search"><Icon name="search" /></label>
+      <input id="site-search" data-filter-input placeholder="正文、图片说明、标签或来源" aria-label="搜索内容" />
+      <button type="button" data-clear aria-label="清空搜索"><Icon name="close" /></button>
     </div>
-    <noscript><p><a href="/browse/articles/1">逐页浏览文章</a> · <a href="/browse/images/1">逐页浏览图片</a></p></noscript>
-    <div class="empty-state" data-empty hidden>
-      <span>¯\_(ツ)_/¯</span><h2>这次真的什么都没搜到</h2><p>换个更短的关键词，或者从标签页开始。</p>
+    <p class="filter-count sr-only" aria-live="polite" data-search-announcement hidden>找到 <span data-visible-count>0</span> 条内容</p>
+
+    <noscript><p class="no-script-note">搜索需要启用 JavaScript。你也可以直接浏览文章或图片。</p></noscript>
+    <nav class="tag-jump-links search-links" aria-label="浏览内容" data-search-browse>
+      <a href="/articles">浏览文章</a>
+      <a href="/images">浏览图片</a>
+    </nav>
+    <CatalogStatus />
+    <nav class="tag-jump-links search-links" aria-label="跳转到搜索结果" data-search-jump hidden>
+      <a href="#search-articles">看文章</a>
+      <a href="#search-images">看图片</a>
+    </nav>
+    <div data-filter-list>
+      <section class="content-section search-group" id="search-articles" tabindex="-1" aria-labelledby="search-articles-title" data-search-group data-list-scope data-catalog-base={catalog.base} data-catalog-kind="articles" data-catalog-total={catalog.articles.length} hidden>
+        <div class="content-title result-section-title">
+          <h2 id="search-articles-title">文章</h2>
+          <span data-group-total><span data-group-count>0</span> 篇</span>
+          <span class="sr-only" aria-live="polite" data-page-summary="range-only"></span>
+        </div>
+        <div class="article-grid"></div>
+        <ListPagination label="搜索文章分页" pageParam="articlesPage" />
+      </section>
+      <section class="content-section image-section search-group" id="search-images" tabindex="-1" aria-labelledby="search-images-title" data-search-group data-list-scope data-catalog-base={catalog.base} data-catalog-kind="images" data-catalog-total={catalog.images.length} data-catalog-image-sizes={`auto, ${cardImageSizes("search")}`} hidden>
+        <div class="content-title result-section-title">
+          <h2 id="search-images-title">图片 / 表情包</h2>
+          <span data-group-total><span data-group-count>0</span> 项</span>
+          <span class="sr-only" aria-live="polite" data-page-summary="range-only"></span>
+        </div>
+        <div class="masonry-grid"></div>
+        <ListPagination label="搜索图片分页" pageParam="imagesPage" />
+      </section>
+    </div>
+    <div class="search-empty" data-empty hidden>
+      <h2>没有找到相关内容</h2>
     </div>
   </section>
   <script is:inline type="module" src="/scripts/filter.js"></script>

@@ -5,7 +5,7 @@ test.beforeEach(async ({ page }) => {
   await page.route("https://img.xgif.cn/**", route => route.fulfill({ contentType: "image/svg+xml", body: '<svg xmlns="http://www.w3.org/2000/svg" width="600" height="600"><rect width="600" height="600" fill="#bac7ae"/></svg>' }));
 });
 
-test("image media filters compose with search and mood, persist on reload and reflow without overflow", async ({ page }) => {
+test("image media filters compose with keyword search and preserve old mood links", async ({ page }) => {
   await page.goto("/images?media=animated");
   await waitForCatalog(page);
   const records = await catalogItems(page, "images");
@@ -25,12 +25,18 @@ test("image media filters compose with search and mood, persist on reload and re
   await input.fill("");
   await page.locator('[data-media-filter="static"]').click();
   await expect(page.locator('[data-search-item][data-media-types="animated"]:visible')).toHaveCount(0);
-  await page.locator('[data-filter="调侃"]').click();
+  await input.fill("调侃");
   const expected = records.filter(item => item.mediaTypes.split(" ").includes("static") && search.get(item.id).includes("调侃")).length;
   await expect(page.locator("[data-search-item]:visible")).toHaveCount(Math.min(24, expected));
   await expect(page.locator("[data-visible-count]")).toHaveText(String(expected));
   await expect(page).toHaveURL(/media=static/);
-  await expect(page).toHaveURL(/source=/);
+  await expect(page).toHaveURL((url) => url.searchParams.get("q") === "调侃");
+  await expect(page.locator(".filter-chips")).toHaveCount(0);
+  await page.goto(`/images?media=static&source=${encodeURIComponent("调侃")}`);
+  await waitForCatalog(page);
+  await expect(input).toHaveValue("调侃");
+  await expect(page.locator("[data-visible-count]")).toHaveText(String(expected));
+  await expect(page).toHaveURL((url) => url.searchParams.get("q") === "调侃" && !url.searchParams.has("source"));
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
 

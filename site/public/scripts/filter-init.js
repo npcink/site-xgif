@@ -1,5 +1,6 @@
 (() => {
   const params = new URLSearchParams(location.search);
+  if (/^\/search\/?$/.test(location.pathname) && !params.get("q")?.trim()) return;
   const filtered = ["q", "source"].some(key => params.get(key)?.trim())
     || ["static", "animated"].includes(params.get("media"));
   const paginated = ["page", "articlesPage", "imagesPage"].some(key => {

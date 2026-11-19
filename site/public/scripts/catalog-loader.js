@@ -19,7 +19,8 @@ export function createCatalog(root) {
   const revision = base.split("/").at(-1);
   const grid = root.querySelector(".article-grid, .masonry-grid");
   // Later pages stay lazy, including sizes=auto, even when the first card is eager.
-  const imageSizes = (grid.querySelector('img[loading="lazy"]') || grid.querySelector("img"))?.getAttribute("sizes");
+  const imageSizes = root.dataset.catalogImageSizes
+    || (grid.querySelector('img[loading="lazy"]') || grid.querySelector("img"))?.getAttribute("sizes");
   for (const card of grid.children) {
     // Cloning into the active document can fetch even disconnected lazy images.
     // Template contents stay inert until a cached card is restored to the list.

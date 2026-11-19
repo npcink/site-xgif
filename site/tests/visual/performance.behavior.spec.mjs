@@ -25,7 +25,7 @@ test("query and page links keep the initial list hidden until the requested resu
   let gate;
   await page.route("**/scripts/filter.js", async route => { await gate; await route.continue(); });
   try {
-    for (const path of ["/search?q=AI", "/images?media=animated", "/articles?page=2", "/search?articlesPage=2&imagesPage=2"]) {
+    for (const path of ["/search?q=AI", "/images?media=animated", "/articles?page=2", "/tags/幽默?articlesPage=2"]) {
       gate = new Promise(resolve => { release = resolve; });
       await page.goto(path, { waitUntil: "commit" });
       const list = page.locator("[data-filter-list]").first();
@@ -90,10 +90,19 @@ test("display images stay local and original image is fetched only on request", 
   expect(originals).toEqual([]);
 });
 
-test("no JavaScript keeps the static content visible", async ({ browser }) => {
+test("search links lead to static content without JavaScript", async ({ browser }) => {
   const context = await browser.newContext({ javaScriptEnabled: false });
   const page = await context.newPage();
   await page.goto("/search?q=AI");
-  await expect(page.locator("[data-search-item]").first()).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "搜索内容" })).toBeHidden();
+  const note = page.locator("noscript .no-script-note");
+  await expect(note).toBeVisible();
+  await expect(note).toContainText("搜索需要启用 JavaScript");
+  await expect(page.locator("[data-search-item]")).toHaveCount(0);
+  await page.getByRole("link", { name: "浏览文章" }).click();
+  await expect(page.locator("main .article-card").first()).toBeVisible();
+  await page.goBack();
+  await page.getByRole("link", { name: "浏览图片" }).click();
+  await expect(page.locator("main .image-card").first()).toBeVisible();
   await context.close();
 });
