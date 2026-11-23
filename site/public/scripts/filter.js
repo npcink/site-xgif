@@ -52,7 +52,7 @@ function writeFilters(push = false, scrollY) {
   writeListUrl(url, push, scrollY);
 }
 
-async function apply({ push = false, scrollY, write = true, scrollRoot, restore, focusResults } = {}) {
+async function apply({ push = false, scrollY, write = true, scrollRoot, restore, focusResults, fromRetry = false } = {}) {
   const run = ++generation;
   const isCurrent = () => run === generation;
   document.documentElement.removeAttribute("data-catalog-ready");
@@ -82,8 +82,14 @@ async function apply({ push = false, scrollY, write = true, scrollRoot, restore,
       if (status) status.hidden = false;
       if (message) message.textContent = changingFilters && !queryRequired && !document.documentElement.hasAttribute("data-filter-pending") && !document.documentElement.hasAttribute("data-filter-unavailable")
         ? "正在加载结果，暂显示上次结果…" : "正在加载结果…";
-      if (retry) retry.hidden = true;
-      scopes.forEach(({ catalog }) => catalog.root.setAttribute("aria-busy", "true"));
+      if (retry) {
+        retry.hidden = !fromRetry;
+        retry.setAttribute("aria-disabled", "true");
+      }
+      scopes.forEach(({ catalog, pager }) => {
+        catalog.root.setAttribute("aria-busy", "true");
+        pager.setBusy(true);
+      });
       results = await Promise.all(scopes.map(async scope => {
         const matches = await scope.catalog.matches(filters);
         if (!isCurrent()) return null;
@@ -127,16 +133,19 @@ async function apply({ push = false, scrollY, write = true, scrollRoot, restore,
     if (run !== generation) return;
     retryOptions = { push, scrollY, write, scrollRoot, restore };
     if (status) status.hidden = false;
-    const unavailable = changingFilters || document.documentElement.hasAttribute("data-filter-pending") || document.documentElement.hasAttribute("data-filter-unavailable");
-    if (unavailable) document.documentElement.setAttribute("data-filter-unavailable", "");
-    if (message) message.textContent = unavailable
+    document.documentElement.toggleAttribute("data-filter-unavailable", changingFilters);
+    if (message) message.textContent = changingFilters
       ? queryRequired ? "搜索结果加载失败，请重试。" : "筛选结果加载失败，当前筛选尚未生效。请重试。"
       : "加载未完成，当前内容已保留。请重试；如果页面刚更新，也可以刷新后再试。";
     if (retry) retry.hidden = false;
     status?.scrollIntoView({ block: "nearest", behavior: "instant" });
   } finally {
     if (run === generation) {
-      scopes.forEach(({ catalog }) => catalog.root.removeAttribute("aria-busy"));
+      scopes.forEach(({ catalog, pager }) => {
+        catalog.root.removeAttribute("aria-busy");
+        pager.setBusy(false);
+      });
+      retry?.removeAttribute("aria-disabled");
       document.documentElement.removeAttribute("data-filter-pending");
       document.documentElement.setAttribute("data-catalog-ready", "");
     }
@@ -165,7 +174,12 @@ document.querySelector("[data-clear]")?.addEventListener("click", () => {
 });
 sourceSelect?.addEventListener("change", resetAndApply);
 mediaChips.forEach(chip => chip.addEventListener("click", () => { mediaFilter = chip.dataset.mediaFilter || ""; resetAndApply(); }));
-retry?.addEventListener("click", event => { void apply({ ...retryOptions, focusResults: event.detail === 0 }); });
+retry?.addEventListener("click", event => {
+  if (retry.getAttribute("aria-disabled") === "true") return;
+  const focusResults = event.detail === 0;
+  const scrollRoot = retryOptions.scrollRoot || (focusResults && scopes.length === 1 ? scopes[0].catalog.root : undefined);
+  void apply({ ...retryOptions, scrollRoot, focusResults, fromRetry: true });
+});
 window.addEventListener("popstate", event => {
   if (location.pathname !== initialPath || event.state?.detailDialog) return;
   readUrl(); void apply({ write: false, restore: event.state });
@@ -176,6 +190,11 @@ window.addEventListener("pageshow", event => {
 });
 window.addEventListener("xgif:detail-closed", () => {
   if (pendingDialog) { pendingDialog = false; void apply(); }
+});
+// The server cards are page one. Set up their controls before reading a requested URL page.
+if (!queryRequired) scopes.forEach(({ catalog, pager }) => {
+  pager.reset();
+  pager.range(catalog.total);
 });
 readUrl();
 document.querySelectorAll("[data-filter-controls]").forEach(control => { control.hidden = false; });

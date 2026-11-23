@@ -16,7 +16,7 @@ export function createPagination(root, onChange) {
 
   nav.addEventListener("click", (event) => {
     const button = event.target instanceof Element ? event.target.closest("button") : null;
-    if (!button || button.disabled || busy) return;
+    if (!button || button.disabled || busy || nav.getAttribute("aria-disabled") === "true") return;
     current = rendered;
     if (button.hasAttribute("data-page-prev")) current -= 1;
     else if (button.hasAttribute("data-page-next")) current += 1;
@@ -30,6 +30,10 @@ export function createPagination(root, onChange) {
     root,
     readUrl,
     reset: () => { current = 1; },
+    setBusy(value) {
+      if (value) nav.setAttribute("aria-disabled", "true");
+      else nav.removeAttribute("aria-disabled");
+    },
     page: () => current,
     bounds(total) {
       const page = Math.min(current, Math.max(1, Math.ceil(total / size)));

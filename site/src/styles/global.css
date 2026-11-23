@@ -117,7 +117,9 @@ button { color: inherit; }
 .archive-pagination > div { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
 .archive-pagination button { background: transparent; border: 1px solid var(--line); min-height: 40px; min-width: 40px; padding: 0 12px; }
 .archive-pagination button.active { background: var(--ink); border-color: var(--ink); color: var(--paper); }
-.archive-pagination button:disabled { cursor: not-allowed; opacity: .45; }
+.archive-pagination button:disabled,
+.archive-pagination[aria-disabled="true"] button,
+.catalog-status button[aria-disabled="true"] { cursor: not-allowed; opacity: .45; }
 .catalog-status { margin-top: 20px; }
 .content-section { max-width: 1200px; margin: 78px auto 0; }
 .content-title { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 1px solid var(--ink); padding-bottom: 16px; margin-bottom: 22px; }
@@ -988,6 +990,7 @@ body.detail-dialog-open { overflow: hidden; }
 
 /* The first filter pass runs before results are revealed; no-JS keeps the full index. */
 html[data-filter-pending] [data-filter-list],
+html[data-filter-pending] [data-pagination],
 html[data-filter-pending] .filter-count,
 html[data-filter-pending] [data-search-browse],
 html[data-filter-pending] body:has([data-query-required]) > footer { visibility: hidden; }

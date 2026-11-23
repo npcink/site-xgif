@@ -69,6 +69,77 @@ test("image filters search every page, reset pagination and clamp malformed or o
   }
 });
 
+test("a failed direct page load keeps the static cards and reports a load error", async ({ page }) => {
+  let failed = true;
+  await page.route("**/catalog/**/cards/images/**", route => failed ? route.abort() : route.continue());
+  await page.goto("/images?page=2");
+  await waitForCatalog(page);
+  const cards = page.locator("main .image-card:visible");
+  const current = page.locator('[data-pagination] [aria-current="page"]');
+  const records = await catalogItems(page, "images");
+  await expect(page.locator("[data-catalog-message]")).toHaveText(/加载未完成，当前内容已保留/);
+  await expect(page.getByRole("navigation", { name: "图片分页" })).toBeVisible();
+  await expect(current).toHaveText("1");
+  await expect(page).toHaveURL(/\?page=2$/);
+  expect(await visibleHrefs(cards)).toEqual(records.slice(0, 24).map(item => `/${item.id}`));
+  failed = false;
+  await page.getByRole("button", { name: "重试加载" }).click();
+  await waitForCatalog(page);
+  await expect(current).toHaveText("2");
+  expect(await visibleHrefs(cards)).toEqual(records.slice(24, 48).map(item => `/${item.id}`));
+});
+
+test("old pagination cannot change the page while a new filter is loading", async ({ page }) => {
+  await page.goto("/images?page=2");
+  await waitForCatalog(page);
+  const input = page.getByRole("textbox", { name: "筛选图片" });
+  const next = page.getByRole("navigation", { name: "图片分页" }).getByRole("button", { name: "下一页", exact: true });
+  let release;
+  const pending = new Promise(resolve => { release = resolve; });
+  await page.route("**/catalog/**/search-images.json", async route => {
+    await pending;
+    await route.continue();
+  });
+  try {
+    await input.fill("的");
+    await expect(next).toBeDisabled();
+    await next.dispatchEvent("click");
+    await expect(page).toHaveURL(url => url.searchParams.get("q") === "的" && !url.searchParams.has("page"));
+  } finally { release(); }
+  await waitForCatalog(page);
+  await expect(page.locator('[data-pagination] [aria-current="page"]')).toHaveText("1");
+  await expect(next).toBeEnabled();
+  await next.click();
+  await expect(page).toHaveURL(url => url.searchParams.get("q") === "的" && url.searchParams.get("page") === "2");
+});
+
+test("keyboard retry returns focus to the refreshed cards", async ({ page }) => {
+  let failed = true;
+  await page.route("**/catalog/**/cards/images/**", route => failed ? route.abort() : route.continue());
+  await page.goto("/images");
+  const next = page.getByRole("navigation", { name: "图片分页" }).getByRole("button", { name: "下一页", exact: true });
+  await next.press("Enter");
+  const retry = page.getByRole("button", { name: "重试加载" });
+  await expect(retry).toBeVisible();
+  let release;
+  const pending = new Promise(resolve => { release = resolve; });
+  await page.route("**/catalog/**/cards/images/**", async route => {
+    await pending;
+    await route.fallback();
+  });
+  failed = false;
+  try {
+    await retry.press("Enter");
+    await expect(retry).toBeDisabled();
+    await expect(retry).toBeFocused();
+  } finally { release(); }
+  await expect(page).toHaveURL(/\?page=2$/);
+  const cards = page.locator("main .image-card");
+  await expect(cards.first()).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(cards.nth(1)).toBeFocused();
+});
+
 test("search and tag sections paginate independently and keep image results reachable", async ({ page }) => {
   await page.goto(`/search?q=${encodeURIComponent("生活")}&articlesPage=2`);
   await waitForCatalog(page);
