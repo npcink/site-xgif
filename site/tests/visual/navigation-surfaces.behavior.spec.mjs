@@ -43,6 +43,54 @@ for (const route of ["/", "/articles?page=2", "/images?media=animated", "/search
   });
 }
 
+test("empty favorites offer both archives and backup import", async ({ page }) => {
+  await page.goto("/favorites");
+  const empty = page.locator("[data-favorites-empty]");
+  await expect(empty.getByRole("link", { name: "去逛文章" })).toHaveAttribute("href", "/articles");
+  await expect(empty.getByRole("link", { name: "去逛图片" })).toHaveAttribute("href", "/images");
+  await expect(empty.getByRole("button", { name: "导入备份" })).toBeVisible();
+});
+
+test("unknown content preserves HTTP 404 and offers site navigation", async ({ page }) => {
+  const response = await page.goto("/20990101-none");
+  expect(response.status()).toBe(404);
+  const main = page.getByRole("main");
+  await expect(main.getByRole("heading", { name: "页面没有找到" })).toBeVisible();
+  await expect(main.getByRole("link", { name: "返回首页" })).toHaveAttribute("href", "/");
+  await expect(main.getByRole("link", { name: "搜索内容" })).toHaveAttribute("href", "/search");
+  await expect(main.getByRole("link", { name: "浏览图片" })).toHaveAttribute("href", "/images");
+});
+
+test("reloading a removed overlay destination stays on its 404 page", async ({ page }) => {
+  await page.goto("/images");
+  const documents = [];
+  page.on("request", request => {
+    if (request.resourceType() === "document") documents.push(new URL(request.url()).pathname);
+  });
+  await page.evaluate(() => history.pushState({ detailDialog: true }, "", "/20990101-none"));
+  const response = await page.reload();
+  expect(response.status()).toBe(404);
+  await expect(page.getByRole("heading", { name: "页面没有找到" })).toBeVisible();
+  expect(documents).toEqual(["/20990101-none"]);
+});
+
+test("image dialog close control does not overlap the image on a narrow phone", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 568 });
+  await page.goto("/images");
+  const card = page.locator('main a.image-card[href="/20261117-0wmy"]');
+  await card.click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toHaveAttribute("aria-busy", "false");
+  const close = dialog.getByRole("button", { name: "关闭详情" });
+  const button = await close.boundingBox();
+  const image = await dialog.locator(".image-detail figure img").first().boundingBox();
+  expect(button.y + button.height).toBeLessThanOrEqual(image.y);
+  await dialog.locator(".image-source").scrollIntoViewIfNeeded();
+  await expect(close).toBeInViewport();
+  await close.click();
+  await expect(card).toBeFocused();
+});
+
 test("favorites open full pages and Back restores the saved list", async ({ page }) => {
   await page.goto("/20261112-cbac");
   await page.locator("main [data-favorite-toggle]").click();

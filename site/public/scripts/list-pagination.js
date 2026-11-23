@@ -23,7 +23,7 @@ export function createPagination(root, onChange) {
     else if (button.dataset.page) current = Number(button.dataset.page);
     else return;
     busy = true;
-    Promise.resolve(onChange(window.scrollY)).finally(() => { busy = false; });
+    Promise.resolve(onChange(window.scrollY, event.detail === 0)).finally(() => { busy = false; });
   });
 
   return {
@@ -63,9 +63,11 @@ export function createPagination(root, onChange) {
       if (current > 1) url.searchParams.set(parameter, String(current));
       else url.searchParams.delete(parameter);
     },
-    scrollToStart() {
+    scrollToStart(focusResults = false) {
       (root.querySelector(".archive-toolbar, .content-title, .favorites-toolbar") || root)
         .scrollIntoView({ block: "start", behavior: "instant" });
+      if (focusResults) root.querySelector(":is(.article-grid, .masonry-grid, .favorites-list) a[href]")
+        ?.focus({ preventScroll: true });
       history.replaceState({ ...history.state, listScrollY: window.scrollY }, "", location.href);
     },
   };

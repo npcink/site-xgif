@@ -19,10 +19,18 @@
   const cache = new Map();
   const viewStates = new Map();
   const initialTitle = document.title;
-  const initialPath = window.location.pathname;
+  const pagePath = (url) => new URL(url).pathname.replace(/\/$/, "") || "/";
+  const initialPath = pagePath(performance.getEntriesByType("navigation")[0]?.name || window.location.href);
+  const matchesDocument = () => pagePath(window.location.href) === initialPath;
   // History survives reloads; a dialog belongs only to the document that opened it.
   const historyOwner = crypto.randomUUID();
   const ownsDialogState = (state) => state?.detailDialog && state.detailDialogOwner === historyOwner;
+
+  // A fast history traversal can change the URL before this deferred script runs.
+  if ((history.state?.detailDialog || history.state?.detailDialogBase) && !matchesDocument()) {
+    window.location.reload();
+    return;
+  }
   let activeRequest = null;
   let closeTimer = null;
   let lastTrigger = null;
@@ -281,7 +289,7 @@
       return;
     }
     // An old overlay entry from another document is a normal page destination.
-    if (window.location.pathname !== initialPath) {
+    if (!matchesDocument()) {
       window.location.reload();
       return;
     }

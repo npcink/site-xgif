@@ -187,14 +187,21 @@ test("article page navigation also restores its previous page through Back", asy
   expect(await page.locator("main .article-card:visible").evaluateAll(items => items.map(item => item.dataset.catalogId))).toEqual(before);
 });
 
-test("page number buttons keep keyboard focus after navigation", async ({ page }) => {
-  await page.goto("/images");
-  const button = page.getByRole("navigation", { name: "图片分页" }).getByRole("button", { name: "第 2 页", exact: true });
-  await button.focus();
-  await page.keyboard.press("Enter");
-  await expect(page).toHaveURL(/page=2$/);
-  await expect(button).toBeFocused();
-});
+for (const name of ["第 2 页", "下一页"]) {
+  test(`keyboard pagination sends focus to the new cards (${name})`, async ({ page }) => {
+    await page.goto("/images");
+    const cards = page.locator("main a.image-card");
+    const previous = await cards.first().getAttribute("href");
+    const button = page.getByRole("navigation", { name: "图片分页" }).getByRole("button", { name, exact: true });
+    await button.press("Enter");
+    await expect(page).toHaveURL(/page=2$/);
+    await expect(cards.first()).not.toHaveAttribute("href", previous);
+    await expect(cards.first()).toBeFocused();
+    await expect(cards.first()).toBeInViewport();
+    await page.keyboard.press("Tab");
+    await expect(cards.nth(1)).toBeFocused();
+  });
+}
 
 test("static image pages remain traversable without JavaScript", async ({ browser, baseURL }) => {
   const context = await browser.newContext({ javaScriptEnabled: false });

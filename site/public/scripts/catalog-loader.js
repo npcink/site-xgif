@@ -49,8 +49,9 @@ export function createCatalog(root) {
       ]);
       records = loadedRecords;
       if (needsSearch) search = loadedSearch;
+      const terms = query.split(/\s+/u).filter(Boolean);
       return records.filter(item => (!tag || item.tags.includes(tag))
-        && (!query || search.get(item.id).includes(query))
+        && (!query || terms.every(term => search.get(item.id).includes(term)))
         && (!source || (sourceOnly ? item.source === source : search.get(item.id).includes(source)))
         && (!media || (item.mediaTypes || "").split(" ").includes(media)));
     },

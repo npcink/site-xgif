@@ -1,0 +1,17 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import { pageTitle } from "../config/site";
+---
+
+<BaseLayout title={pageTitle("页面没有找到")} noindex>
+  <section class="search-page">
+    <p class="section-kicker">404</p>
+    <h1>页面没有找到</h1>
+    <p>这个链接可能已失效，或地址有误。</p>
+    <nav class="tag-jump-links" aria-label="继续浏览">
+      <a href="/">返回首页</a>
+      <a href="/search">搜索内容</a>
+      <a href="/images">浏览图片</a>
+    </nav>
+  </section>
+</BaseLayout>
