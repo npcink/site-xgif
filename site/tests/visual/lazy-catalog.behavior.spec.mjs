@@ -207,6 +207,10 @@ test("a late search response neither overwrites the newest query nor downloads o
   await waitForCatalog(page);
   const input = page.getByRole("textbox", { name: "筛选图片" });
   try {
+    const targetId = "20261117-7ayb";
+    const target = (await catalogItems(page, "images")).find(item => item.id === targetId);
+    expect(target, "CUP 5080 needs a public catalog entry").toBeDefined();
+    const alreadyRendered = await page.locator(`main .image-card[data-catalog-id="${targetId}"]`).count() === 1;
     await input.fill("无语");
     await expect(page.locator("[data-catalog-message]")).toHaveText("正在加载结果，暂显示上次结果…");
     await input.fill("CUP 5080");
@@ -214,9 +218,10 @@ test("a late search response neither overwrites the newest query nor downloads o
     await expect(page.locator("[data-visible-count]")).toHaveText("1");
     await expect(page.locator("main .image-card")).toHaveCount(1);
     await expect(page).toHaveURL(/q=CUP\+5080$/);
-    await expect(page.locator("main .image-card")).toHaveAttribute("aria-label", /CUP 5080/);
+    await expect(page.locator("main .image-card")).toHaveAttribute("data-catalog-id", targetId);
     await page.waitForLoadState("networkidle");
-    expect(cardRequests).toEqual([]);
+    expect(cardRequests.map(url => new URL(url).pathname.split("/").at(-1)))
+      .toEqual(alreadyRendered ? [] : [String(target.page)]);
   } finally { release(); }
 });
 
