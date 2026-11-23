@@ -29,3 +29,11 @@
 - 可复用检查项已纳入[开发与交付规范](DEVELOPMENT_AND_DELIVERY_STANDARD.md#界面排查清单)。先核对相关页面的初始、加载、失败、零结果和恢复状态，再决定是否需要改样式或数据结构。
 - 本地测试、PR 检查、生产 SHA 与真机验收分别记录。候选验证未覆盖真机 Safari／Firefox，也未测生产真实访问指标。推荐评测与动态图首帧限制不在本轮范围内。
 - 收尾时只处理本轮隔离分支和 worktree，保留共享主工作区和私有资料。清理前保存可恢复的提交及差异，按[仓库收尾规范](REPOSITORY_CLOSEOUT_AND_GIT_HYGIENE_STANDARD.md)复核。
+
+## 生产发布与验收（2026-11-23）
+
+- PR #104 经用户明确授权合并，合并提交为 `fa155adfd0757a7e8fe24b4f72490d5d4eec9654`；主线验证 run `45126345198` 中 Astro site、Linux 视觉测试、图集测试、部署检查和 Local publisher 均通过。
+- Cloudflare Workers Build 成功；生产 `https://www.xgif.cn/build.json` 返回 `commit=fa155adfd0757a7e8fe24b4f72490d5d4eec9654`，与主线合并提交一致。
+- 带 `EXPECTED_SHA` 和 `REQUIRE_APEX_REDIRECT=true` 的生产巡检通过；Production smoke run `45127439501` 成功。
+- 只读线上验收通过：首页、`/images`、`/images?page=2`、搜索、`/articles?page=2`、标签、收藏页返回 200；不存在的内容地址保持 HTTP 404，并提供返回首页、搜索和图片入口；浏览器快照确认分页内容和 404 导航可见。
+- 仍未由自动化替代的项目：真机 Safari／Firefox、实际触屏滑动、系统字体放大、低高度横屏、弱网／断网恢复，以及有足够样本后的真实访问性能和失败率观察。
