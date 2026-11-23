@@ -76,7 +76,7 @@ test("reloading a removed overlay destination stays on its 404 page", async ({ p
 
 test("image dialog close control does not overlap the image on a narrow phone", async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 568 });
-  await page.goto("/images");
+  await imageArchiveFor(page, "20261117-0wmy");
   const card = page.locator('main a.image-card[href="/20261117-0wmy"]');
   await card.click();
   const dialog = page.getByRole("dialog");

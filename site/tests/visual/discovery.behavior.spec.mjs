@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { imageArchiveFor, catalogItems, waitForCatalog } from "./archive-helpers.mjs";
 import { expect, test } from "@playwright/test";
 
@@ -213,13 +214,19 @@ test("static navigation and initial recommendations work without JavaScript", as
 });
 
 test("weak image matches stay absent in both a standalone page and a loaded dialog", async ({ page }) => {
-  await page.goto("/20260723-2wfr");
-  await expect(page.locator("main [data-detail-content]")).toHaveAttribute("data-content-id", "20260723-2wfr");
+  // A previously sparse image can gain a qualified neighbor on a content release.
+  const { recommendations } = JSON.parse(await readFile(new URL("../../src/data/recommendations.json", import.meta.url), "utf8"));
+  const fixture = Object.entries(recommendations).find(([, item]) =>
+    item.sourceType === "image" && item.images.length === 0 && item.articles.length === 0);
+  expect(fixture, "expected a published image with no qualified recommendations").toBeDefined();
+  const [id] = fixture;
+  await page.goto(`/${id}`);
+  await expect(page.locator("main [data-detail-content]")).toHaveAttribute("data-content-id", id);
   await expect(page.locator("main [data-recommendations]")).toHaveCount(0);
-  await imageArchiveFor(page, "20260723-2wfr");
-  await page.locator('a[data-detail-link][href="/20260723-2wfr"]').click();
+  await imageArchiveFor(page, id);
+  await page.locator(`a[data-detail-link][href="/${id}"]`).click();
   const dialog = page.locator("[data-detail-dialog]");
   await expect(dialog).toHaveAttribute("aria-busy", "false");
-  await expect(dialog.locator("[data-detail-content][data-content-id=\"20260723-2wfr\"]")).toBeVisible();
+  await expect(dialog.locator(`[data-detail-content][data-content-id="${id}"]`)).toBeVisible();
   await expect(dialog.locator("[data-recommendations]")).toHaveCount(0);
 });
