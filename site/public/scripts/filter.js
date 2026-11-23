@@ -15,10 +15,11 @@ const browse = queryRequired?.querySelector("[data-search-browse]");
 const jump = queryRequired?.querySelector("[data-search-jump]");
 const announcement = queryRequired?.querySelector("[data-search-announcement]");
 let shownQuery = "";
+let appliedFilters = { query: "", source: "", media: "" };
 let mediaFilter = "", generation = 0, pendingDialog = false, retryOptions = {};
 const scopes = [...document.querySelectorAll("[data-list-scope]")].map(root => {
   const catalog = createCatalog(root);
-  const pager = createPagination(root, scrollY => apply({ push: true, scrollY, scrollRoot: root }));
+  const pager = createPagination(root, (scrollY, focusResults) => apply({ push: true, scrollY, scrollRoot: root, focusResults }));
   return { catalog, pager };
 });
 
@@ -42,7 +43,16 @@ function updateControls() {
   }
 }
 
-async function apply({ push = false, scrollY, write = true, scrollRoot, restore } = {}) {
+function writeFilters(push = false, scrollY) {
+  const url = new URL(location.href);
+  for (const [key, value] of [["q", input?.value.trim()], ["source", sourceSelect?.value], ["media", mediaFilter]]) {
+    if (value) url.searchParams.set(key, value); else url.searchParams.delete(key);
+  }
+  scopes.forEach(({ pager }) => pager.writeUrl(url));
+  writeListUrl(url, push, scrollY);
+}
+
+async function apply({ push = false, scrollY, write = true, scrollRoot, restore, focusResults, fromRetry = false } = {}) {
   const run = ++generation;
   const isCurrent = () => run === generation;
   document.documentElement.removeAttribute("data-catalog-ready");
@@ -50,6 +60,7 @@ async function apply({ push = false, scrollY, write = true, scrollRoot, restore 
   const idle = queryRequired && !query;
   const source = sourceSelect?.value || "";
   const filters = { query, source, media: mediaFilter, sourceOnly: Boolean(sourceSelect) };
+  const changingFilters = query !== appliedFilters.query || source !== appliedFilters.source || mediaFilter !== appliedFilters.media;
   updateControls();
   try {
     if (browse) browse.hidden = !idle;
@@ -69,9 +80,16 @@ async function apply({ push = false, scrollY, write = true, scrollRoot, restore 
       results = scopes.map(scope => ({ ...scope, total: scope.catalog.total, nodes: null }));
     } else {
       if (status) status.hidden = false;
-      if (message) message.textContent = "正在加载结果…";
-      if (retry) retry.hidden = true;
-      scopes.forEach(({ catalog }) => catalog.root.setAttribute("aria-busy", "true"));
+      if (message) message.textContent = changingFilters && !queryRequired && !document.documentElement.hasAttribute("data-filter-pending") && !document.documentElement.hasAttribute("data-filter-unavailable")
+        ? "正在加载结果，暂显示上次结果…" : "正在加载结果…";
+      if (retry) {
+        retry.hidden = !fromRetry;
+        retry.setAttribute("aria-disabled", "true");
+      }
+      scopes.forEach(({ catalog, pager }) => {
+        catalog.root.setAttribute("aria-busy", "true");
+        pager.setBusy(true);
+      });
       results = await Promise.all(scopes.map(async scope => {
         const matches = await scope.catalog.matches(filters);
         if (!isCurrent()) return null;
@@ -84,6 +102,7 @@ async function apply({ push = false, scrollY, write = true, scrollRoot, restore 
     }
     if (run !== generation) return;
     if (location.pathname !== initialPath || history.state?.detailDialog) { pendingDialog = true; return; }
+    const moveFocus = focusResults && (scrollRoot?.querySelector("[data-pagination]")?.contains(document.activeElement) || document.activeElement === retry);
     let total = 0, changed = false;
     for (const { catalog, pager, nodes, total: matched } of results) {
       const searchGroup = catalog.root.hasAttribute("data-search-group");
@@ -103,37 +122,43 @@ async function apply({ push = false, scrollY, write = true, scrollRoot, restore 
       jump.hidden = !results.every(({ total }) => total > 0);
       announcement.hidden = Boolean(idle);
     }
-    if (write) {
-      const url = new URL(location.href);
-      for (const [key, value] of [["q", input?.value.trim()], ["source", source], ["media", mediaFilter]]) {
-        if (value) url.searchParams.set(key, value); else url.searchParams.delete(key);
-      }
-      scopes.forEach(({ pager }) => pager.writeUrl(url));
-      writeListUrl(url, push, scrollY);
-    }
+    if (write) writeFilters(push, scrollY);
+    appliedFilters = filters;
+    document.documentElement.removeAttribute("data-filter-unavailable");
     if (status) status.hidden = true;
     if (changed) window.dispatchEvent(new CustomEvent("xgif:list-updated"));
-    if (scrollRoot) scopes.find(({ catalog }) => catalog.root === scrollRoot).pager.scrollToStart();
+    if (scrollRoot) scopes.find(({ catalog }) => catalog.root === scrollRoot).pager.scrollToStart(moveFocus);
     if (restore) restoreListScroll(restore);
   } catch {
     if (run !== generation) return;
     retryOptions = { push, scrollY, write, scrollRoot, restore };
     if (status) status.hidden = false;
-    if (message) message.textContent = queryRequired && query !== shownQuery
-      ? "搜索结果加载失败，请重试。"
+    document.documentElement.toggleAttribute("data-filter-unavailable", changingFilters);
+    if (message) message.textContent = changingFilters
+      ? queryRequired ? "搜索结果加载失败，请重试。" : "筛选结果加载失败，当前筛选尚未生效。请重试。"
       : "加载未完成，当前内容已保留。请重试；如果页面刚更新，也可以刷新后再试。";
     if (retry) retry.hidden = false;
     status?.scrollIntoView({ block: "nearest", behavior: "instant" });
   } finally {
     if (run === generation) {
-      scopes.forEach(({ catalog }) => catalog.root.removeAttribute("aria-busy"));
+      scopes.forEach(({ catalog, pager }) => {
+        catalog.root.removeAttribute("aria-busy");
+        pager.setBusy(false);
+      });
+      retry?.removeAttribute("aria-disabled");
       document.documentElement.removeAttribute("data-filter-pending");
       document.documentElement.setAttribute("data-catalog-ready", "");
     }
   }
 }
 
-const resetAndApply = () => { scopes.forEach(({ pager }) => pager.reset()); void apply(); };
+const resetAndApply = () => {
+  scopes.forEach(({ pager }) => pager.reset());
+  // Preserve requested filters even if their indexes fail to load. Page changes
+  // still commit their URL only after their cards are ready.
+  writeFilters();
+  void apply();
+};
 jump?.addEventListener("click", event => {
   const link = event.target instanceof Element ? event.target.closest("a") : null;
   if (!link || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
@@ -149,7 +174,12 @@ document.querySelector("[data-clear]")?.addEventListener("click", () => {
 });
 sourceSelect?.addEventListener("change", resetAndApply);
 mediaChips.forEach(chip => chip.addEventListener("click", () => { mediaFilter = chip.dataset.mediaFilter || ""; resetAndApply(); }));
-retry?.addEventListener("click", () => { void apply(retryOptions); });
+retry?.addEventListener("click", event => {
+  if (retry.getAttribute("aria-disabled") === "true") return;
+  const focusResults = event.detail === 0;
+  const scrollRoot = retryOptions.scrollRoot || (focusResults && scopes.length === 1 ? scopes[0].catalog.root : undefined);
+  void apply({ ...retryOptions, scrollRoot, focusResults, fromRetry: true });
+});
 window.addEventListener("popstate", event => {
   if (location.pathname !== initialPath || event.state?.detailDialog) return;
   readUrl(); void apply({ write: false, restore: event.state });
@@ -160,6 +190,11 @@ window.addEventListener("pageshow", event => {
 });
 window.addEventListener("xgif:detail-closed", () => {
   if (pendingDialog) { pendingDialog = false; void apply(); }
+});
+// The server cards are page one. Set up their controls before reading a requested URL page.
+if (!queryRequired) scopes.forEach(({ catalog, pager }) => {
+  pager.reset();
+  pager.range(catalog.total);
 });
 readUrl();
 document.querySelectorAll("[data-filter-controls]").forEach(control => { control.hidden = false; });

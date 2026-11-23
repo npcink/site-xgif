@@ -65,6 +65,43 @@ test("full-text search finds an older body-only phrase and reuses its downloaded
   expect(indexes).toHaveLength(2);
 });
 
+test("search treats whitespace-separated terms as an AND query", async ({ page }) => {
+  await page.goto(`/search?q=${encodeURIComponent("学习 监控")}`);
+  await waitForCatalog(page);
+  const matches = (await catalogItems(page, "articles", true)).filter(item => ["学习", "监控"].every(term => item.text.includes(term)));
+  await expect(page.locator("#search-articles [data-group-count]")).toHaveText(String(matches.length));
+  await expect(page.locator('main a[data-detail-link][href="/20260917-j3xu"]')).toBeVisible();
+});
+
+test("filter failures do not present old cards as the newly selected result", async ({ page }) => {
+  let fail = true;
+  await page.route("**/catalog/**/images.json", route => fail ? route.fulfill({ status: 503, body: "unavailable" }) : route.continue());
+  await page.goto("/images");
+  await waitForCatalog(page);
+  await page.getByRole("button", { name: "动图", exact: true }).click();
+  await expect(page).toHaveURL(/\?media=animated$/);
+  await expect(page.getByRole("button", { name: "重试加载" })).toBeVisible();
+  await expect(page.locator("main .image-card:visible")).toHaveCount(0);
+  await expect(page.locator(".filter-count")).toBeHidden();
+  await expect(page.locator("[data-catalog-message]")).toHaveText("筛选结果加载失败，当前筛选尚未生效。请重试。");
+  fail = false;
+  await page.getByRole("button", { name: "重试加载" }).click();
+  await waitForCatalog(page);
+  const animated = (await catalogItems(page, "images")).filter(item => item.mediaTypes.split(" ").includes("animated"));
+  await expect(page.locator("[data-visible-count]")).toHaveText(String(animated.length));
+  await expect(page.locator("main .image-card:visible")).toHaveCount(Math.min(24, animated.length));
+});
+
+test("failed search keeps the requested query across refresh", async ({ page }) => {
+  await page.route("**/catalog/**/search-images.json", route => route.fulfill({ status: 503, body: "unavailable" }));
+  await page.goto("/search");
+  await page.getByRole("textbox", { name: "搜索内容" }).fill("学习");
+  await expect(page).toHaveURL(/q=%E5%AD%A6%E4%B9%A0/);
+  await expect(page.getByRole("button", { name: "重试加载" })).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole("textbox", { name: "搜索内容" })).toHaveValue("学习");
+});
+
 test("failed page fetch preserves the current cards and retries without losing Back history", async ({ page }) => {
   let fail = true;
   await page.route("**/catalog/**/cards/images/2", route => fail ? route.fulfill({ status: 503, body: "unavailable" }) : route.continue());
@@ -171,7 +208,7 @@ test("a late search response neither overwrites the newest query nor downloads o
   const input = page.getByRole("textbox", { name: "筛选图片" });
   try {
     await input.fill("无语");
-    await expect(page.locator("[data-catalog-message]")).toHaveText("正在加载结果…");
+    await expect(page.locator("[data-catalog-message]")).toHaveText("正在加载结果，暂显示上次结果…");
     await input.fill("CUP 5080");
     release();
     await expect(page.locator("[data-visible-count]")).toHaveText("1");
@@ -239,7 +276,7 @@ test("a failed card request stops refills and retry reuses successful fragments"
     releaseRest();
     await page.waitForLoadState("networkidle");
     expect(requests).toHaveLength(4);
-    await expect(page).not.toHaveURL(/q=/);
+    await expect(page).toHaveURL(url => url.searchParams.get("q") === "学习");
     const firstBatch = [...requests];
     await retry.click();
     await expect(page).toHaveURL(/q=/);

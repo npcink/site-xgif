@@ -26,9 +26,9 @@ if (root instanceof HTMLElement && catalogNode instanceof HTMLScriptElement) {
   const knownKeys = new Set(catalogByKey.keys());
   let importMode = "merge";
   const initialPath = location.pathname;
-  const pager = createPagination(root, (scrollY) => {
+  const pager = createPagination(root, (scrollY, focusResults) => {
     render({ push: true, scrollY });
-    pager.scrollToStart();
+    pager.scrollToStart(focusResults);
   });
 
   const setStatus = (message, type = "info") => {

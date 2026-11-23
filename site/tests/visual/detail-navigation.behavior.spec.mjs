@@ -75,6 +75,36 @@ test("reloading an overlay does not let old history entries reopen it", async ({
   await expect(page.locator("[data-detail-dialog]")).not.toBeVisible();
 });
 
+test("Forward loads the detail page even before the archive dialog script starts", async ({ page }) => {
+  const archiveUrl = await imageArchiveFor(page, "20261112-cbac");
+  await page.locator('a.image-card[href="/20261112-cbac"]').click();
+  await expect(page.locator("[data-detail-dialog]")).toHaveAttribute("aria-busy", "false");
+  await page.reload();
+
+  let scriptRequested;
+  const scriptPending = new Promise(resolve => { scriptRequested = resolve; });
+  let allowScript;
+  const releaseScript = new Promise(resolve => { allowScript = resolve; });
+  await page.route("**/scripts/detail-dialog.js", async route => {
+    scriptRequested();
+    await releaseScript;
+    await route.continue();
+  }, { times: 1 });
+
+  try {
+    await page.evaluate(() => history.back());
+    await expect(page).toHaveURL(archiveUrl);
+    await expect(page.locator("main .archive-hero")).toBeVisible();
+    await scriptPending;
+    await page.evaluate(() => history.forward());
+    await expect(page).toHaveURL("/20261112-cbac");
+  } finally {
+    allowScript();
+  }
+  await expect(page.locator("main [data-detail-content]")).toHaveAttribute("data-content-id", "20261112-cbac");
+  await expect(page.locator("[data-detail-dialog]")).not.toBeVisible();
+});
+
 test("long image dialogs use one vertical scroll container and keep all actions reachable", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 720 });
   const archiveUrl = await imageArchiveFor(page, "20261112-cbac");

@@ -1,6 +1,21 @@
 import { expect, test } from "@playwright/test";
 import { catalogItems, waitForCatalog } from "./archive-helpers.mjs";
 
+test("phone archives and tag index bring useful content into the first screen", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  for (const [route, card] of [["/articles", ".article-card"], ["/images", ".image-card"]]) {
+    await page.goto(route);
+    await waitForCatalog(page);
+    // Allow font reflow while keeping the first card near the middle of the viewport.
+    expect((await page.locator(`main ${card}`).first().boundingBox()).y).toBeLessThan(440);
+  }
+  await page.goto("/tags");
+  const first = page.locator(".tag-index a").first();
+  expect((await first.boundingBox()).height).toBeLessThan(80);
+  await expect(first.locator("span:not(.tag-order)")).toBeVisible();
+  await expect(first.locator("span:not(.tag-order)")).toHaveText(/篇文章.*项图片/u);
+});
+
 test("the article source selector preserves exact filters and shareable URLs", async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 844 });
   await page.goto("/articles");

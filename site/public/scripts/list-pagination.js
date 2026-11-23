@@ -16,20 +16,24 @@ export function createPagination(root, onChange) {
 
   nav.addEventListener("click", (event) => {
     const button = event.target instanceof Element ? event.target.closest("button") : null;
-    if (!button || button.disabled || busy) return;
+    if (!button || button.disabled || busy || nav.getAttribute("aria-disabled") === "true") return;
     current = rendered;
     if (button.hasAttribute("data-page-prev")) current -= 1;
     else if (button.hasAttribute("data-page-next")) current += 1;
     else if (button.dataset.page) current = Number(button.dataset.page);
     else return;
     busy = true;
-    Promise.resolve(onChange(window.scrollY)).finally(() => { busy = false; });
+    Promise.resolve(onChange(window.scrollY, event.detail === 0)).finally(() => { busy = false; });
   });
 
   return {
     root,
     readUrl,
     reset: () => { current = 1; },
+    setBusy(value) {
+      if (value) nav.setAttribute("aria-disabled", "true");
+      else nav.removeAttribute("aria-disabled");
+    },
     page: () => current,
     bounds(total) {
       const page = Math.min(current, Math.max(1, Math.ceil(total / size)));
@@ -63,9 +67,11 @@ export function createPagination(root, onChange) {
       if (current > 1) url.searchParams.set(parameter, String(current));
       else url.searchParams.delete(parameter);
     },
-    scrollToStart() {
+    scrollToStart(focusResults = false) {
       (root.querySelector(".archive-toolbar, .content-title, .favorites-toolbar") || root)
         .scrollIntoView({ block: "start", behavior: "instant" });
+      if (focusResults) root.querySelector(":is(.article-grid, .masonry-grid, .favorites-list) a[href]")
+        ?.focus({ preventScroll: true });
       history.replaceState({ ...history.state, listScrollY: window.scrollY }, "", location.href);
     },
   };
