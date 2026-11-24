@@ -10,14 +10,14 @@ import ImageRecommendations from "./ImageRecommendations.astro";
 import FavoriteButton from "./FavoriteButton.astro";
 import { contentHref, selectContentRecommendations } from "../lib/content";
 import { staticRecommendationOptions } from "../lib/recommendation-manifest";
-import { costumeDialogue } from "../config/image-collection";
+import { imageCollectionHref, imageCollections } from "../config/image-collection";
 
 interface Props {
   item: CollectionEntry<"images">;
 }
 
 const { item } = Astro.props;
-const inCostumeDialogue = costumeDialogue.members.some(({ id }) => id === item.data.contentId);
+const collections = imageCollections.filter(({ members }) => members.some(({ id }) => id === item.data.contentId));
 const images = galleryImages(item.data);
 const containsAnimation = ["animated", "mixed"].includes(imageMediaType(item.data));
 const canonicalPath = contentHref(item);
@@ -86,7 +86,7 @@ const imageRatioKey =
         <button class="copy-link-button" type="button" data-copy-url={canonicalPath}>复制链接</button>
       </div>
       <p class="image-save-hint">{upscaleLabel ? `此图为${upscaleLabel}。` : "打开原图后，可长按或右键保存。"}</p>
-      {inCostumeDialogue && <p class="image-save-hint">所属合集：<a href={costumeDialogue.href}>{costumeDialogue.title}</a></p>}
+      {collections.map(({ slug, title }) => <p class="image-save-hint">所属合集：<a href={imageCollectionHref(slug)}>{title}</a></p>)}
       <p class="action-feedback" data-copy-status role="status" aria-live="polite"></p>
       <input class="copy-link-fallback" data-copy-fallback aria-label="图片链接，可选择后复制" readonly hidden />
       {Boolean(item.body?.trim()) && <div class="prose image-note"><Content /></div>}

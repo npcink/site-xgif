@@ -1,19 +1,31 @@
 ---
 import { getCollection } from "astro:content";
+import type { InferGetStaticPropsType } from "astro";
 import DisplayImage from "../../../components/DisplayImage.astro";
 import Icon from "../../../components/Icon.astro";
-import { costumeDialogue as collection } from "../../../config/image-collection";
+import { imageCollections } from "../../../config/image-collection";
 import { pageTitle } from "../../../config/site";
 import BaseLayout from "../../../layouts/BaseLayout.astro";
 import { contentHref } from "../../../lib/content";
 
-const publicImages = await getCollection("images", ({ data }) => !data.draft && data.public);
-const byId = new Map(publicImages.map((image) => [image.data.contentId, image]));
-const members = collection.members.map(({ id, caption }) => {
-  const entry = byId.get(id);
-  if (!entry) throw new Error(`Missing public member ${id} in ${collection.href}`);
-  return { entry, caption };
-});
+export async function getStaticPaths() {
+  const publicImages = await getCollection("images", ({ data }) => !data.draft && data.public);
+  const byId = new Map(publicImages.map((image) => [image.data.contentId, image]));
+  return imageCollections.map((collection) => ({
+    params: { slug: collection.slug },
+    props: {
+      collection,
+      members: collection.members.map(({ id, caption }) => {
+        const entry = byId.get(id);
+        if (!entry) throw new Error(`Missing public member ${id} in ${collection.slug}`);
+        return { entry, caption };
+      }),
+    },
+  }));
+}
+
+type Props = InferGetStaticPropsType<typeof getStaticPaths>;
+const { collection, members } = Astro.props;
 ---
 
 <BaseLayout title={pageTitle(collection.title)} description={collection.description} image={members[0].entry.data.image}>
@@ -22,7 +34,7 @@ const members = collection.members.map(({ id, caption }) => {
     <p class="section-kicker">图片合集</p>
     <h1 id="collection-title">{collection.title}</h1>
     <p>{collection.description}</p>
-    <ol class="collection-members" role="list">
+    <ol class:list={["collection-members", { "collection-pair": members.length === 2 }]} role="list">
       {members.map(({ entry, caption }, index) => (
         <li>
           <a href={contentHref(entry)}>
@@ -56,6 +68,7 @@ const members = collection.members.map(({ id, caption }) => {
     margin: 30px 0 0;
   }
   .collection-members a { display: grid; gap: 6px; text-decoration: none; }
+  .collection-pair { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 904px; }
   .collection-members a:hover strong, .collection-members a:focus-visible strong { text-decoration: underline; }
   .collection-members :global(img) { display: block; width: 100%; height: auto; border: 1px solid var(--ink); }
   .member-caption { font-size: .875rem; }
