@@ -105,10 +105,10 @@ test("the narrow article dialog aligns the heading and summary with the reading 
   await expect(dialog).toHaveCount(0);
 });
 
-test("archive text stays in its gutters and clear of the decoration", async ({ page }) => {
+test("decorated archive text stays in its gutters and clear of the decoration", async ({ page }) => {
   for (const width of [320, 390, 600, 601, 820, 821, 1440, 1920]) {
     await page.setViewportSize({ width, height: 850 });
-    for (const path of ["/articles", "/images", "/tags"]) {
+    for (const path of ["/articles", "/tags"]) {
       await page.goto(path);
       const { inset, edge, right, left } = await page.locator(".archive-hero").evaluate(async (hero) => {
         await document.fonts.ready;
@@ -137,7 +137,7 @@ test("archive text stays in its gutters and clear of the decoration", async ({ p
 test("page headings fit on one line when there is room", async ({ page }) => {
   for (const [path, selector] of [
     ["/", ".home-feed-heading h1"], ["/", ".tag-intro h2"], ["/articles", "h1"],
-    ["/tags", "h1"], ["/about", "h1"], ["/rights", "h1"], ["/privacy", "h1"],
+    ["/images", ".image-library-heading h1"], ["/tags", "h1"], ["/about", "h1"], ["/rights", "h1"], ["/privacy", "h1"],
   ]) {
     await page.goto(path);
     for (const width of [320, 390, 600, 601, 820, 821, 900, 901, 1440, 1920]) {
@@ -299,21 +299,21 @@ test("search prompts fit and clearing restores the empty field", async ({ page }
   }
 });
 
-test("middle archive pages keep the full pagination row inside the toolbar width", async ({ page }) => {
-  for (const [path, current] of [["/articles?page=7", "7"], ["/images?page=5", "5"]]) {
-    await page.setViewportSize({ width: 320, height: 850 });
+test("full archive pagination fits wherever numeric shortcuts are shown", async ({ page }) => {
+  for (const [path, current, width] of [["/articles?page=7", "7", 320], ["/images?page=5", "5", 601], ["/images?page=5", "5", 1440]]) {
+    await page.setViewportSize({ width, height: 850 });
     await page.goto(path);
     const numbers = page.locator("[data-page-numbers]");
     await expect(numbers.locator('[aria-current="page"]')).toHaveText(current);
     await expect(numbers.locator(".page-gap").first()).toBeVisible();
-    const width = await numbers.evaluate(async (row) => {
+    const fits = await numbers.evaluate(async (row) => {
       await document.fonts.ready;
       const { left, right } = row.getBoundingClientRect();
-      return [...row.children].every((element) => {
+      return left >= 0 && right <= innerWidth + 1 && [...row.children].every((element) => {
         const rect = element.getBoundingClientRect();
         return rect.left >= left - 1 && rect.right <= right + 1;
       });
     });
-    expect(width).toBe(true);
+    expect(fits, `${path} at ${width}px`).toBe(true);
   }
 });
