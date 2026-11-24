@@ -1,0 +1,65 @@
+---
+import { getCollection } from "astro:content";
+import DisplayImage from "../../../components/DisplayImage.astro";
+import Icon from "../../../components/Icon.astro";
+import { costumeDialogue as collection } from "../../../config/image-collection";
+import { pageTitle } from "../../../config/site";
+import BaseLayout from "../../../layouts/BaseLayout.astro";
+import { contentHref } from "../../../lib/content";
+
+const publicImages = await getCollection("images", ({ data }) => !data.draft && data.public);
+const byId = new Map(publicImages.map((image) => [image.data.contentId, image]));
+const members = collection.members.map(({ id, caption }) => {
+  const entry = byId.get(id);
+  if (!entry) throw new Error(`Missing public member ${id} in ${collection.href}`);
+  return { entry, caption };
+});
+---
+
+<BaseLayout title={pageTitle(collection.title)} description={collection.description} image={members[0].entry.data.image}>
+  <section class="detail-page curated-collection" aria-labelledby="collection-title">
+    <a class="back-link" href="/images"><Icon name="arrow-left" class="inline-icon" /> 返回图片库</a>
+    <p class="section-kicker">图片合集</p>
+    <h1 id="collection-title">{collection.title}</h1>
+    <p>{collection.description}</p>
+    <ol class="collection-members" role="list">
+      {members.map(({ entry, caption }, index) => (
+        <li>
+          <a href={contentHref(entry)}>
+            <DisplayImage
+              src={entry.data.image}
+              alt={entry.data.altText || entry.data.title}
+              width={entry.data.width}
+              height={entry.data.height}
+              animated={entry.data.animated}
+              priority={index === 0}
+            />
+            <span class="member-caption">{index + 1}. {caption}{index === 0 ? " · 封面" : ""}</span>
+            <strong>{entry.data.title}</strong>
+            {entry.data.upscale && <span class="member-caption">{entry.data.upscale === "lanczos" ? "Lanczos 放大版" : "AI 超分版"}</span>}
+          </a>
+        </li>
+      ))}
+    </ol>
+  </section>
+</BaseLayout>
+
+<style>
+  .curated-collection .back-link { margin-bottom: 28px; }
+  h1 { margin: 0; font-size: 2rem; }
+  .collection-members {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 24px;
+    list-style: none;
+    padding: 0;
+    margin: 30px 0 0;
+  }
+  .collection-members a { display: grid; gap: 6px; text-decoration: none; }
+  .collection-members a:hover strong, .collection-members a:focus-visible strong { text-decoration: underline; }
+  .collection-members :global(img) { display: block; width: 100%; height: auto; border: 1px solid var(--ink); }
+  .member-caption { font-size: .875rem; }
+  @media (max-width: 720px) {
+    .collection-members { grid-template-columns: minmax(0, 1fr); }
+  }
+</style>

@@ -1,6 +1,7 @@
 import { getCollection } from "astro:content";
 import { siteConfig } from "../config/site";
 import { allTags, contentHref } from "../lib/content";
+import { costumeDialogue } from "../config/image-collection";
 
 const entry = (path: string, lastmod?: Date) => `  <url>
     <loc>${new URL(path, siteConfig.url).href}</loc>${lastmod ? `
@@ -15,6 +16,7 @@ export async function GET() {
     entry("/"),
     entry("/articles"),
     entry("/images"),
+    entry(costumeDialogue.href),
     entry("/tags"),
     entry("/about"),
     entry("/rights"),
