@@ -46,7 +46,7 @@ test("the article source selector preserves exact filters and shareable URLs", a
   await expect(page).toHaveURL(url => url.searchParams.get("q") === keyword && !url.searchParams.has("source"));
 });
 
-test("image archive keeps its gutters and wraps the title only when necessary", async ({ page }) => {
+test("image archive aligns its heading and first row and keeps the controls accessible", async ({ page }) => {
   for (const width of [1920, 1440, 1200, 900, 600, 530, 390, 320]) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto("/images?q=躺在‘色泽黄亮，外酥内糯’招牌下的橘猫");
@@ -59,12 +59,11 @@ test("image archive keeps its gutters and wraps the title only when necessary", 
         return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom, width: rect.width };
       };
       return {
-        heroKicker: box(".archive-hero .section-kicker"),
-        contentInnerLeft: document.querySelector(".archive-content").getBoundingClientRect().left + parseFloat(getComputedStyle(document.querySelector(".archive-content")).paddingLeft),
-        toolbar: box(".archive-toolbar"),
+        heading: box(".image-library-heading h1"),
+        grid: box(".image-library-grid"),
         search: box(".inline-search"),
-        heading: box(".image-archive-hero h1"),
-        titleParts: [box(".image-archive-hero h1 > span"), box(".image-archive-hero h1 > em")],
+        types: box(".media-filter"),
+        buttons: [...document.querySelectorAll(".media-filter button")].map(button => button.getBoundingClientRect().height),
         headerTools: box(".header-tools"),
         mobileNav: box(".mobile-nav"),
         overflow: document.documentElement.scrollWidth - innerWidth,
@@ -72,13 +71,15 @@ test("image archive keeps its gutters and wraps the title only when necessary", 
     });
 
     expect(layout.overflow).toBeLessThanOrEqual(1);
-    expect(Math.abs(layout.heroKicker.left - layout.contentInnerLeft)).toBeLessThanOrEqual(1);
+    expect(Math.abs(layout.heading.left - layout.grid.left)).toBeLessThanOrEqual(1);
+    expect(Math.abs(layout.search.left - layout.grid.left)).toBeLessThanOrEqual(1);
     expect(layout.headerTools.right).toBeLessThanOrEqual(width + 1);
     expect(layout.mobileNav.right).toBeLessThanOrEqual(width + 1);
-    expect(layout.toolbar.width - layout.search.width).toBeLessThanOrEqual(2);
-    expect(layout.titleParts.every((part) => part.right <= layout.heading.right + 1)).toBe(true);
-    const needsWrap = layout.titleParts.reduce((width, part) => width + part.width, 0) > layout.heading.width;
-    expect(layout.titleParts[0].top !== layout.titleParts[1].top).toBe(needsWrap);
+    expect(layout.types.right).toBeLessThanOrEqual(layout.grid.right + 1);
+    expect(Math.min(layout.search.bottom - layout.search.top, ...layout.buttons)).toBeGreaterThanOrEqual(44);
+    expect(layout.grid.top).toBeLessThan(350);
+    if (width <= 600) expect(layout.types.top).toBeGreaterThan(layout.search.bottom);
+    else expect(layout.types.left).toBeGreaterThan(layout.search.right);
   }
 });
 

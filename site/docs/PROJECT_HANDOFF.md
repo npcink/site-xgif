@@ -12,6 +12,8 @@ PR #102 已于 2026-11-19 合并并上线，版本为 `9bdd8c304cf434551e83ebb36
 
 2026-11-23 的搜索、返回导航和移动布局改动见[界面修复复盘](UI_FIXES_RETROSPECTIVE_2026-11-23.md)。PR #104 已于 2026-11-23 经用户明确授权合并，合并提交为 `fa155adfd0757a7e8fe24b4f72490d5d4eec9654`，Workers Builds 成功，线上 `/build.json` 已核对为同一 SHA；生产 smoke 和关键只读路径验收通过。真机 Safari／Firefox、实际触屏、弱网恢复和真实访问指标仍属于发布后观察项。
 
+2026-11-24 的[图片库分页与详情样板复盘](IMAGE_LIBRARY_UI_CLOSEOUT_2026-11-24.md)记录紧凑分页、瀑布流保留取舍、悬停排查和 SoFile／blog 的借鉴规则。此文用于交接候选方案，不替代生产验收记录。
+
 ## 当前架构
 
 XGIF 是单人借助 AI 维护的 Astro 静态内容站。公开站点为 `https://www.xgif.cn`，Cloudflare Workers Static Assets 托管，新图片使用 R2 `img.xgif.cn`。文章和图片 Markdown 是内容权威源，`contentId` 与公开 URL 保持稳定。

@@ -15,6 +15,7 @@ const { images, title } = Astro.props;
         <DisplayImage src={image.src} alt={image.altText || `${title} · 第 ${index + 1} 张`} width={image.width} height={image.height} animated={image.animated} detail priority={index === 0} deferred={index !== 0} />
       </div>
     ))}
+    <span class="gallery-loading" data-gallery-loading role="status" hidden>正在加载图片…</span>
   </figure>
   <div class="gallery-controls" hidden>
     <button type="button" data-gallery-step="-1" disabled aria-label="上一张图片"><Icon name="arrow-left" class="inline-icon" /> 上一张</button>

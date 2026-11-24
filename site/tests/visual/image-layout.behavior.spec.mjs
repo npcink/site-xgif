@@ -1,6 +1,27 @@
 import { expect, test } from "@playwright/test";
 import { imageArchiveFor } from "./archive-helpers.mjs";
 
+test("tall image cards fit within a square on multi-column archives without cropping", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await imageArchiveFor(page, "20261123-kxrp");
+  const image = page.locator('main .image-card[href="/20261123-kxrp"] img');
+  await expect(image).toHaveCSS("object-fit", "contain");
+  const measure = () => image.evaluate(img => {
+    const { width, height } = img.getBoundingClientRect();
+    return { ratio: height / width, original: Number(img.getAttribute("height")) / Number(img.getAttribute("width")) };
+  });
+  for (const width of [1440, 768]) {
+    await page.setViewportSize({ width, height: 900 });
+    await expect.poll(async () => (await measure()).ratio).toBeCloseTo(1, 2);
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect.poll(async () => {
+    const { ratio, original } = await measure();
+    return Math.abs(ratio - original);
+  }).toBeLessThan(0.01);
+  expect((await measure()).original).toBeGreaterThan(1.5);
+});
+
 async function expectGalleryLayout(gallery) {
   const image = gallery.locator("[data-gallery-slide]:visible img");
   await image.scrollIntoViewIfNeeded();
@@ -83,6 +104,35 @@ test("reported portrait gallery stays centered after selecting its deferred seco
   });
 });
 
+test("a deferred gallery slide reports loading without moving its stage", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/20261117-mpyo");
+  const gallery = page.locator("main [data-image-gallery]");
+  const stage = gallery.locator("[data-gallery-stage]");
+  const loading = gallery.locator("[data-gallery-loading]");
+  const deferred = gallery.locator("[data-gallery-slide]").nth(1).locator("img");
+  const sources = await deferred.evaluate(img => [img.dataset.gallerySrc, ...(img.dataset.gallerySrcset || "").split(",").map(entry => entry.trim().split(/\s/u)[0])]
+    .filter(Boolean).map(src => new URL(src, location.href).href));
+  let release;
+  const pending = new Promise(resolve => { release = resolve; });
+  await page.route(url => sources.includes(url.href), async route => {
+    await pending;
+    await route.continue();
+  });
+  const next = gallery.getByRole("button", { name: "下一张图片" });
+  await next.scrollIntoViewIfNeeded();
+  const height = await stage.evaluate(el => el.clientHeight);
+  try {
+    await next.click();
+    await expect(loading).toBeVisible();
+    await expect(gallery.locator("[data-gallery-counter]")).toHaveText("2 / 2");
+    expect(await stage.evaluate(el => el.clientHeight)).toBe(height);
+  } finally { release(); }
+  await expect(loading).toBeHidden();
+  await expect.poll(() => deferred.evaluate(img => img.naturalWidth)).toBeGreaterThan(0);
+  expect(await stage.evaluate(el => el.clientHeight)).toBe(height);
+});
+
 test("image information has compact spacing, aligned continuation headers and plain text tags", async ({ page }, testInfo) => {
   const widths = testInfo.project.name === "desktop" ? [1440, 901] : [768, 553, 390, 320];
   for (const width of widths) {
@@ -97,7 +147,8 @@ test("image information has compact spacing, aligned continuation headers and pl
       const copy = root.querySelector(".image-detail-copy");
       return {
         media: box(".image-detail-grid > figure"), copy: box(".image-detail-copy"),
-        kicker: box(".section-kicker"), tags: box(".card-tags"),
+        kicker: box(".section-kicker"), title: box(".image-detail-heading h1"), tags: box(".card-tags"),
+        actions: box(".image-detail-actions"), original: box(".image-original-link"),
         hint: box(".image-save-hint"), source: box(".image-source"),
         heading: box(".related-section h2"), more: box(".related-section .content-title > a"),
         sourcePadding: parseFloat(getComputedStyle(copy.querySelector(".image-source")).paddingTop),
@@ -105,8 +156,12 @@ test("image information has compact spacing, aligned continuation headers and pl
         overflow: root.querySelector("[data-detail-shell]").scrollWidth - root.querySelector("[data-detail-shell]").clientWidth,
       };
     });
-    expect(layout.tags.top - layout.kicker.bottom).toBeLessThanOrEqual(16);
-    expect(layout.source.top - layout.hint.bottom).toBeLessThanOrEqual(24);
+    expect(layout.title.height).toBeGreaterThan(20);
+    expect(layout.actions.top - layout.title.bottom).toBeLessThanOrEqual(16);
+    expect(layout.original.left).toBe(layout.actions.left);
+    expect(layout.original.height).toBeGreaterThanOrEqual(44);
+    expect(layout.tags.top).toBeGreaterThan(layout.hint.bottom);
+    expect(layout.source.top).toBeGreaterThan(layout.tags.bottom);
     expect(layout.sourcePadding).toBeLessThanOrEqual(16);
     expect(layout.overflow).toBeLessThanOrEqual(1);
     if (width <= 900) {

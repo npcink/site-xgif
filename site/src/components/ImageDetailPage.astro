@@ -65,30 +65,32 @@ const imageRatioKey =
     </figure>
     )}
     <div class="image-detail-copy">
-      <p class="section-kicker">REACTION / {images.length > 1 ? (containsAnimation ? "图集 · 含动图" : "图集") : containsAnimation ? "动图详情" : "图片详情"}</p>
-      <h1 class="sr-only">{item.data.title}</h1>
-      <dl>
-        <div><dt>分类</dt><dd>{item.data.category}</dd></div>
-        {item.data.mood.length > 0 && <div><dt>情绪</dt><dd>{item.data.mood.join(" / ")}</dd></div>}
-        {item.data.scenes.length > 0 && <div><dt>场景</dt><dd>{item.data.scenes.join(" / ")}</dd></div>}
-      </dl>
-      <div class="card-tags">
-        {item.data.tags.map((tag) => <a href={`/tags/${encodeURIComponent(tag)}`}>#{tag}</a>)}
-      </div>
+      <header class="image-detail-heading">
+        <p class="section-kicker">{images.length > 1 ? (containsAnimation ? "图集 · 含动图" : "图集") : containsAnimation ? "动图" : "图片"}</p>
+        <h1>{item.data.title}</h1>
+      </header>
       <div class="image-detail-actions">
+        <a class="image-original-link" data-gallery-original href={item.data.image} target="_blank" rel="noreferrer">{upscaleLabel ? "查看 / 保存放大版" : "查看 / 保存原图"} <Icon name="arrow-up-right" class="inline-icon" /></a>
         <FavoriteButton
           contentId={item.data.contentId}
           kind="image"
           title={item.data.title}
           href={canonicalPath}
         />
-        <a class="image-original-link" data-gallery-original href={item.data.image} target="_blank" rel="noreferrer">{upscaleLabel ? "查看 / 保存放大版" : "查看 / 保存原图"} <Icon name="arrow-up-right" class="inline-icon" /></a>
         <button class="copy-link-button" type="button" data-copy-url={canonicalPath}>复制链接</button>
       </div>
       <p class="image-save-hint">{upscaleLabel ? `此图为${upscaleLabel}。` : "打开原图后，可长按或右键保存。"}</p>
       {collections.map(({ slug, title }) => <p class="image-save-hint">所属合集：<a href={imageCollectionHref(slug)}>{title}</a></p>)}
       <p class="action-feedback" data-copy-status role="status" aria-live="polite"></p>
       <input class="copy-link-fallback" data-copy-fallback aria-label="图片链接，可选择后复制" readonly hidden />
+      <div class="card-tags">
+        {item.data.tags.map((tag) => <a href={`/tags/${encodeURIComponent(tag)}`}>#{tag}</a>)}
+      </div>
+      <dl>
+        <div><dt>分类</dt><dd>{item.data.category}</dd></div>
+        {item.data.mood.length > 0 && <div><dt>情绪</dt><dd>{item.data.mood.join(" / ")}</dd></div>}
+        {item.data.scenes.length > 0 && <div><dt>场景</dt><dd>{item.data.scenes.join(" / ")}</dd></div>}
+      </dl>
       {Boolean(item.body?.trim()) && <div class="prose image-note"><Content /></div>}
       <p class="image-source">
         {isUserProvided

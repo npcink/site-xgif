@@ -3,6 +3,38 @@ import { catalogItems, waitForCatalog } from "./archive-helpers.mjs";
 
 const visibleHrefs = locator => locator.evaluateAll(items => items.map(item => item.getAttribute("href")));
 
+test("image pagination keeps the page end compact and preserves desktop page shortcuts", async ({ page }, testInfo) => {
+  const mobile = testInfo.project.name === "mobile";
+  if (mobile) await page.setViewportSize({ width: 320, height: 844 });
+  await page.goto("/images?page=3");
+  await waitForCatalog(page);
+  const nav = page.getByRole("navigation", { name: "图片分页" });
+  const position = nav.locator("[data-page-position]");
+  const numbers = nav.locator("[data-page-numbers]");
+  if (mobile) {
+    const total = (await catalogItems(page, "images")).length;
+    await expect(position).toBeVisible();
+    await expect(position).toHaveText(`3 / ${Math.ceil(total / 24)}`);
+    await expect(numbers).toBeHidden();
+    const [previous, next] = await nav.getByRole("button").all();
+    const before = await previous.boundingBox();
+    const middle = await position.boundingBox();
+    const after = await next.boundingBox();
+    expect(before.y).toBe(after.y);
+    expect(before.x + before.width).toBeLessThan(middle.x);
+    expect(middle.x + middle.width).toBeLessThan(after.x);
+    expect(after.x + after.width).toBeLessThanOrEqual(320);
+    expect(Math.min(before.height, after.height)).toBeGreaterThanOrEqual(44);
+  } else {
+    await expect(position).toBeHidden();
+    await expect(numbers.getByRole("button", { name: "第 3 页", exact: true })).toBeVisible();
+  }
+  await expect.poll(() => nav.evaluate(element =>
+    element.getBoundingClientRect().top - element.previousElementSibling.getBoundingClientRect().bottom,
+  )).toBeCloseTo(12, 0);
+  await nav.screenshot({ path: testInfo.outputPath("image-pagination.png") });
+});
+
 test("image pages are bounded and preserve their URL, cards and position through history and dialogs", async ({ page }) => {
   await page.goto("/images?page=2");
   await waitForCatalog(page);
@@ -259,7 +291,8 @@ test("article page navigation also restores its previous page through Back", asy
 });
 
 for (const name of ["第 2 页", "下一页"]) {
-  test(`keyboard pagination sends focus to the new cards (${name})`, async ({ page }) => {
+  test(`keyboard pagination sends focus to the new cards (${name})`, async ({ page }, testInfo) => {
+    test.skip(name === "第 2 页" && testInfo.project.name === "mobile", "Numbered shortcuts are desktop-only.");
     await page.goto("/images");
     const cards = page.locator("main a.image-card");
     const previous = await cards.first().getAttribute("href");
