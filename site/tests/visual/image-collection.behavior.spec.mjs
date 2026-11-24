@@ -26,11 +26,17 @@ test("the editorial collection links to the unchanged single images in order", a
   await expect(page).toHaveURL(new RegExp(`${path}$`));
 });
 
-for (const { slug, title, ids, excludedId } of [
-  { slug: "white-horned-mask", title: "白色长角面具", ids: ["20261123-aqco", "20261123-9t6t"], excludedId: "20261123-4f7m" },
+for (const { slug, title, ids, excludedIds = [] } of [
+  { slug: "white-horned-mask", title: "白色长角面具", ids: ["20261123-aqco", "20261123-9t6t"], excludedIds: ["20261123-4f7m"] },
   { slug: "lopital", title: "洛必达两连", ids: ["20261123-coe2", "20261123-muyj"] },
+  {
+    slug: "pink-haired-food-stall",
+    title: "粉发小人的小吃摊日常",
+    ids: ["20261123-4qiu", "20261123-1iy9", "20261123-qycb"],
+    excludedIds: ["20261123-knt5", "20261123-9gow", "20261123-03ld"],
+  },
 ]) {
-  test(`${title} only includes the approved pair in order`, async ({ page }) => {
+  test(`${title} only includes the approved members in order`, async ({ page }) => {
     const collectionPath = `/images/collections/${slug}`;
     await page.goto(collectionPath);
     await expect(page.getByRole("heading", { name: title })).toBeVisible();
@@ -51,7 +57,7 @@ for (const { slug, title, ids, excludedId } of [
       await expect(page).toHaveURL(new RegExp(`${collectionPath}$`));
     }
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(page.viewportSize().width);
-    if (excludedId) {
+    for (const excludedId of excludedIds) {
       await page.goto(`/${excludedId}`);
       await expect(page.getByRole("link", { name: title, exact: true })).toHaveCount(0);
     }

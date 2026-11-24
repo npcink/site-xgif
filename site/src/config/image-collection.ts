@@ -27,6 +27,16 @@ export const imageCollections = [
       { id: "20261123-muyj", caption: "反复用洛必达" },
     ],
   },
+  {
+    slug: "pink-haired-food-stall",
+    title: "粉发小人的小吃摊日常",
+    description: "三张像素风动图：粉发小人做饼、做芝士汉堡，再到柜台后守着小吃摊。",
+    members: [
+      { id: "20261123-4qiu", caption: "做饼" },
+      { id: "20261123-1iy9", caption: "做芝士汉堡" },
+      { id: "20261123-qycb", caption: "守小吃摊" },
+    ],
+  },
 ];
 
 export const imageCollectionHref = (slug: string) => `/images/collections/${slug}`;
