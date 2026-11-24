@@ -256,8 +256,9 @@ export async function loadPublicRecommendationContent(repoRoot, { multimodal = f
       if (!contentId) continue;
       const chunks = source.type === "article" ? articleEvidenceChunks(body) : [];
       const input = source.type === "article" ? body : "";
+      const upscale = source.type === "image" && data.upscale;
       let images = [];
-      if (multimodal && source.type === "image") {
+      if (multimodal && source.type === "image" && !upscale) {
         try {
           images = await recommendationImages(repoRoot, data);
         } catch (error) {
@@ -266,16 +267,19 @@ export async function loadPublicRecommendationContent(repoRoot, { multimodal = f
       }
       const fingerprint = source.type === "article"
         ? [MULTIMODAL_INPUT_VERSION, "article", body]
+        : upscale ? [MULTIMODAL_INPUT_VERSION, "excluded-upscale"]
         : [MULTIMODAL_INPUT_VERSION, "image", multimodal ? images.map(({ sha256 }) => sha256) : data.images?.map(({ src }) => src) || [data.image]];
       const imageEvidence = source.type === "image" ? await publicationImageEvidence(repoRoot, data) : [];
       const publicEntry = { data: { ...data, pubDate: data.pubDate ? new Date(data.pubDate) : new Date(0) } };
       const publicationEvidence = [contentId, source.type, source.type === "article" ? createHash("sha256").update(body).digest("hex") : imageEvidence,
         recommendationDocument(publicEntry).recommendationGroup, recommendationDocument(publicEntry).pubDate];
+      if (upscale) publicationEvidence.push(upscale);
       if (multimodal && images.some((image, i) => imageEvidence[i]?.sha256 && image.sha256 !== imageEvidence[i].sha256)) {
         throw new Error(`Content-addressed image hash mismatch: ${contentId}`);
       }
       documents.push({
         publicationEvidence,
+        excludedUpscale: Boolean(upscale),
         id: contentId,
         type: source.type,
         input,
@@ -549,11 +553,15 @@ export function buildRecommendationManifest(
   } = {},
 ) {
   const articles = documents.filter((document) => document.type === "article");
-  const images = documents.filter((document) => document.type === "image");
+  const images = documents.filter((document) => document.type === "image" && !document.excludedUpscale);
   const recommendations = {};
 
   for (const document of documents) {
     const multimodal = mode === "hybrid" && embeddingDetails.inputVersion === MULTIMODAL_INPUT_VERSION;
+    if (document.excludedUpscale) {
+      recommendations[document.id] = { ...(multimodal ? { sourceType: document.type } : {}), articles: [], images: [] };
+      continue;
+    }
     const source = document.entry;
     const sourceGroup = recommendationDocument(source).recommendationGroup;
     const articleEntries = articles
@@ -779,8 +787,8 @@ export async function generateRecommendationManifest({
 
   try {
     if (config.provider === "ollama") documents = await loadPublicRecommendationContent(repoRoot, { multimodal: true });
-    else if (documents.some((document) => document.type === "image")) throw new EmbeddingServiceError("EMBEDDING_VISION_UNAVAILABLE", "Image evidence requires native multimodal Ollama; generated descriptions cannot substitute for pixels.");
-    const result = await embeddingVectors(documents, store, config, fetchImpl);
+    else if (documents.some((document) => document.type === "image" && !document.excludedUpscale)) throw new EmbeddingServiceError("EMBEDDING_VISION_UNAVAILABLE", "Image evidence requires native multimodal Ollama; generated descriptions cannot substitute for pixels.");
+    const result = await embeddingVectors(documents.filter((document) => !document.excludedUpscale), store, config, fetchImpl);
     return {
       manifest: buildRecommendationManifest(documents, {
         vectors: result.vectors,

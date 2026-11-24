@@ -36,6 +36,7 @@ const relatedArticles = selectContentRecommendations(item, allArticles, {
 });
 const isUserProvided = item.data.sourceKind === "user_provided";
 const isUnknownSource = item.data.sourceKind === "unknown";
+const upscaleLabel = item.data.upscale === "real-esrgan" ? "AI 超分版" : item.data.upscale === "lanczos" ? "Lanczos 放大版" : "";
 const unknownSourceLabel = item.data.source.replace(/（(?:来源|原作者与授权信息)待核实）$/u, "");
 const imageRatioKey =
   item.data.width && item.data.height
@@ -79,10 +80,10 @@ const imageRatioKey =
           title={item.data.title}
           href={canonicalPath}
         />
-        <a class="image-original-link" data-gallery-original href={item.data.image} target="_blank" rel="noreferrer">查看 / 保存原图 <Icon name="arrow-up-right" class="inline-icon" /></a>
+        <a class="image-original-link" data-gallery-original href={item.data.image} target="_blank" rel="noreferrer">{upscaleLabel ? "查看 / 保存放大版" : "查看 / 保存原图"} <Icon name="arrow-up-right" class="inline-icon" /></a>
         <button class="copy-link-button" type="button" data-copy-url={canonicalPath}>复制链接</button>
       </div>
-      <p class="image-save-hint">打开原图后，可长按或右键保存。</p>
+      <p class="image-save-hint">{upscaleLabel ? `此图为${upscaleLabel}。` : "打开原图后，可长按或右键保存。"}</p>
       <p class="action-feedback" data-copy-status role="status" aria-live="polite"></p>
       <input class="copy-link-fallback" data-copy-fallback aria-label="图片链接，可选择后复制" readonly hidden />
       {Boolean(item.body?.trim()) && <div class="prose image-note"><Content /></div>}

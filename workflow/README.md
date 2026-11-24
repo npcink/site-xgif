@@ -14,6 +14,8 @@
 
 Frontmatter 的数组与图集字段使用 JSON 单行形式，例如 `tags: ["生活"]`、`images: [{"src":"https://img.xgif.cn/memes/...png","width":640,"height":480}]`，供 Astro 与内容检查工具共同读取。图集含封面共 1–12 张，`image` 等于第一张 `src`；完整字段以 Astro Schema 为准。修改前读取当前文件，写入前复核差异，避免覆盖其他任务的编辑。
 
+经人工确认公开的放大衍生图应独立发布，填写 `upscale: "real-esrgan"` 或 `upscale: "lanczos"`。原图、所选版本和确认记录的映射私有留存；公开文件仅引用衍生图。衍生图仍参与图库浏览和发布快照核验，但不作为推荐或语义系列证据。
+
 外部来源文章还应把当前完整正文保存到 `private-sources/articles/<contentId>.md`，可复用 `article-publication.js` 的 `prepareArticlePublication`；私有副本不进入公开提交。
 
 正文排版只能增加段落空行时，必须验证字符与顺序没有改变；短内容不能靠扩写凑字数。共享格式规则仍由 `shared-content-formatting.js` 提供。标签使用 `content-taxonomy.js` 的规范词表。

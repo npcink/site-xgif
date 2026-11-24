@@ -57,7 +57,7 @@ export async function findThemeSeriesMatches({ repoRoot, buffer, env = process.e
     if (file === excludeFile) continue;
     try {
       const { data } = parseContentDocument(await readFile(path.join(directory, name), "utf8"));
-      if (data.draft || data.public === false) continue;
+      if (data.draft || data.public === false || data.upscale) continue;
       const images = await recommendationImages(repoRoot, data);
       checkedContents++;
       for (const [memberIndex, image] of images.entries()) {
