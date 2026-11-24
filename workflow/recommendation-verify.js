@@ -6,7 +6,7 @@ import { createHash } from "node:crypto";
 
 export function bindOfflineImageFingerprints(documents, manifest) {
   if (manifest.embedding?.inputVersion === MULTIMODAL_INPUT_VERSION) {
-    for (const doc of documents.filter((doc) => doc.type === "image")) {
+    for (const doc of documents.filter((doc) => doc.type === "image" && !doc.excludedUpscale)) {
       doc.contentSha256 = createHash("sha256").update(JSON.stringify([MULTIMODAL_INPUT_VERSION, "image", doc.publicationEvidence[2].map((image) => image.sha256)])).digest("hex");
     }
   }
@@ -28,9 +28,10 @@ export async function verifyRecommendationPublication(repoRoot) {
     for (const [kind, type] of [["articles", "article"], ["images", "image"]]) {
       const list = manifest.recommendations[doc.id]?.[kind];
       if (!Array.isArray(list) || new Set(list).size !== list.length) fail(`${doc.id}/${kind} 列表无效`);
+      if (doc.excludedUpscale && list.length) fail(`${doc.id}/${kind} 放大衍生图不得作为推荐来源`);
       for (const id of list) {
         const target = byId.get(id);
-        if (!target || target.type !== type || target.id === doc.id
+        if (!target || target.type !== type || target.id === doc.id || target.excludedUpscale
           || target.publicationEvidence[3] !== doc.publicationEvidence[3]) fail(`${doc.id}/${kind} 引用了不允许的内容`);
       }
     }

@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-24T01:42:34.626Z",
-  "sourceHash": "68a5399fb6e44dc5219fc270772d25820b0d29b1e23aa2032d9af98070ae78d9",
+  "generatedAt": "2026-11-24T02:43:00.627Z",
+  "sourceHash": "5ec1cb53d9093b110467669dcfc5257d51d125d513168868ccb6d8ebe1da30d2",
   "publication": {
     "schemaVersion": 1,
-    "sourceHash": "3bde1e8b25f04551a86055e27388a655ee460239d7d04019510a28824f8b25b4"
+    "sourceHash": "1a3e813905c1eb1a8118cc8f2d12395e89e84dd3ae6a11d17706d1bddf2f79fa"
   },
   "mode": "hybrid",
   "embedding": {
@@ -22,7 +22,7 @@
   "generation": {
     "fallbackCode": "",
     "requestedModel": "RizwanMalik/qwen3-vl-embedding-2b:q8_0-q8_0",
-    "attemptedAt": "2026-11-24T01:42:34.626Z"
+    "attemptedAt": "2026-11-24T02:43:00.627Z"
   },
   "recommendations": {
     "20250722-n20d": {
@@ -10991,6 +10991,31 @@
         "20261117-qc9k"
       ]
     },
+    "20261124-1mr5": {
+      "sourceType": "image",
+      "articles": [],
+      "images": []
+    },
+    "20261124-832b": {
+      "sourceType": "image",
+      "articles": [],
+      "images": []
+    },
+    "20261124-ba5f": {
+      "sourceType": "image",
+      "articles": [],
+      "images": []
+    },
+    "20261124-bcea": {
+      "sourceType": "image",
+      "articles": [],
+      "images": []
+    },
+    "20261124-bj1v": {
+      "sourceType": "image",
+      "articles": [],
+      "images": []
+    },
     "20261124-bpe2": {
       "sourceType": "image",
       "articles": [
@@ -11006,6 +11031,16 @@
         "20261116-vty4",
         "20260725-w29r"
       ]
+    },
+    "20261124-f95n": {
+      "sourceType": "image",
+      "articles": [],
+      "images": []
+    },
+    "20261124-gfzv": {
+      "sourceType": "image",
+      "articles": [],
+      "images": []
     },
     "20261124-i02f": {
       "sourceType": "image",
@@ -11037,6 +11072,11 @@
         "20261123-04y0"
       ]
     },
+    "20261124-m4s0": {
+      "sourceType": "image",
+      "articles": [],
+      "images": []
+    },
     "20261124-myd3": {
       "sourceType": "image",
       "articles": [
@@ -11059,6 +11099,11 @@
         "20261116-zzzm",
         "20261116-6chw"
       ]
+    },
+    "20261124-o7gf": {
+      "sourceType": "image",
+      "articles": [],
+      "images": []
     }
   }
 }

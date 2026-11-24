@@ -103,7 +103,7 @@ export async function findSemanticSeriesMatches({
         let images;
         try {
           data = parseContentDocument(await readFile(path.join(directory, name), "utf8")).data;
-          if (data.draft || data.public === false) continue;
+          if (data.draft || data.public === false || data.upscale) continue;
           images = await recommendationImages(repoRoot, data);
         } catch { unavailableContents++; continue; }
         checkedContents++;

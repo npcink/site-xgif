@@ -11,6 +11,7 @@ import {
   articleEvidenceChunks, TEXT_CHUNK_SIZE, recommendationSourceHash,
 } from "../recommendation-engine.js";
 import { sampleImage } from "./fixtures/image-sample.mjs";
+import { verifyRecommendationPublication } from "../recommendation-verify.js";
 
 const config = getEmbeddingConfig({ XGIF_EMBEDDING_PROVIDER: "ollama", XGIF_EMBEDDING_BASE_URL: "http://127.0.0.1:11439", XGIF_EMBEDDING_MODEL: "test-vl" });
 const response = (payload) => ({ ok: true, json: async () => payload });
@@ -56,6 +57,29 @@ function fakeStore() {
 }
 
 const env = { XGIF_EMBEDDING_PROVIDER: "ollama", XGIF_EMBEDDING_BASE_URL: "http://localhost:11434", XGIF_EMBEDDING_MODEL: "test-vl" };
+
+test("published upscales are verified but never encoded or recommended", async () => {
+  const root = await fixture(), store = fakeStore();
+  const file = path.join(root, "site/src/content/images/upscaled.md");
+  const raw = `---\ncontentId: "upscaled"\nimage: "https://img.xgif.cn/memes/${"a".repeat(64)}.png"\nupscale: "real-esrgan"\n---\n`;
+  await writeFile(file, raw); // No private copy: this image must never be loaded for inference.
+  const fetchImpl = async (url) => url.endsWith("/api/tags")
+    ? response({ models: [{ name: "test-vl", digest: "a".repeat(64), capabilities: ["embedding", "vision"] }] })
+    : response({ embeddings: [[1, 0]] });
+  const { manifest, summary } = await generateRecommendationManifest({ repoRoot: root, store, env, fetchImpl, requireEmbeddings: true });
+  assert.equal(summary.generated, 2);
+  assert.equal(store.records.has("test-vl:upscaled"), false);
+  assert.deepEqual(manifest.recommendations.upscaled, { sourceType: "image", articles: [], images: [] });
+  for (const record of Object.values(manifest.recommendations)) assert(!record.images.includes("upscaled"));
+  await writeRecommendationManifest(root, manifest);
+  assert.equal((await verifyRecommendationPublication(root)).publicCount, 3);
+  await writeFile(file, raw.replace("real-esrgan", "lanczos"));
+  await assert.rejects(verifyRecommendationPublication(root), /快照不一致/);
+  await writeFile(file, raw);
+  manifest.recommendations.article.images = ["upscaled"];
+  await writeRecommendationManifest(root, manifest);
+  await assert.rejects(verifyRecommendationPublication(root), /不允许的内容/);
+});
 
 test("all gallery members enter one model space; image bytes, model digest and input version invalidate cache; generated captions do not", async () => {
   const root = await fixture(), store = fakeStore();

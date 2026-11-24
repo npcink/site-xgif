@@ -62,6 +62,7 @@ const images = defineCollection({
     altText: z.string().max(160).optional(),
     description: z.string(),
     image: imagePath,
+    upscale: z.enum(["real-esrgan", "lanczos"]).optional(),
     animated: z.boolean().optional(),
     images: z.array(z.object({
       src: imagePath,
@@ -87,6 +88,9 @@ const images = defineCollection({
     ratio: z.enum(["wide", "tall", "square"]).default("square"),
     draft: z.boolean().default(false),
   }).superRefine((data, context) => {
+    if (data.upscale && data.images) {
+      context.addIssue({ code: "custom", path: ["upscale"], message: "放大衍生图必须独立发布，不得标记为图集" });
+    }
     if (!data.draft && data.public) {
       const members = data.images || [{ animated: data.animated }];
       if (members.some(image => typeof image.animated !== "boolean")) {

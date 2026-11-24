@@ -60,6 +60,7 @@ export function recommendationDocument(entry) {
     pubDate: normalizedDateValue(data.pubDate),
     isDraft: Boolean(data.draft),
     isPublic: data.public !== false && data.publicationHold !== true,
+    isUpscale: isImage && Boolean(data.upscale),
     recommendationGroup: data.recommendationGroup === "adult-humor" ? "adult-humor" : "general",
   };
 }
@@ -69,7 +70,7 @@ function isSameRecommendationGroup(source, candidate) {
 }
 
 function allowsRecommendation(source, candidate) {
-  return isSameRecommendationGroup(source, candidate);
+  return !source.isUpscale && !candidate.isUpscale && isSameRecommendationGroup(source, candidate);
 }
 
 function freshnessScore(candidate, newestDate) {

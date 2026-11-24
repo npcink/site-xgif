@@ -17,10 +17,11 @@ export async function exportRecommendationQuality(repoRoot) {
   if (manifest.mode !== "hybrid" || manifest.embedding.provider !== "ollama" || manifest.embedding.inputVersion !== MULTIMODAL_INPUT_VERSION) throw new Error("评测需要当前版本的本地多模态清单与匹配缓存");
   const docs = bindOfflineImageFingerprints(await loadPublicRecommendationContent(repoRoot), manifest);
   if (recommendationSourceHash(docs) !== manifest.sourceHash || publicationEvidenceHash(docs) !== manifest.publication.sourceHash) throw new Error("导出过程中原始依据变化");
+  const eligible = docs.filter(doc => !doc.excludedUpscale);
   const db = new DatabaseSync(path.join(repoRoot, "workflow/.runtime/xgif.sqlite3"), { readOnly: true });
   try {
     const rows = db.prepare("SELECT content_id, content_sha256, vector_json FROM recommendation_embeddings WHERE model = ?").all(manifest.embedding.model);
-    const documents = docs.map(doc => {
+    const documents = eligible.map(doc => {
       const row = rows.find(row => row.content_id === doc.id);
       const expected = hash(`ollama:${manifest.embedding.modelDigest}:${doc.contentSha256}`);
       if (!row || row.content_sha256 !== expected) throw new Error(`缺少匹配原始依据的缓存：${doc.id}`);
@@ -29,7 +30,14 @@ export async function exportRecommendationQuality(repoRoot) {
       return { id: doc.id, type: doc.type, group: doc.publicationEvidence[3], sourceHash: hash(JSON.stringify(doc.publicationEvidence)), evidence: doc.publicationEvidence,
         body: doc.entry.body, images: doc.type === "image" ? doc.publicationEvidence[2] : [], vector };
     });
-    return { schemaVersion: "xgif.recommendation-input.v1", identity: manifest.embedding, sourceHash: manifest.sourceHash, manifest, documents };
+    const sourceHash = recommendationSourceHash(eligible);
+    const evaluationManifest = {
+      ...manifest,
+      sourceHash,
+      publication: { ...manifest.publication, sourceHash: publicationEvidenceHash(eligible) },
+      recommendations: Object.fromEntries(eligible.map(doc => [doc.id, manifest.recommendations[doc.id]])),
+    };
+    return { schemaVersion: "xgif.recommendation-input.v1", identity: manifest.embedding, sourceHash, manifest: evaluationManifest, documents };
   } finally { db.close(); }
 }
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
