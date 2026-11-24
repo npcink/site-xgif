@@ -26,7 +26,7 @@ test("the editorial collection links to the unchanged single images in order", a
   await expect(page).toHaveURL(new RegExp(`${path}$`));
 });
 
-for (const { slug, title, ids, excludedIds = [], sourceHint = /原作者与授权信息待核实/ } of [
+for (const { slug, title, ids, excludedIds = [] } of [
   { slug: "white-horned-mask", title: "白色长角面具", ids: ["20261123-aqco", "20261123-9t6t"], excludedIds: ["20261123-4f7m"] },
   { slug: "lopital", title: "洛必达两连", ids: ["20261123-coe2", "20261123-muyj"] },
   {
@@ -34,7 +34,6 @@ for (const { slug, title, ids, excludedIds = [], sourceHint = /原作者与授�
     title: "粉发小人的小吃摊日常",
     ids: ["20261123-4qiu", "20261123-1iy9", "20261123-qycb"],
     excludedIds: ["20261123-knt5", "20261123-9gow", "20261123-03ld"],
-    sourceHint: /来源待核实/,
   },
 ]) {
   test(`${title} only includes the approved members in order`, async ({ page }) => {
@@ -53,7 +52,7 @@ for (const { slug, title, ids, excludedIds = [], sourceHint = /原作者与授�
       await expect.poll(() => image.evaluate((element) => element.naturalWidth)).toBeGreaterThan(0);
       await link.click();
       await expect(page).toHaveURL(new RegExp(`/${id}$`));
-      await expect(page.getByText(sourceHint)).toBeVisible();
+      await expect(page.getByText(/原作者与授权信息待核实/)).toBeVisible();
       await page.getByRole("link", { name: title, exact: true }).click();
       await expect(page).toHaveURL(new RegExp(`${collectionPath}$`));
     }
