@@ -1,7 +1,7 @@
 import { getCollection } from "astro:content";
 import { siteConfig } from "../config/site";
 import { allTags, contentHref } from "../lib/content";
-import { imageCollectionHref, imageCollections } from "../config/image-collection";
+import { imageCollectionHref, imageCollections, isGalleryChild } from "../config/image-collection";
 
 const entry = (path: string, lastmod?: Date) => `  <url>
     <loc>${new URL(path, siteConfig.url).href}</loc>${lastmod ? `
@@ -10,7 +10,7 @@ const entry = (path: string, lastmod?: Date) => `  <url>
 
 export async function GET() {
   const articles = (await getCollection("articles")).filter((item) => !item.data.draft);
-  const images = (await getCollection("images")).filter((item) => !item.data.draft && item.data.public);
+  const images = (await getCollection("images")).filter(({ data }) => !data.draft && data.public && !isGalleryChild(data.contentId));
   const tags = allTags(articles, images);
   const pages = [
     entry("/"),

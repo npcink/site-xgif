@@ -5,9 +5,10 @@ interface Props {
   kind: "article" | "image";
   title: string;
   href: string;
+  subject?: string;
 }
 
-const { contentId, kind, title, href } = Astro.props;
+const { contentId, kind, title, href, subject } = Astro.props;
 ---
 
 <button
@@ -18,8 +19,9 @@ const { contentId, kind, title, href } = Astro.props;
   data-content-kind={kind}
   data-content-title={title}
   data-content-href={href}
+  data-favorite-subject={subject}
   aria-pressed="false"
 >
   <Icon name="heart" class="favorite-toggle-mark" />
-  <span data-favorite-label>收藏</span>
+  <span data-favorite-label>收藏{subject}</span>
 </button>

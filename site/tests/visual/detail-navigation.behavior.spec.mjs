@@ -61,7 +61,7 @@ test("reloading an overlay does not let old history entries reopen it", async ({
   await expect(page.locator("[data-detail-dialog]")).not.toBeVisible();
   await page.goBack();
   await expect(page).toHaveURL(archiveUrl);
-  await expect(page.locator("main .archive-hero")).toBeVisible();
+  await expect(page.getByRole("main").getByRole("heading", { name: "图片与表情包", level: 1 })).toBeVisible();
   await expect(page.locator("[data-detail-dialog]")).not.toBeVisible();
   await page.goForward();
   await expect(page.locator("main [data-detail-content]")).toHaveAttribute("data-content-id", "20261112-cbac");
@@ -94,7 +94,7 @@ test("Forward loads the detail page even before the archive dialog script starts
   try {
     await page.evaluate(() => history.back());
     await expect(page).toHaveURL(archiveUrl);
-    await expect(page.locator("main .archive-hero")).toBeVisible();
+    await expect(page.getByRole("main").getByRole("heading", { name: "图片与表情包", level: 1 })).toBeVisible();
     await scriptPending;
     await page.evaluate(() => history.forward());
     await expect(page).toHaveURL("/20261112-cbac");
@@ -117,8 +117,8 @@ test("long image dialogs use one vertical scroll container and keep all actions 
   expect(scrollers).toEqual(["detail-dialog-shell"]);
   const copy = dialog.locator(".image-detail-copy");
   expect(await copy.evaluate((element) => element.scrollHeight - element.clientHeight)).toBeLessThanOrEqual(1);
-  await dialog.getByRole("link", { name: "查看 / 保存原图" }).scrollIntoViewIfNeeded();
-  await expect(dialog.getByRole("link", { name: "查看 / 保存原图" })).toBeInViewport();
+  await dialog.getByRole("link", { name: "查看原图" }).scrollIntoViewIfNeeded();
+  await expect(dialog.getByRole("link", { name: "查看原图" })).toBeInViewport();
   await dialog.locator(".image-source").scrollIntoViewIfNeeded();
   await expect(dialog.locator(".image-source")).toBeInViewport();
   await page.getByRole("button", { name: "关闭详情" }).click();

@@ -19,7 +19,7 @@ test("animated cards fetch a static poster and open the complete animation on cl
   const poster = await selectedImage(page, card.locator("img"));
   expect(poster.metadata.pages || 1).toBe(1);
   expect(poster.bytes).toBeLessThan(100000);
-  await expect(card.locator(".image-count")).toContainText("点开播放");
+  await expect(card.locator(".image-count")).toHaveText("动图");
   await card.click();
   const dialog = page.getByRole("dialog");
   await expect(dialog).toHaveAttribute("aria-busy", "false");

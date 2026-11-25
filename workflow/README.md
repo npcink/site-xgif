@@ -46,6 +46,8 @@ npm run content:sync -- --apply --retry content-sync/原分支
 
 PR 创建失败会返回失败状态和已推送分支；使用 `gh pr list --head <分支>` 核实，再重试。CLI 不自动合并。创建的 PR 应附加到当前 AI 聊天供审查。主分支保护暂时保留 `Local publisher` 检查名，它现在只运行本目录的工具测试。
 
+批量图片先区分纯内容发布与涉及 Schema、页面或推荐逻辑的变更。发布、回读验收和组图复核见[批量图片发布规范](docs/LOCAL_PUBLISHER_ENGINEERING_STANDARD.md#批量图片发布)。
+
 下架仍需明确选择文件，通过隔离 Git 分支执行版本化删除、PR 和部署；删除本地文件不代表线上已经下架。不要清理 R2 原图来代替下架。推荐清单修改及经过复核的必要素材台账可在专门内容 PR 中精确暂存；不混入普通代码 PR，也不使用 `git add .`。
 
 ## 图片查重与上传
@@ -116,6 +118,8 @@ npm run recommendations:build -- --require-embeddings
 
 命令行只更新 `site/src/data/recommendations.json` 和本机派生缓存，不修改 Markdown 或发布状态。未指定严格模式时，如果模型或图片读取失败，保留已有的成功 `hybrid` 清单并以非零退出码报告失败；严格模式直接失败且不写清单。只有显式 `--rules-only` 才能用规则覆盖成功向量结果。规则兜底及缺清单时，文章仅按完整原文词面重合和日期排序；图片不使用文字描述推测画面关系，只提供确定性顺序。旧 `openai` 文本接口仅支持纯文章库的完整正文分段；混合图片库必须使用原生多模态 Ollama，不能用 AI 描述替代图片。
 
+多模态清单为每条内容保留最多 12 个合格的图片候选。前台过滤本次会话已看过的图片，按原顺序补位，仍按容器宽度只显示最多两行（4、6 或 8 张）。候选不足不降低门槛，也不重复展示已看内容。仅调整候选数时可复用匹配模型摘要和原始依据指纹的向量，不需要重新推理。
+
 生成后核对 `model`、`dimensions`、公开内容覆盖和真实推荐，再通过 PR 发布静态 ID 清单；前端构建和线上访问都不调用模型。原始依据边界与迁移见 [ADR-022](../site/docs/decisions/ADR-022-original-evidence-recommendations.md)，统一模型决策沿用 [ADR-020](../site/docs/decisions/ADR-020-unified-multimodal-recommendations.md)。
 
 原有来源检查、段落整理与历史迁移命令仍在 `package.json`。迁移默认先预览，只在当前任务确实需要时运行 `:apply`。不要将历史一次性迁移当作日常发布步骤。
@@ -145,6 +149,8 @@ composer eval:site-xgif-recommendations -- --input /绝对路径/内容库/workf
 导出只读 SQLite，不补向量、不联网，缓存不匹配则停止。私有原文、向量与结果不进入代码提交。固定样本将模型排序与实际展示分别衡量；总评失败应保留具体案例，不能修改固定标签或降低阈值使之通过。详见 ADR-023。
 
 ### 主题补充检查
+
+待发布图片未经明确授权不得发送到外部视觉服务；本机配置仍指向外部服务时，先设 `XGIF_SERIES_THEME=off`。这不会关闭用于系列向量的 M4 Ollama。即使向量检查为 `ready`，它也只查当前公开图库，不能代替同批新图之间的复核。
 
 设置 `XGIF_SERIES_THEME=on`，并填写专用的 `XGIF_SERIES_VISION_PROVIDER/BASE_URL/MODEL/API_KEY` 后，`image:check` 和 `image:upload` 会独立比较现有公开图片的原始像素，补充向量未命中的主题关联。可用支持图片的 OpenAI 兼容服务或本机 Ollama；密钥仅放在未跟踪的本机 `.env`。主题模型与 Qwen3-VL-Embedding 2B 是不同职责，可分别更换。第三方视觉服务会接收待上传图和现有公开图片的缩放首帧。
 

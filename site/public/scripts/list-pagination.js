@@ -4,6 +4,7 @@ const scrollPositions = new Map();
 export function createPagination(root, onChange) {
   const nav = root.querySelector("[data-pagination]");
   const summary = root.querySelector("[data-page-summary]");
+  const position = nav.querySelector("[data-page-position]");
   const size = Number(nav.dataset.pageSize);
   const parameter = nav.dataset.pageParam || "page";
   let current = 1;
@@ -46,6 +47,7 @@ export function createPagination(root, onChange) {
       const start = (current - 1) * size;
       const end = Math.min(start + size, total);
       nav.hidden = pages <= 1;
+      if (position) position.textContent = `${current} / ${pages}`;
       nav.querySelector("[data-page-prev]").disabled = current <= 1;
       nav.querySelector("[data-page-next]").disabled = current >= pages;
       const visible = [...new Set([1, current - 1, current, current + 1, pages])]

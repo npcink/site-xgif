@@ -2,15 +2,36 @@
   const select = (gallery, index) => {
     const slides = [...gallery.querySelectorAll("[data-gallery-slide]")];
     index = Math.max(0, Math.min(slides.length - 1, index));
+    if (index === Number(gallery.dataset.current)) return;
     gallery.dataset.current = String(index);
-    const image = slides[index]?.querySelector("img[data-gallery-src]");
-    if (image) {
+    const slide = slides[index];
+    const image = slide.querySelector("img");
+    const loading = gallery.querySelector("[data-gallery-loading]");
+    if (image.hasAttribute("data-gallery-src")) {
       if (image.dataset.gallerySrcset) image.srcset = image.dataset.gallerySrcset;
       image.src = image.dataset.gallerySrc;
       delete image.dataset.gallerySrc;
       delete image.dataset.gallerySrcset;
     }
-    slides.forEach((slide, position) => { slide.hidden = position !== index; });
+    slides.forEach((item, position) => {
+      item.hidden = position !== index;
+      item.removeAttribute("data-gallery-reveal");
+    });
+    function finish(event) {
+      image.removeEventListener("load", finish);
+      image.removeEventListener("error", finish);
+      if (Number(gallery.dataset.current) !== index) return;
+      loading.hidden = event?.type !== "error" && image.naturalWidth > 0;
+      if (loading.hidden) slide.setAttribute("data-gallery-reveal", "");
+      else loading.textContent = "图片未能加载";
+    }
+    if (image.complete) finish();
+    else {
+      loading.textContent = "正在加载图片…";
+      loading.hidden = false;
+      image.addEventListener("load", finish);
+      image.addEventListener("error", finish);
+    }
     gallery.querySelectorAll("[data-gallery-index]").forEach((thumbnail, position) => {
       if (position === index) thumbnail.setAttribute("aria-current", "true");
       else thumbnail.removeAttribute("aria-current");
@@ -21,6 +42,16 @@
     const original = gallery.closest("[data-detail-content]")?.querySelector("[data-gallery-original]");
     const thumbnail = gallery.querySelector(`[data-gallery-index="${index}"]`);
     if (original && thumbnail) original.href = thumbnail.href;
+    const caption = gallery.querySelector("[data-gallery-caption-output]");
+    if (caption) {
+      caption.textContent = slide.dataset.galleryCaption || "";
+      caption.hidden = !slide.dataset.galleryCaption;
+    }
+    const attribution = gallery.querySelector("[data-gallery-attribution-output]");
+    if (attribution) {
+      attribution.textContent = slide.dataset.galleryAttribution || "";
+      attribution.hidden = !slide.dataset.galleryAttribution;
+    }
     // Keep the selected thumbnail visible without scrolling the surrounding page.
     const strip = thumbnail?.parentElement;
     if (strip) strip.scrollLeft = thumbnail.offsetLeft - strip.offsetLeft - strip.clientWidth / 2 + thumbnail.clientWidth / 2;
@@ -51,6 +82,7 @@
     if (!(event.target instanceof Element) || !["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
     const gallery = event.target.closest("[data-image-gallery]");
     if (!gallery) return;
+    if (event.target.closest(".image-detail-copy")) return;
     event.preventDefault();
     if (event.key === "Home") select(gallery, 0);
     else if (event.key === "End") select(gallery, gallery.querySelectorAll("[data-gallery-slide]").length - 1);

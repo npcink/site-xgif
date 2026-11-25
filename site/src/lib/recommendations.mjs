@@ -1,5 +1,7 @@
 const DAY_MS = 86_400_000;
 export const RECOMMENDATION_EVIDENCE_VERSION = "original-sources-v2";
+export const IMAGE_RECOMMENDATION_DISPLAY_LIMIT = 8;
+export const IMAGE_RECOMMENDATION_CANDIDATE_LIMIT = 12;
 
 function asArray(value) {
   return Array.isArray(value) ? value : [];

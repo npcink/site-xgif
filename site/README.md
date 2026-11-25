@@ -92,7 +92,7 @@ npm run test:production
 
 `public/_headers` 仅允许 Cloudflare 从 `https://static.cloudflareinsights.com` 加载统计脚本，向同源 `/cdn-cgi/rum` 或 `https://cloudflareinsights.com` 上报，已移除爱站域名。保留对内联脚本和动态代码执行的限制。变更统计服务或启用额外功能时，应重新验证所需地址和 CSP，不放行通配域名。
 
-图片的精确宽高比由构建期生成的同源 `/image-ratios.css` 提供，仅包含公开图片的尺寸，不再依赖被 CSP 拦截的内联样式；独立页与弹窗共用该样式。
+图片详情的宽度上限与精确宽高比由构建期生成的同源 `/image-ratios.css` 提供，覆盖公开单图和图集成员，不依赖被 CSP 拦截的内联样式；独立页与弹窗共用该样式。详情展示只缩小、不放大，不修改原图。
 
 ## 维护交接
 
