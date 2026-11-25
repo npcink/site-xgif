@@ -2,7 +2,7 @@
 
 ## 状态
 
-已接受
+已接受；关于可公开阅读的草稿不得入库的旧规则，自 2026-11-25 起由 [ADR-031](ADR-031-repository-drafts-and-production-visibility.md) 取代。两个仓库的职责和私有数据保护仍然有效。
 
 ## 日期
 

@@ -12,6 +12,8 @@
 4. `cd workflow && npm run content:audit` 检查完整内容库，再运行 `cd site && npm test` 验证 Schema、构建与链接。只修复当前任务的内容，不为了报告全绿批量改写历史草稿。
 5. 来源和公开范围确认后，将选中内容设为公开，重新检查和预览，按下面的隔离发布流程操作。
 
+只保存草稿版本时，可将已确认允许在公开 GitHub 上阅读的 Markdown 单独提交，保留 `draft: true`（图片另设 `public: false`）。不要用 `content:sync` 同步草稿，它仍只接受达到上线条件的内容。私密草稿仍留在本机或私有内容历史；未上线专用素材不要放进 `site/public/` 或上传到公开 R2。见[草稿入库与生产展示规则](../site/docs/decisions/ADR-031-repository-drafts-and-production-visibility.md)。
+
 Frontmatter 的数组与图集字段使用 JSON 单行形式，例如 `tags: ["生活"]`、`images: [{"src":"https://img.xgif.cn/memes/...png","width":640,"height":480}]`，供 Astro 与内容检查工具共同读取。图集含封面共 1–12 张，`image` 等于第一张 `src`；完整字段以 Astro Schema 为准。修改前读取当前文件，写入前复核差异，避免覆盖其他任务的编辑。
 
 经人工确认公开的放大衍生图应独立发布，填写 `upscale: "real-esrgan"` 或 `upscale: "lanczos"`。原图、所选版本和确认记录的映射私有留存；公开文件仅引用衍生图。衍生图仍参与图库浏览和发布快照核验，但不作为推荐或语义系列证据。

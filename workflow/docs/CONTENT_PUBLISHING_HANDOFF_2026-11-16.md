@@ -1,5 +1,7 @@
 # XGIF 内容发布交接
 
+当前草稿入库规则见 [ADR-031](../../site/docs/decisions/ADR-031-repository-drafts-and-production-visibility.md)。下文的草稿私有状态是历史批次记录，不是对所有新草稿的入库限制。
+
 日期：2026-11-16
 
 状态：本阶段收尾，工具与规范已合入主线；后续按真实新增内容维护。
