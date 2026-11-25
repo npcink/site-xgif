@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { readdir, readFile } from "node:fs/promises";
+import { join, relative, sep } from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
+import { parseFrontmatter } from "astro/markdown";
 
 const readOutput = (path) => readFile(new URL(`../dist/${path}`, import.meta.url), "utf8");
 
@@ -117,9 +120,39 @@ test("article details publish structured data and honest source labels", async (
   assert.match(component, /补充来源线索 \/ 版权反馈/);
 });
 
-test("production build excludes local draft preview routes", async () => {
-  await assert.rejects(
-    () => readOutput("preview/articles/ai-uses-computer/index.html"),
-    /ENOENT/,
-  );
+test("production output excludes draft previews and unpublished content IDs", async () => {
+  const root = fileURLToPath(new URL("../dist/", import.meta.url));
+  const [drafts, privateImages, output] = await Promise.all([
+    unpublishedIds("articles", (data) => data.draft === true || data.publicationHold === true),
+    unpublishedIds("images", (data) => data.draft === true || data.public === false),
+    readdir(root, { recursive: true, withFileTypes: true }),
+  ]);
+  const hidden = new Set([...drafts, ...privateImages]);
+  const assertNoHiddenIds = (text, file) => {
+    for (const [id] of text.matchAll(/\b\d{8}-[a-z0-9]{4}\b/gu)) {
+      assert.ok(!hidden.has(id), `${file} must not expose unpublished content ID ${id}`);
+    }
+  };
+
+  for (const entry of output) {
+    const file = join(entry.parentPath, entry.name);
+    const name = relative(root, file).split(sep).join("/");
+    assert.doesNotMatch(name, /^preview\/articles(?:[/.]|$)/u);
+    assertNoHiddenIds(name, name);
+    if (entry.isFile() && (/\.(?:html|json|xml|css)$/u.test(name) || name === "_redirects")) {
+      assertNoHiddenIds(await readFile(file, "utf8"), name);
+    }
+  }
 });
+
+async function unpublishedIds(kind, isUnpublished) {
+  const root = fileURLToPath(new URL(`../src/content/${kind}/`, import.meta.url));
+  const files = await readdir(root, { recursive: true, withFileTypes: true });
+  const ids = [];
+  for (const entry of files) {
+    if (!entry.isFile() || !/\.mdx?$/u.test(entry.name)) continue;
+    const { frontmatter } = parseFrontmatter(await readFile(join(entry.parentPath, entry.name), "utf8"));
+    if (isUnpublished(frontmatter)) ids.push(frontmatter.contentId);
+  }
+  return ids;
+}

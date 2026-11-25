@@ -30,10 +30,10 @@ XGIF 是单人借助 AI 维护的 Astro 静态内容站。公开站点为 `https
 | `workflow/.runtime/` | 可重建 SQLite、推荐缓存及本机工具锁 |
 | `workflow/private-sources/`、`backups/`、`trash/` | 私有正文、图片原字节、内容历史和回收站，必须保留 |
 | `workflow/records/` | 图片最小授权/存储台账与被忽略的报告和发布回执 |
-| GitHub `npcink/site-xgif` | 公开程序、文档、公开内容、PR 与部署历史 |
+| GitHub `npcink/site-xgif` | 公开程序、文档、已上线内容、可公开阅读的草稿、PR 与部署历史 |
 | 私有仓库 `npcink/site-xgif-private-content` | 私有内容快照的 `history` 分支 |
 
-`.env`、SQLite、私有来源、备份、回收站、日志和发布回执不得进入公开提交。即使草稿位于 `site/src/content/`，也不能把它提交到公开代码 PR。不要引入在线 CMS、上传 API 或第二份正文数据库。D1 仅用于访客主动收藏/取消的按日汇总，不承载正文或个人收藏夹；见 [ADR-026](decisions/ADR-026-favorite-action-statistics.md)。
+`.env`、SQLite、私密草稿、私有来源、备份、回收站、日志和发布回执不得进入公开提交。允许公开阅读的草稿可单独提交，仍须从生产页面和数据中排除；不要把未上线专用素材放进 `site/public/` 或公开 R2。见 [ADR-031](decisions/ADR-031-repository-drafts-and-production-visibility.md)。不要引入在线 CMS、上传 API 或第二份正文数据库。D1 仅用于访客主动收藏/取消的按日汇总，不承载正文或个人收藏夹；见 [ADR-026](decisions/ADR-026-favorite-action-statistics.md)。
 
 ## 日常操作
 
