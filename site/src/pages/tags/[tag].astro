@@ -22,9 +22,11 @@ const articles = sortByDate(
   (await getCollection("articles")).filter((entry) => !entry.data.draft && !entry.data.publicationHold && entry.data.tags.includes(tag)),
 );
 const images = catalog.images.filter(({ data }) => data.tags.includes(tag));
+const contentKinds = [articles.length > 0 ? "文章" : "", images.length > 0 ? "图片" : ""].filter(Boolean);
+const description = `浏览「${tag}」标签下的${contentKinds.join("与")}。`;
 ---
 
-<BaseLayout title={pageTitle(`#${tag}`)} description={`浏览与 ${tag} 相关的文章、编辑摘要和图片。`}>
+<BaseLayout title={pageTitle(`#${tag}`)} {description}>
   <section class="tag-detail-hero">
     <a class="back-link" href="/tags"><Icon name="arrow-left" class="inline-icon" /> 全部标签</a>
     <div class="tag-detail-main">
