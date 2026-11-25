@@ -65,7 +65,7 @@ npm run content:sync -- site/src/content/articles/<contentId>.md
 | Build command | `npm run build` |
 | Deploy command | `npx wrangler deploy` |
 
-正常路径：隔离分支 → 精确提交和 push → PR → 必需检查 → 经授权合并 → Workers Builds → `/build.json` 和生产巡检。`Local publisher` 是兼容主分支保护的工具测试名称，现在不再运行后台。不要在自动构建期间并行手工部署。
+正常路径：隔离分支 → 精确提交和 push → PR → 必需检查 → 经授权合并 → Workers Builds → `/build.json`、日常可用性巡检和发布验收。`Local publisher` 是兼容主分支保护的工具测试名称，现在不再运行后台。不要在自动构建期间并行手工部署。
 
 不存在的站内地址由静态资源回退到 `404.html`，保留 HTTP 404；本地应使用 Wrangler 验证响应状态及站内入口，不能只访问 `/404` 检查页面样式。
 
@@ -77,7 +77,7 @@ npm run content:sync -- site/src/content/articles/<contentId>.md
 git diff --check
 ```
 
-交互变更增加相应浏览器测试；布局变更运行 Linux 视觉基线；部署配置变更运行 `cd site && npm run check:deploy`。真实生产核验为 `cd site && npm run test:production`；确认具体版本时设置 `EXPECTED_SHA` 和 `REQUIRE_APEX_REDIRECT=true`。
+交互变更增加相应浏览器测试；布局变更运行 Linux 视觉基线；部署配置变更运行 `cd site && npm run check:deploy`。日常生产可用性巡检为 `cd site && npm run test:production`，不能代替版本验收。确认具体版本必须运行 `cd site && EXPECTED_SHA=<sha> REQUIRE_APEX_REDIRECT=true npm run test:release-acceptance`；缺少预期 SHA、线上 commit 为 `unknown`、首页 CSP 与当前 `site/public/_headers` 不符，或已撤回文章路由不是 404 时，不得视为发布通过。
 
 通过测试、创建 PR、合并、Cloudflare 构建和线上核验分别报告，不能相互替代。下架必须经过公开 Git 删除、部署和线上消失核验。
 

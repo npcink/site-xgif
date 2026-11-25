@@ -15,6 +15,7 @@
     "test": "npm run build && node --test tests/*.test.mjs && npm run test:links",
     "test:links": "node scripts/check-links.mjs",
     "test:production": "node scripts/production-smoke.mjs",
+    "test:release-acceptance": "node scripts/release-acceptance.mjs",
     "test:gallery": "node scripts/test-gallery.mjs",
     "test:visual": "playwright test --config playwright.config.mjs",
     "test:visual:update": "playwright test --config playwright.config.mjs --update-snapshots",
