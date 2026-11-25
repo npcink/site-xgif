@@ -1,3 +1,4 @@
+// 日常生产可用性巡检。确认特定版本请使用 release-acceptance.mjs，不要把本脚本报告的 commit 当作发布验收。
 import assert from "node:assert/strict";
 import process from "node:process";
 

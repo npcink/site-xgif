@@ -4,7 +4,7 @@
 
 适用范围：公开内容批次、推荐清单、站点代码、生产部署，以及与其对应的本地恢复证据
 
-最后更新：2026-08-03
+最后更新：2026-11-25
 
 ## 1. 目的
 
@@ -35,7 +35,7 @@
 3. **PR 与 CI**：PR 已创建，所需检查均通过。
 4. **主线来源**：PR 已合并，记录准确的 `main` 提交 SHA。
 5. **生产构建**：`/build.json` 与目标 SHA 一致。
-6. **生产核验**：严格生产巡检和关键真实 URL 通过。
+6. **生产核验**：日常可用性巡检与针对目标 SHA 的发布验收，以及关键真实 URL 均通过。
 7. **人工验收**：需要主观判断的视觉、内容或操作体验由人确认。
 
 前一层不能替代后一层。生产核验失败时，即使 CI 全绿，本轮仍未完成。
@@ -151,23 +151,32 @@ npm run recommendations:build -- --require-embeddings
 
 ### 5.7 部署与生产核验
 
-合并后执行：
+日常可用性巡检（`npm run test:production`）只确认站点可访问，不能代替版本验收；定时 CI 运行的也是这项巡检，不设置 `EXPECTED_SHA`。
+
+合并后先确认可用性，再执行发布验收：
 
 ```bash
 cd site
-EXPECTED_SHA=<main-sha> REQUIRE_APEX_REDIRECT=true npm run test:production
+npm run test:production
+EXPECTED_SHA=<main-sha> REQUIRE_APEX_REDIRECT=true npm run test:release-acceptance
 ```
 
-生产巡检至少验证：
+发布验收必须失败，如果：
 
-- `www` 主站可用，裸域重定向保留路径和查询参数；
-- `/build.json` 精确等于目标 SHA；
+- 未设置 `EXPECTED_SHA`，或线上 `/build.json` 的 commit 为 `unknown`，或与目标 SHA 不一致（真实 SHA 允许前缀匹配）；
+- 首页 `Content-Security-Policy` 与当前仓库 `site/public/_headers` 中适用于首页的规则不符；
+- 已撤回文章 `20251030-tfm4`、`20251230-oucg` 的公开详情路由 `/{id}` 或预览路由 `/preview/articles/{id}` 不是 404。
+
+可用性巡检至少验证：
+
+- `www` 主站可用，必要时裸域重定向保留路径和查询参数；
+- `/build.json` 可访问且格式正确，但不把其中的 commit 当作发布验收；
 - 文章索引可发现真实文章；
 - sitemap 使用当前公开路由契约；
 - 本轮新增或关键文章返回 200 且出现在 sitemap；
-- 必要时手动触发 GitHub Production smoke，保留运行链接。
+- 必要时可手动触发 GitHub Production smoke（日常巡检）或 Release acceptance（须提供 `EXPECTED_SHA`），保留运行链接。
 
-巡检脚本必须从实际页面或当前路由契约发现目标，不能永久写死已经废弃的 URL 结构。修改路由时，同一 PR 更新巡检和契约测试。
+巡检与验收脚本必须从实际页面或当前路由契约发现目标，不能永久写死已经废弃的 URL 结构。修改路由时，同一 PR 更新脚本和契约测试。不得把 `unknown` 当作已发布 SHA。
 
 ### 5.8 清理
 

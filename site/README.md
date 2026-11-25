@@ -78,13 +78,21 @@ Astro 会把纯静态部署产物输出到 `dist/`。
 文章 RSS 位于 `/rss.xml`，只包含公开文章的摘要、标签与原始来源，不发布草稿或
 完整正文。RSS 条数上限由站点配置控制；页面 `<head>` 与页脚都提供订阅入口。
 
-真实线上巡检可单独执行：
+日常生产可用性巡检可单独执行：
 
 ```bash
 npm run test:production
 ```
 
-它会核对生产首页、反馈邮箱、sitemap、公开文章正文与来源、构建 commit、R2 站内读取和防盗链。GitHub Actions 每天执行同一巡检，并额外要求裸域名 `xgif.cn` 使用 301/308 跳转到 `www.xgif.cn`。
+它会核对生产首页、反馈邮箱、sitemap、公开文章正文与来源、`/build.json` 是否可访问且格式正确、R2 站内读取和防盗链。GitHub Actions 每天执行同一巡检，并额外要求裸域名 `xgif.cn` 使用 301/308 跳转到 `www.xgif.cn`。这项巡检不要求 `EXPECTED_SHA`，也不能代替发布验收。
+
+确认特定版本必须执行发布验收：
+
+```bash
+EXPECTED_SHA=<sha> REQUIRE_APEX_REDIRECT=true npm run test:release-acceptance
+```
+
+验收会核对线上 commit 与 `EXPECTED_SHA` 一致（不得为 `unknown`）、首页 CSP 与当前 `public/_headers` 一致，以及已撤回文章的公开详情和预览路由保持 404。
 
 ## 访问统计
 
