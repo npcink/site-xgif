@@ -7,6 +7,8 @@ export default defineConfig({
   site: siteConfig.url,
   output: "static",
   trailingSlash: "never",
+  // The deployed CSP permits same-origin stylesheets, not inline <style> tags.
+  build: { inlineStylesheets: "never" },
   integrations: [staticAssetVersions()],
   image: {
     service: { entrypoint: "./src/lib/display-image-service.mjs" },

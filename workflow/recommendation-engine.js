@@ -13,6 +13,8 @@ import {
   recommendationDocument,
   selectContentRecommendations,
   RECOMMENDATION_EVIDENCE_VERSION,
+  IMAGE_RECOMMENDATION_DISPLAY_LIMIT,
+  IMAGE_RECOMMENDATION_CANDIDATE_LIMIT,
 } from "../site/src/lib/recommendations.mjs";
 import { parseContentDocument } from "./local-data-store.js";
 import { validateServiceBaseUrl } from "./service-url-policy.js";
@@ -594,10 +596,10 @@ export function buildRecommendationManifest(
         preferredIds: [...new Set([...firstArticles, ...rankedArticles.map((candidate) => candidate.id)])],
       }),
       images: multimodal
-        ? rankedImages.filter((candidate) => candidate.vector >= IMAGE_MIN_SIMILARITY).slice(0, 8).map((candidate) => candidate.id)
+        ? rankedImages.filter((candidate) => candidate.vector >= IMAGE_MIN_SIMILARITY).slice(0, IMAGE_RECOMMENDATION_CANDIDATE_LIMIT).map((candidate) => candidate.id)
         : rulesFor(source, imageEntries, {
-        limit: 8,
-        relatedSlots: 8,
+        limit: IMAGE_RECOMMENDATION_DISPLAY_LIMIT,
+        relatedSlots: IMAGE_RECOMMENDATION_DISPLAY_LIMIT,
         allowSurprise: false,
         preferredIds: rankedImages.map((candidate) => candidate.id),
       }),

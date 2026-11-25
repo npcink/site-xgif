@@ -5,10 +5,11 @@ import { pageTitle } from "../../config/site";
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import ListPagination from "../../components/ListPagination.astro";
 import { contentHref } from "../../lib/content";
+import { foodStallGallery, isGalleryChild } from "../../config/image-collection";
 
 const [articles, images] = await Promise.all([
   getCollection("articles").then((entries) => entries.filter((entry) => !entry.data.draft)),
-  getCollection("images").then((entries) => entries.filter((entry) => !entry.data.draft && entry.data.public)),
+  getCollection("images").then((entries) => entries.filter(({ data }) => !data.draft && data.public && !isGalleryChild(data.contentId))),
 ]);
 const catalog = [
   ...articles.map((entry) => ({
@@ -20,8 +21,9 @@ const catalog = [
   ...images.map((entry) => ({
     contentId: entry.data.contentId,
     kind: "image",
-    title: entry.data.title,
+    title: entry.data.contentId === foodStallGallery.cover ? foodStallGallery.title : entry.data.title,
     href: contentHref(entry),
+    gallery: entry.data.contentId === foodStallGallery.cover || Boolean(entry.data.images?.length && entry.data.images.length > 1),
   })),
 ];
 const safeCatalog = JSON.stringify(catalog).replaceAll("<", "\\u003c");

@@ -1,33 +1,21 @@
 ---
-import Icon from "./Icon.astro";
 import DisplayImage from "./DisplayImage.astro";
 interface Props {
-  images: { src: string; width?: number; height?: number; altText?: string; animated?: boolean }[];
+  images: { src: string; width?: number; height?: number; altText?: string; animated?: boolean; caption?: string; attribution?: string }[];
   title: string;
 }
 const { images, title } = Astro.props;
 ---
 
-<section class="public-image-gallery" data-image-gallery data-current="0" aria-label={`${title}，共 ${images.length} 张图片`}>
+<div class="public-image-gallery">
   <figure class="gallery-stage" data-gallery-stage>
     {images.map((image, index) => (
-      <div data-gallery-slide hidden={index !== 0}>
+      <div data-gallery-slide data-gallery-caption={image.caption} data-gallery-attribution={image.attribution} data-image-ratio={image.width && image.height ? `${image.width}x${image.height}` : undefined} hidden={index !== 0}>
         <DisplayImage src={image.src} alt={image.altText || `${title} · 第 ${index + 1} 张`} width={image.width} height={image.height} animated={image.animated} detail priority={index === 0} deferred={index !== 0} />
       </div>
     ))}
     <span class="gallery-loading" data-gallery-loading role="status" hidden>正在加载图片…</span>
   </figure>
-  <div class="gallery-controls" hidden>
-    <button type="button" data-gallery-step="-1" disabled aria-label="上一张图片"><Icon name="arrow-left" class="inline-icon" /> 上一张</button>
-    <span data-gallery-counter role="status" aria-live="polite">1 / {images.length}</span>
-    <button type="button" data-gallery-step="1" aria-label="下一张图片">下一张 <Icon name="arrow-right" class="inline-icon" /></button>
-  </div>
-  <nav class="gallery-thumbnails" aria-label="选择图集图片">
-    {images.map((image, index) => (
-      <a href={image.src} target="_blank" rel="noreferrer" data-gallery-index={index} aria-current={index === 0 ? "true" : undefined} aria-label={`第 ${index + 1} 张${index === 0 ? "，封面" : ""}`}>
-        <DisplayImage src={image.src} alt="" width={image.width} height={image.height} thumbnail />
-        <span>{index + 1}</span>
-      </a>
-    ))}
-  </nav>
-</section>
+  {images.some((image) => image.caption) && <p class="gallery-caption" data-gallery-caption-output>{images[0]?.caption}</p>}
+  {images.some((image) => image.attribution) && <p class="gallery-attribution" data-gallery-attribution-output hidden={!images[0]?.attribution}>{images[0]?.attribution}</p>}
+</div>

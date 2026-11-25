@@ -11,6 +11,8 @@ import {
   selectContentRecommendations,
 } from "../lib/content";
 import { staticRecommendationOptions } from "../lib/recommendation-manifest";
+import { IMAGE_RECOMMENDATION_CANDIDATE_LIMIT, IMAGE_RECOMMENDATION_DISPLAY_LIMIT } from "../lib/recommendations.mjs";
+import { isGalleryChild } from "../config/image-collection";
 
 interface Props {
   article: CollectionEntry<"articles">;
@@ -22,17 +24,18 @@ const { Content, headings } = await render(article);
 const tableOfContents = headings.filter((heading) => heading.depth === 2 || heading.depth === 3);
 const [allArticles, allImages] = await Promise.all([
   getCollection("articles"),
-  getCollection("images").then((entries) => entries.filter((entry) => !entry.data.draft && entry.data.public)),
+  getCollection("images").then((entries) => entries.filter(({ data }) => !data.draft && data.public && !isGalleryChild(data.contentId))),
 ]);
 const recommendedArticles = selectContentRecommendations(article, allArticles, {
   limit: 12,
   ...staticRecommendationOptions(article.data.contentId, "articles"),
 });
+const imageRecommendationOptions = staticRecommendationOptions(article.data.contentId, "images");
 const relatedImages = selectContentRecommendations(article, allImages, {
-  limit: 8,
+  limit: imageRecommendationOptions.preferredOnly ? IMAGE_RECOMMENDATION_CANDIDATE_LIMIT : IMAGE_RECOMMENDATION_DISPLAY_LIMIT,
   relatedSlots: 3,
   allowSurprise: false,
-  ...staticRecommendationOptions(article.data.contentId, "images"),
+  ...imageRecommendationOptions,
 });
 const sourceLabel = {
   original: "原创内容",
@@ -45,7 +48,12 @@ const articleHref = contentHref(article);
 const sourcePending = article.data.sourceKind === "unknown";
 const hasSourceNote = Boolean(editorNote) || sourcePending;
 const hasArticleSidebar = tableOfContents.length > 0 || hasSourceNote;
-const titleLength = [...article.data.title].length;
+const title = article.data.title;
+const titleLength = [...title].length;
+const titleBreak = title.indexOf("：") + 1;
+const titleParts = titleBreak > 1 && title.slice(titleBreak).trim()
+  ? [title.slice(0, titleBreak), title.slice(titleBreak)]
+  : null;
 const dialogTitleSize = titleLength <= 12
   ? "short"
   : titleLength <= 24
@@ -64,13 +72,12 @@ const dialogTitleSize = titleLength <= 12
 
 <article class="detail-page article-detail" data-detail-content data-detail-kind="article" data-content-id={article.data.contentId}>
   <header class="detail-header">
-    <a class="back-link" href="/articles"><Icon name="arrow-left" class="inline-icon" /> 返回文章列表</a>
     <div class="detail-meta">
       <span>{article.data.source}</span>
       <time datetime={article.data.pubDate.toISOString()}>{formatShortDate(article.data.pubDate)}</time>
       <span>{article.data.readTime}</span>
     </div>
-    <h1 class:list={["article-title", `dialog-title--${dialogTitleSize}`]}>{article.data.title}</h1>
+    <h1 class:list={["article-title", `dialog-title--${dialogTitleSize}`]}>{titleParts ? titleParts.map((part) => <span>{part}</span>) : title}</h1>
     <p class="detail-summary">{article.data.summary}</p>
     {(!preview || article.data.sourceUrl) && <div class="article-detail-actions">
       {!preview && (
@@ -82,8 +89,8 @@ const dialogTitleSize = titleLength <= 12
         />
       )}
       {article.data.sourceUrl && (
-        <a class="primary-button" href={article.data.sourceUrl} target="_blank" rel="noreferrer">
-          {sourceLabel} <span><Icon name="arrow-up-right" class="inline-icon" /></span>
+        <a class="article-source-link" href={article.data.sourceUrl} target="_blank" rel="noreferrer">
+          <span>{sourceLabel}</span><Icon name="arrow-up-right" />
         </a>
       )}
       {!preview && <a class="dialog-full-link" href={articleHref}>打开独立文章页 <Icon name="arrow-right" class="inline-icon" /></a>}

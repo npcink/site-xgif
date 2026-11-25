@@ -42,6 +42,16 @@
     const original = gallery.closest("[data-detail-content]")?.querySelector("[data-gallery-original]");
     const thumbnail = gallery.querySelector(`[data-gallery-index="${index}"]`);
     if (original && thumbnail) original.href = thumbnail.href;
+    const caption = gallery.querySelector("[data-gallery-caption-output]");
+    if (caption) {
+      caption.textContent = slide.dataset.galleryCaption || "";
+      caption.hidden = !slide.dataset.galleryCaption;
+    }
+    const attribution = gallery.querySelector("[data-gallery-attribution-output]");
+    if (attribution) {
+      attribution.textContent = slide.dataset.galleryAttribution || "";
+      attribution.hidden = !slide.dataset.galleryAttribution;
+    }
     // Keep the selected thumbnail visible without scrolling the surrounding page.
     const strip = thumbnail?.parentElement;
     if (strip) strip.scrollLeft = thumbnail.offsetLeft - strip.offsetLeft - strip.clientWidth / 2 + thumbnail.clientWidth / 2;
@@ -72,6 +82,7 @@
     if (!(event.target instanceof Element) || !["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
     const gallery = event.target.closest("[data-image-gallery]");
     if (!gallery) return;
+    if (event.target.closest(".image-detail-copy")) return;
     event.preventDefault();
     if (event.key === "Home") select(gallery, 0);
     else if (event.key === "End") select(gallery, gallery.querySelectorAll("[data-gallery-slide]").length - 1);

@@ -5,6 +5,7 @@ import ImageDetailPage from "../components/ImageDetailPage.astro";
 import { pageTitle, siteConfig } from "../config/site";
 import BaseLayout from "../layouts/BaseLayout.astro";
 import { contentHref } from "../lib/content";
+import { foodStallGallery, isGalleryChild } from "../config/image-collection";
 
 type Props =
   | { kind: "article"; entry: CollectionEntry<"articles"> }
@@ -18,7 +19,7 @@ export async function getStaticPaths() {
   ]);
   const records: Props[] = [
     ...articles.map((entry) => ({ kind: "article" as const, entry })),
-    ...images.map((entry) => ({ kind: "image" as const, entry })),
+    ...images.filter(({ data }) => !isGalleryChild(data.contentId)).map((entry) => ({ kind: "image" as const, entry })),
   ];
   const seen = new Set<string>();
 
@@ -71,7 +72,7 @@ if (props.kind === "article") {
 } else {
   const item = props.entry;
   const canonicalPath = contentHref(item);
-  title = pageTitle(item.data.title);
+  title = pageTitle(item.data.contentId === foodStallGallery.cover ? foodStallGallery.title : item.data.title);
   description = item.data.description;
   socialImage = item.data.image;
   jsonLd = {

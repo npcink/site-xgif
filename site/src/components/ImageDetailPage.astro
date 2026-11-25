@@ -3,14 +3,16 @@ import Icon from "./Icon.astro";
 import { getCollection, render, type CollectionEntry } from "astro:content";
 import ArticleRecommendations from "./ArticleRecommendations.astro";
 import ImageGallery from "./ImageGallery.astro";
+import GalleryThumbnails from "./GalleryThumbnails.astro";
 import DisplayImage from "./DisplayImage.astro";
 import { imageMediaType } from "../lib/image-media.mjs";
-import { galleryImages } from "../lib/image-gallery.mjs";
+import { galleryImages, validateGalleryImages } from "../lib/image-gallery.mjs";
 import ImageRecommendations from "./ImageRecommendations.astro";
 import FavoriteButton from "./FavoriteButton.astro";
 import { contentHref, selectContentRecommendations } from "../lib/content";
 import { staticRecommendationOptions } from "../lib/recommendation-manifest";
-import { imageCollectionHref, imageCollections } from "../config/image-collection";
+import { IMAGE_RECOMMENDATION_CANDIDATE_LIMIT, IMAGE_RECOMMENDATION_DISPLAY_LIMIT } from "../lib/recommendations.mjs";
+import { foodStallGallery, imageCollectionHref, imageCollections, isGalleryChild } from "../config/image-collection";
 
 interface Props {
   item: CollectionEntry<"images">;
@@ -18,17 +20,27 @@ interface Props {
 
 const { item } = Astro.props;
 const collections = imageCollections.filter(({ members }) => members.some(({ id }) => id === item.data.contentId));
-const images = galleryImages(item.data);
-const containsAnimation = ["animated", "mixed"].includes(imageMediaType(item.data));
 const canonicalPath = contentHref(item);
 const { Content } = await render(item);
 const allArticles = (await getCollection("articles")).filter((entry) => !entry.data.draft);
 const allImages = (await getCollection("images")).filter((entry) => !entry.data.draft && entry.data.public);
-const relatedImages = selectContentRecommendations(item, allImages, {
-  limit: 8,
-  relatedSlots: 8,
+const isFoodStallCover = item.data.contentId === foodStallGallery.cover;
+const images = isFoodStallCover ? validateGalleryImages(foodStallGallery.members.map((id) => {
+  const member = allImages.find(({ data }) => data.contentId === id);
+  const frames = member ? galleryImages(member.data) : [];
+  if (frames.length !== 1) throw new Error(`Expected one public food stall image for ${id}`);
+  return frames[0];
+})) : galleryImages(item.data);
+const galleryTitle = isFoodStallCover ? foodStallGallery.title : item.data.title;
+const isGallery = images.length > 1;
+const containsAnimation = isFoodStallCover ? images.some((image: { animated?: boolean }) => image.animated) : ["animated", "mixed"].includes(imageMediaType(item.data));
+const mediaLabel = isGallery ? `图集 · ${images.length} 张${containsAnimation ? " · 含动图" : ""}` : containsAnimation ? "动图详情" : "图片详情";
+const imageRecommendationOptions = staticRecommendationOptions(item.data.contentId, "images");
+const relatedImages = selectContentRecommendations(item, allImages.filter(({ data }) => !isGalleryChild(data.contentId)), {
+  limit: imageRecommendationOptions.preferredOnly ? IMAGE_RECOMMENDATION_CANDIDATE_LIMIT : IMAGE_RECOMMENDATION_DISPLAY_LIMIT,
+  relatedSlots: IMAGE_RECOMMENDATION_DISPLAY_LIMIT,
   allowSurprise: false,
-  ...staticRecommendationOptions(item.data.contentId, "images"),
+  ...imageRecommendationOptions,
 });
 const relatedArticles = selectContentRecommendations(item, allArticles, {
   limit: 8,
@@ -48,12 +60,9 @@ const imageRatioKey =
 
 <article class="detail-page image-detail" data-detail-content data-detail-kind="image" data-content-id={item.data.contentId}>
   <a class="back-link" href="/images"><Icon name="arrow-left" class="inline-icon" /> 返回图片库</a>
-  <div class="image-detail-grid">
-    {images.length > 1 ? <ImageGallery images={images} title={item.data.title} /> : (
-    <figure
-      class:list={[`ratio-${item.data.ratio}`]}
-      data-image-ratio={imageRatioKey}
-    >
+  <div class:list={["image-detail-grid", { "gallery-side-layout": isGallery, "single-image-layout": !isGallery }]} data-image-ratio={isGallery ? undefined : imageRatioKey} role={isGallery ? "region" : undefined} aria-label={isGallery ? `${galleryTitle}，共 ${images.length} 张图片` : undefined} data-image-gallery={isGallery ? "" : undefined} data-current={isGallery ? "0" : undefined}>
+    {isGallery ? <ImageGallery images={images} title={galleryTitle} /> : (
+    <figure class="single-image-media">
       <DisplayImage
         src={item.data.image}
         alt={images[0]?.altText || item.data.altText || item.data.title}
@@ -64,33 +73,31 @@ const imageRatioKey =
       />
     </figure>
     )}
+    {isGallery && <GalleryThumbnails images={images} />}
     <div class="image-detail-copy">
-      <header class="image-detail-heading">
-        <p class="section-kicker">{images.length > 1 ? (containsAnimation ? "图集 · 含动图" : "图集") : containsAnimation ? "动图" : "图片"}</p>
-        <h1>{item.data.title}</h1>
-      </header>
+      <h1 class={isFoodStallCover ? "gallery-title" : "sr-only"}>{galleryTitle}</h1>
+      <p class="section-kicker">{mediaLabel}</p>
       <div class="image-detail-actions">
-        <a class="image-original-link" data-gallery-original href={item.data.image} target="_blank" rel="noreferrer">{upscaleLabel ? "查看 / 保存放大版" : "查看 / 保存原图"} <Icon name="arrow-up-right" class="inline-icon" /></a>
-        <FavoriteButton
-          contentId={item.data.contentId}
-          kind="image"
-          title={item.data.title}
-          href={canonicalPath}
-        />
-        <button class="copy-link-button" type="button" data-copy-url={canonicalPath}>复制链接</button>
+        <a class="image-original-link" data-gallery-original href={item.data.image} target="_blank" rel="noreferrer">{upscaleLabel ? "查看放大版" : "查看原图"} <Icon name="arrow-up-right" class="inline-icon" /></a>
+        <div class="image-secondary-actions">
+          <FavoriteButton contentId={item.data.contentId} kind="image" title={galleryTitle} href={canonicalPath} subject={isGallery ? "图集" : undefined} />
+          <button class="copy-link-button" type="button" data-copy-url={canonicalPath}>{isGallery ? "复制图集链接" : "复制链接"}</button>
+        </div>
       </div>
-      <p class="image-save-hint">{upscaleLabel ? `此图为${upscaleLabel}。` : "打开原图后，可长按或右键保存。"}</p>
-      {collections.map(({ slug, title }) => <p class="image-save-hint">所属合集：<a href={imageCollectionHref(slug)}>{title}</a></p>)}
+      {upscaleLabel && <p class="image-save-hint">此图为{upscaleLabel}。</p>}
       <p class="action-feedback" data-copy-status role="status" aria-live="polite"></p>
-      <input class="copy-link-fallback" data-copy-fallback aria-label="图片链接，可选择后复制" readonly hidden />
-      <div class="card-tags">
-        {item.data.tags.map((tag) => <a href={`/tags/${encodeURIComponent(tag)}`}>#{tag}</a>)}
+      <input class="copy-link-fallback" data-copy-fallback aria-label={`${isGallery ? "图集" : "图片"}链接，可选择后复制`} readonly hidden />
+      <div class="image-detail-meta">
+        <span><span class="sr-only">分类：</span>{item.data.category}</span>
+        {item.data.tags.length > 0 && <div class="card-tags">
+          {item.data.tags.map((tag) => <a href={`/tags/${encodeURIComponent(tag)}`}>#{tag}</a>)}
+        </div>}
       </div>
-      <dl>
-        <div><dt>分类</dt><dd>{item.data.category}</dd></div>
-        {item.data.mood.length > 0 && <div><dt>情绪</dt><dd>{item.data.mood.join(" / ")}</dd></div>}
-        {item.data.scenes.length > 0 && <div><dt>场景</dt><dd>{item.data.scenes.join(" / ")}</dd></div>}
-      </dl>
+      {(item.data.mood.length > 0 || item.data.scenes.length > 0) && <div class="image-detail-meta">
+        {item.data.mood.length > 0 && <span>情绪：{item.data.mood.join(" / ")}</span>}
+        {item.data.scenes.length > 0 && <span>场景：{item.data.scenes.join(" / ")}</span>}
+      </div>}
+      {collections.map(({ slug, title }) => <p class="image-save-hint">所属合集：<a href={imageCollectionHref(slug)}>{title}</a></p>)}
       {Boolean(item.body?.trim()) && <div class="prose image-note"><Content /></div>}
       <p class="image-source">
         {isUserProvided

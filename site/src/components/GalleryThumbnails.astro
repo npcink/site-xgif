@@ -1,0 +1,24 @@
+---
+import DisplayImage from "./DisplayImage.astro";
+import Icon from "./Icon.astro";
+interface Props {
+  images: { src: string; width?: number; height?: number; caption?: string }[];
+}
+const { images } = Astro.props;
+---
+
+<div class:list={["gallery-navigation", { "gallery-navigation-short": images.length <= 3 }]}>
+  <div class="gallery-controls" hidden>
+    <button type="button" data-gallery-step="-1" disabled aria-label="上一张图片"><Icon name="arrow-left" class="inline-icon" /> <span class="gallery-step-label">上一张</span></button>
+    <span data-gallery-counter role="status" aria-live="polite">1 / {images.length}</span>
+    <button type="button" data-gallery-step="1" aria-label="下一张图片"><span class="gallery-step-label">下一张</span> <Icon name="arrow-right" class="inline-icon" /></button>
+  </div>
+  <nav class="gallery-thumbnails" aria-label="选择图集图片">
+    {images.map((image, index) => (
+      <a href={image.src} target="_blank" rel="noreferrer" data-gallery-index={index} aria-current={index === 0 ? "true" : undefined} aria-label={`第 ${index + 1} 张${image.caption ? `，${image.caption}` : ""}${index === 0 ? "，封面" : ""}`}>
+        <DisplayImage src={image.src} alt="" width={image.width} height={image.height} thumbnail />
+        <span>{index + 1}</span>
+      </a>
+    ))}
+  </nav>
+</div>

@@ -12,7 +12,7 @@ import { allTags, sortByDate } from "../../lib/content";
 
 export async function getStaticPaths() {
   const articles = (await getCollection("articles")).filter((entry) => !entry.data.draft && !entry.data.publicationHold);
-  const images = (await getCollection("images")).filter((entry) => !entry.data.draft && entry.data.public);
+  const images = (await getCatalog()).images;
   return allTags(articles, images).map((tag) => ({ params: { tag }, props: { tag } }));
 }
 
@@ -21,11 +21,7 @@ const catalog = await getCatalog();
 const articles = sortByDate(
   (await getCollection("articles")).filter((entry) => !entry.data.draft && !entry.data.publicationHold && entry.data.tags.includes(tag)),
 );
-const images = sortByDate(
-  (await getCollection("images")).filter(
-    (entry) => !entry.data.draft && entry.data.public && entry.data.tags.includes(tag),
-  ),
-);
+const images = catalog.images.filter(({ data }) => data.tags.includes(tag));
 ---
 
 <BaseLayout title={pageTitle(`#${tag}`)} description={`浏览与 ${tag} 相关的文章、编辑摘要和图片。`}>

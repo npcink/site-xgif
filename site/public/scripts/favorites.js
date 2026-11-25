@@ -23,7 +23,7 @@ function updateInterface() {
     const isFavorite = keys.has(key);
     button.setAttribute("aria-pressed", String(isFavorite));
     const label = button.querySelector("[data-favorite-label]");
-    if (label) label.textContent = isFavorite ? "已收藏" : "收藏";
+    if (label) label.textContent = `${isFavorite ? "已收藏" : "收藏"}${button.dataset.favoriteSubject || ""}`;
   });
 
   document.documentElement.toggleAttribute("data-favorites-unavailable", Boolean(error));

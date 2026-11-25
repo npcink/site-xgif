@@ -1,12 +1,11 @@
 ---
 import { getCollection } from "astro:content";
 import type { InferGetStaticPropsType } from "astro";
-import DisplayImage from "../../../components/DisplayImage.astro";
-import Icon from "../../../components/Icon.astro";
+import GalleryThumbnails from "../../../components/GalleryThumbnails.astro";
+import ImageGallery from "../../../components/ImageGallery.astro";
 import { imageCollections } from "../../../config/image-collection";
 import { pageTitle } from "../../../config/site";
 import BaseLayout from "../../../layouts/BaseLayout.astro";
-import { contentHref } from "../../../lib/content";
 
 export async function getStaticPaths() {
   const publicImages = await getCollection("images", ({ data }) => !data.draft && data.public);
@@ -26,53 +25,41 @@ export async function getStaticPaths() {
 
 type Props = InferGetStaticPropsType<typeof getStaticPaths>;
 const { collection, members } = Astro.props;
+const galleryImages = members.map(({ entry, caption }) => ({
+  src: entry.data.image,
+  width: entry.data.width,
+  height: entry.data.height,
+  altText: entry.data.altText || entry.data.title,
+  animated: entry.data.animated,
+  caption,
+  attribution: [entry.data.upscale === "lanczos" ? "Lanczos 放大版" : entry.data.upscale === "real-esrgan" ? "AI 超分版" : "", entry.data.source].filter(Boolean).join(" · "),
+}));
 ---
 
 <BaseLayout title={pageTitle(collection.title)} description={collection.description} image={members[0].entry.data.image}>
-  <section class="detail-page curated-collection" aria-labelledby="collection-title">
-    <a class="back-link" href="/images"><Icon name="arrow-left" class="inline-icon" /> 返回图片库</a>
-    <p class="section-kicker">图片合集</p>
+  <section class="detail-page curated-collection">
+    <a class="back-link" href="/images">返回图片库</a>
+    <p class="section-kicker">图集 · {galleryImages.length} 张</p>
     <h1 id="collection-title">{collection.title}</h1>
     <p>{collection.description}</p>
-    <ol class:list={["collection-members", { "collection-pair": members.length === 2 }]} role="list">
-      {members.map(({ entry, caption }, index) => (
-        <li>
-          <a href={contentHref(entry)}>
-            <DisplayImage
-              src={entry.data.image}
-              alt={entry.data.altText || entry.data.title}
-              width={entry.data.width}
-              height={entry.data.height}
-              animated={entry.data.animated}
-              priority={index === 0}
-            />
-            <span class="member-caption">{index + 1}. {caption}{index === 0 ? " · 封面" : ""}</span>
-            <strong>{entry.data.title}</strong>
-            {entry.data.upscale && <span class="member-caption">{entry.data.upscale === "lanczos" ? "Lanczos 放大版" : "AI 超分版"}</span>}
-          </a>
-        </li>
-      ))}
-    </ol>
+    <div class="collection-gallery" role="region" aria-labelledby="collection-title" data-collection-gallery data-image-gallery data-current="0">
+      <ImageGallery images={galleryImages} title={collection.title} />
+      <GalleryThumbnails images={galleryImages} />
+    </div>
+    {members.some(({ entry }) => entry.data.sourceKind === "unknown") && <a class="collection-rights" href="/rights">权利人投诉与下架</a>}
   </section>
 </BaseLayout>
 
 <style>
   .curated-collection .back-link { margin-bottom: 28px; }
   h1 { margin: 0; font-size: 2rem; }
-  .collection-members {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 24px;
-    list-style: none;
-    padding: 0;
-    margin: 30px 0 0;
-  }
-  .collection-members a { display: grid; gap: 6px; text-decoration: none; }
-  .collection-pair { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 904px; }
-  .collection-members a:hover strong, .collection-members a:focus-visible strong { text-decoration: underline; }
-  .collection-members :global(img) { display: block; width: 100%; height: auto; border: 1px solid var(--ink); }
-  .member-caption { font-size: .875rem; }
+  .collection-gallery { max-width: 960px; margin: 30px auto 0; }
+  .collection-gallery :global(.gallery-stage) { height: min(62svh, 680px); }
+  .collection-gallery :global(.gallery-caption) { margin: 0; padding: 10px 12px 0; font-size: .875rem; }
+  .collection-gallery :global(.gallery-attribution) { margin: 0; padding: 4px 12px 10px; color: var(--muted); font-size: .875rem; }
+  .collection-rights { display: inline-block; margin-top: 10px; font-size: .875rem; }
   @media (max-width: 720px) {
-    .collection-members { grid-template-columns: minmax(0, 1fr); }
+    .collection-gallery { margin-top: 24px; }
+    .collection-gallery :global(.gallery-stage) { height: min(58svh, 520px); }
   }
 </style>

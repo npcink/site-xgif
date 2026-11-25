@@ -183,6 +183,24 @@ test("multimodal image candidates below the similarity threshold remain empty", 
   assert.deepEqual(manifest.recommendations.weak.images, []);
 });
 
+test("multimodal recommendations keep up to twelve qualified image candidates", () => {
+  const ids = Array.from({ length: 13 }, (_, index) => `image-${String(index).padStart(2, "0")}`);
+  const documents = ["source", "sparse", "weak", ...ids].map(id => ({
+    id, type: "image", contentSha256: id,
+    entry: { data: { contentId: id, public: true } },
+  }));
+  const manifest = buildRecommendationManifest(documents, {
+    mode: "hybrid", model: "test-vl", embeddingDetails: { inputVersion: MULTIMODAL_INPUT_VERSION },
+    vectors: new Map([
+      ["source", [1, 0, 0]], ["sparse", [0, 0, 1]], ["weak", [0, 1, 0]],
+      ...ids.map((id, index) => [id, [1, 0, index === 0 ? 1 : 0]]),
+    ]),
+  });
+  assert.deepEqual(manifest.recommendations.source.images, ids.slice(1));
+  assert.deepEqual(manifest.recommendations.sparse.images, [ids[0]]);
+  assert.deepEqual(manifest.recommendations.weak.images, []);
+});
+
 test("a response with changing dimensions cannot persist partial cache updates", async () => {
   const root = await fixture(), store = fakeStore();
   let calls = 0;

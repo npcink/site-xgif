@@ -139,6 +139,8 @@ test("homepage matches the approved visual baseline", async ({ page }, testInfo)
 
 test("image dialog matches the approved visual baseline", async ({ page }, testInfo) => {
   await openImageDialog(page);
+  // The pointer used to open the card can land over a newly revealed action.
+  await page.mouse.move(0, 0);
 
   // Capture the dialog itself: the blurred archive outside it changes whenever
   // content is published. Recommendation cards are data-owned and masked too.

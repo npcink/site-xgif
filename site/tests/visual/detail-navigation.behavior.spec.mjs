@@ -117,8 +117,8 @@ test("long image dialogs use one vertical scroll container and keep all actions 
   expect(scrollers).toEqual(["detail-dialog-shell"]);
   const copy = dialog.locator(".image-detail-copy");
   expect(await copy.evaluate((element) => element.scrollHeight - element.clientHeight)).toBeLessThanOrEqual(1);
-  await dialog.getByRole("link", { name: "查看 / 保存原图" }).scrollIntoViewIfNeeded();
-  await expect(dialog.getByRole("link", { name: "查看 / 保存原图" })).toBeInViewport();
+  await dialog.getByRole("link", { name: "查看原图" }).scrollIntoViewIfNeeded();
+  await expect(dialog.getByRole("link", { name: "查看原图" })).toBeInViewport();
   await dialog.locator(".image-source").scrollIntoViewIfNeeded();
   await expect(dialog.locator(".image-source")).toBeInViewport();
   await page.getByRole("button", { name: "关闭详情" }).click();

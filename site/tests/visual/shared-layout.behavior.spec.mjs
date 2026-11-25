@@ -85,6 +85,137 @@ test("empty and populated collections show useful content before the fold", asyn
   await expect(empty).toBeHidden();
 });
 
+test("standalone article keeps the heading and first paragraph in a compact reading flow", async ({ page }, testInfo) => {
+  const titleText = "满纸荒唐言02：破产低谷与重新站起";
+  await page.goto("/20260126-fox0");
+  const detail = page.locator("main .article-detail");
+  const title = detail.getByRole("heading", { level: 1 });
+  await expect(title).toHaveText(titleText);
+  await expect(detail.locator(".back-link")).toHaveCount(0);
+  await expect(detail.locator(".detail-grid")).toHaveCSS("border-top-width", "0px");
+  await expect(detail.locator(".prose > p").first()).toHaveText(titleText);
+  await expect(detail.getByRole("link", { name: "访问来源站" })).toHaveAttribute("href", "https://bbs.hupu.com/637060258.html");
+  for (const width of [1440, 768, 390, 320]) {
+    await page.setViewportSize({ width, height: 720 });
+    const layout = await detail.evaluate(async article => {
+      await document.fonts.ready;
+      const box = (selector, root = article) => root.querySelector(selector).getBoundingClientRect();
+      const heading = box("h1");
+      const meta = box(".detail-meta");
+      const actions = box(".article-detail-actions");
+      const firstParagraph = box(".prose > p");
+      const reading = box(".article-reading");
+      return {
+        topGap: meta.top - box(".site-header", document).bottom,
+        titleGap: heading.top - meta.bottom,
+        bodyGap: firstParagraph.top - actions.bottom,
+        centered: Math.abs(reading.left - (innerWidth - reading.right)) <= 1,
+        paragraphsAlignLeft: getComputedStyle(article.querySelector(".prose")).textAlign === "start" ||
+          getComputedStyle(article.querySelector(".prose")).textAlign === "left",
+        textFits: document.documentElement.scrollWidth <= innerWidth,
+        clauseTops: [...article.querySelectorAll("h1 > span")].map(clause => clause.getBoundingClientRect().top),
+      };
+    });
+    expect(layout.topGap).toBeLessThanOrEqual(32);
+    expect(layout.titleGap).toBeLessThanOrEqual(12);
+    expect(layout.bodyGap).toBeLessThanOrEqual(28);
+    expect(layout.centered && layout.paragraphsAlignLeft && layout.textFits).toBe(true);
+    await expect(detail.locator(".detail-summary")).toHaveCSS("font-size", "15px");
+    const [first, second] = layout.clauseTops;
+    if (width >= 768) expect(second).toBe(first);
+    else expect(second).toBeGreaterThan(first);
+    if (width === (testInfo.project.name === "desktop" ? 1440 : 390)) {
+      await page.screenshot({ path: testInfo.outputPath("standalone-article-header.png"), animations: "disabled" });
+    }
+  }
+  await page.locator(".mobile-nav summary").click();
+  await page.getByRole("navigation", { name: "移动端主导航" }).getByRole("link", { name: "文章", exact: true }).click();
+  await expect(page).toHaveURL(/\/articles$/u);
+});
+
+test("article favorite and source actions stay lightweight and usable in both reading surfaces", async ({ page }, testInfo) => {
+  const id = "20260824-ynqx";
+  const title = "广场上的一场华尔兹演出";
+  const width = testInfo.project.name === "mobile" ? 320 : 768;
+  await page.setViewportSize({ width, height: 800 });
+
+  async function checkActions(article) {
+    const favorite = article.locator("[data-favorite-toggle]");
+    const source = article.getByRole("link", { name: "访问来源站" });
+    await expect(source).toHaveAttribute("href", "https://jandan.net/t/6199339");
+    await expect(source).toHaveAttribute("target", "_blank");
+    await expect(favorite).toHaveAccessibleName("收藏");
+    for (const action of [favorite, source]) {
+      await expect(action).toBeVisible();
+      await expect(action).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+      await expect(action).toHaveCSS("border-top-width", "0px");
+      await expect(action).toHaveCSS("min-height", "44px");
+      expect((await action.boundingBox()).height).toBeGreaterThanOrEqual(43.5);
+    }
+    const sourceBefore = await source.boundingBox();
+    expect(sourceBefore.y).toBeCloseTo((await favorite.boundingBox()).y, 0);
+    expect(sourceBefore.x + sourceBefore.width).toBeLessThanOrEqual(width);
+    await favorite.focus();
+    await page.keyboard.press("Tab");
+    await expect(source).toBeFocused();
+    await expect(source).toHaveCSS("outline-style", "solid");
+    await page.keyboard.press("Shift+Tab");
+    await expect(favorite).toBeFocused();
+    await expect(favorite).toHaveCSS("outline-style", "solid");
+    await page.keyboard.press("Space");
+    await expect(favorite).toHaveAccessibleName("已收藏");
+    await expect(favorite).toHaveAttribute("aria-pressed", "true");
+    await expect(favorite).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+    expect((await source.boundingBox()).x).toBeCloseTo(sourceBefore.x, 0);
+    await page.keyboard.press("Space");
+    await expect(favorite).toHaveAttribute("aria-pressed", "false");
+  }
+
+  await page.goto(`/${id}`);
+  await checkActions(page.locator("main .article-detail"));
+  await page.goto("/articles");
+  await page.locator("[data-filter-input]").fill(title);
+  await page.locator(`main .article-card h2 a[href="/${id}"]`).click();
+  await checkActions(page.getByRole("dialog").locator(".article-detail"));
+});
+
+test("article back-to-top scrolls the current reading surface and restores focus", async ({ page }) => {
+  const id = "20260126-fox0";
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto(`/${id}`);
+  const pageButton = page.locator("body > .back-to-top");
+  await expect(pageButton).toBeHidden();
+  await page.mouse.wheel(0, 700);
+  await expect(pageButton).toBeInViewport({ ratio: 1 });
+  await pageButton.press("Enter");
+  await expect.poll(() => page.evaluate(() => scrollY)).toBe(0);
+  await expect(page.locator(".site-header .brand")).toBeFocused();
+  await expect(pageButton).toBeHidden();
+
+  await page.goto("/articles");
+  const article = (await catalogItems(page, "articles")).find(item => item.id === id);
+  await page.locator("[data-filter-input]").fill(article.title);
+  const card = page.locator(`main .article-card h2 a[href="/${id}"]`);
+  await card.click();
+  const dialog = page.getByRole("dialog");
+  const shell = dialog.locator("[data-detail-shell]");
+  const dialogButton = dialog.getByRole("button", { name: "返回顶部" });
+  await expect(dialog).toHaveAttribute("aria-busy", "false");
+  await expect(dialogButton).toBeHidden();
+  await shell.evaluate(element => element.scrollTo(0, 700));
+  await expect(dialogButton).toBeInViewport({ ratio: 1 });
+  await expect(pageButton).toBeHidden();
+  const baseScroll = await page.evaluate(() => scrollY);
+  await dialogButton.press("Enter");
+  await expect.poll(() => shell.evaluate(element => element.scrollTop)).toBe(0);
+  await expect(dialog.getByRole("heading", { level: 1 })).toBeFocused();
+  await expect(dialogButton).toBeHidden();
+  expect(await page.evaluate(() => scrollY)).toBe(baseScroll);
+  await dialog.getByRole("button", { name: "关闭详情" }).click();
+  await expect(dialog).toBeHidden();
+  await expect(card).toBeFocused();
+});
+
 test("the narrow article dialog aligns the heading and summary with the reading area", async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 672 });
   await page.goto("/articles");

@@ -13,6 +13,9 @@ import Icon from "./Icon.astro";
     </div>
     <div class="detail-dialog-body" data-detail-body hidden></div>
   </div>
+  <button class="back-to-top detail-back-to-top" type="button" data-detail-top aria-label="返回顶部" title="返回顶部" hidden>
+    <Icon name="arrow-up" />
+  </button>
 </dialog>
 
 <script is:inline defer src="/scripts/detail-dialog.js"></script>

@@ -5,10 +5,11 @@ import ArticleCard from "../components/ArticleCard.astro";
 import ImageCard from "../components/ImageCard.astro";
 import BaseLayout from "../layouts/BaseLayout.astro";
 import { sortByDate } from "../lib/content";
+import { isGalleryChild } from "../config/image-collection";
 
 const articles = sortByDate((await getCollection("articles")).filter((entry) => !entry.data.draft));
 const images = sortByDate(
-  (await getCollection("images")).filter((entry) => !entry.data.draft && entry.data.public),
+  (await getCollection("images")).filter(({ data }) => !data.draft && data.public && !isGalleryChild(data.contentId)),
 );
 const homeArticles = articles.slice(0, 8);
 const homeImages = images.slice(0, 6);

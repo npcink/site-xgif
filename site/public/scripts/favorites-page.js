@@ -61,7 +61,7 @@ if (root instanceof HTMLElement && catalogNode instanceof HTMLScriptElement) {
       const meta = document.createElement("p");
       meta.className = "favorite-row-meta";
       meta.textContent = current
-        ? `${item.kind === "article" ? "文章" : "图片"} · 收藏于 ${new Date(saved.savedAt).toLocaleDateString("zh-CN")}`
+        ? `${item.kind === "article" ? "文章" : item.gallery ? "图集" : "图片"} · 收藏于 ${new Date(saved.savedAt).toLocaleDateString("zh-CN")}`
         : "原内容当前不可用 · 保留导入时的标题";
       const heading = document.createElement("h2");
       const link = document.createElement("a");

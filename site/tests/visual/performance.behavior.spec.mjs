@@ -84,10 +84,43 @@ test("display images stay local and original image is fetched only on request", 
   expect(await first.evaluate((image) => image.naturalWidth)).toBeGreaterThan(0);
   await expect(first).toHaveAttribute("src", /\/_astro\/.*\.webp$/);
   expect(await gallery.locator("[data-gallery-slide] img[src]").count()).toBe(1);
-  await gallery.getByRole("button", { name: "下一张图片" }).click();
+  const next = gallery.getByRole("button", { name: "下一张图片" });
+  const strip = gallery.locator(".gallery-thumbnails");
+  if (page.viewportSize().width > 900) {
+    const stage = await gallery.locator("[data-gallery-stage]").boundingBox();
+    expect((await next.boundingBox()).x).toBeGreaterThan(stage.x + stage.width);
+    expect((await strip.boundingBox()).width).toBeGreaterThanOrEqual(60);
+  }
+  await next.click();
   await expect(gallery.locator("[data-gallery-slide] img[src]")).toHaveCount(2);
   await expect(page.locator("[data-gallery-original]")).toHaveAttribute("href", /https:\/\/img\.xgif\.cn\/.*\.jpg$/);
+  await next.press("End");
+  await expect(gallery.locator("[data-gallery-counter]")).toHaveText("8 / 8");
+  await expect(next).toBeDisabled();
+  const last = strip.locator('[data-gallery-index="7"]');
+  await expect(last).toHaveAttribute("aria-current", "true");
+  expect(await strip.evaluate(element => {
+    const bounds = element.getBoundingClientRect();
+    const selected = element.lastElementChild.getBoundingClientRect();
+    return element.scrollWidth > element.clientWidth && element.scrollHeight === element.clientHeight &&
+      selected.left >= bounds.left - 1 && selected.right <= bounds.right + 1;
+  })).toBe(true);
   expect(originals).toEqual([]);
+});
+
+test("gallery thumbnails keep their original image links without JavaScript", async ({ page, context }) => {
+  await context.route("https://img.xgif.cn/**", route => route.fulfill({
+    contentType: "text/plain", body: "Original target",
+  }));
+  await page.route("**/scripts/image-gallery.js", route => route.abort());
+  await page.goto("/20261117-cfys");
+  const gallery = page.locator("[data-image-gallery]");
+  await expect(gallery.locator(".gallery-controls")).toBeHidden();
+  const thumbnail = gallery.locator('[data-gallery-index="1"]');
+  const original = await thumbnail.getAttribute("href");
+  const [popup] = await Promise.all([page.waitForEvent("popup"), thumbnail.click()]);
+  await expect(popup).toHaveURL(original);
+  await popup.close();
 });
 
 test("search links lead to static content without JavaScript", async ({ browser }) => {

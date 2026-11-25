@@ -77,6 +77,7 @@ test.describe("mouse hover feedback", () => {
     await expect(menuLink).toHaveCSS("background-color", yellow);
 
     await page.goto("/20261117-mpyo");
+    await page.setViewportSize({ width: 768, height: 844 });
     const gallery = page.locator("main [data-image-gallery]");
     const next = gallery.getByRole("button", { name: "下一张图片" });
     await next.hover();

@@ -157,7 +157,7 @@ test("Back retains the selected image of a gallery", async ({ page }) => {
   await page.locator('a.image-card[href="/20261112-8jzn"]').click();
   const dialog = page.locator("[data-detail-dialog]");
   await expect(dialog).toHaveAttribute("aria-busy", "false");
-  await dialog.getByRole("button", { name: "下一张图片" }).click();
+  await dialog.locator('[data-gallery-index="1"]').click();
   await expect(dialog.locator("[data-gallery-counter]")).toHaveText("2 / 3");
   await expect(dialog.locator("[data-gallery-stage] a")).toHaveCount(0);
   await expect(dialog.locator("[data-gallery-original]")).toHaveAttribute("href", await dialog.locator('[data-gallery-index="1"]').getAttribute("href"));

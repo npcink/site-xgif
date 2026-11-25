@@ -14,7 +14,7 @@ interface Props {
   deferred?: boolean;
   deferCard?: boolean;
   animated?: boolean;
-  layout?: "archive" | "home" | "search";
+  layout?: "archive" | "home" | "search" | "recommendation";
 }
 
 const { src, alt, width, height, thumbnail = false, detail = false, priority = false, deferred = false, deferCard = false, animated = false, layout = "archive" } = Astro.props;

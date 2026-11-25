@@ -4,9 +4,10 @@ import { getCollection } from "astro:content";
 import { pageTitle } from "../../config/site";
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import { allTags } from "../../lib/content";
+import { getCatalog } from "../../lib/catalog";
 
 const articles = (await getCollection("articles")).filter((entry) => !entry.data.draft);
-const images = (await getCollection("images")).filter((entry) => !entry.data.draft && entry.data.public);
+const { images } = await getCatalog();
 const tags = allTags(articles, images).map((tag) => ({
   name: tag,
   articles: articles.filter((entry) => entry.data.tags.includes(tag)).length,

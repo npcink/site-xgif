@@ -2,6 +2,7 @@
 import Icon from "./Icon.astro";
 import type { CollectionEntry } from "astro:content";
 import ImageCard from "./ImageCard.astro";
+import { IMAGE_RECOMMENDATION_DISPLAY_LIMIT } from "../lib/recommendations.mjs";
 
 interface Props {
   images: CollectionEntry<"images">[];
@@ -9,13 +10,14 @@ interface Props {
 }
 
 const { images, title = "接着看图片" } = Astro.props;
+const limit = IMAGE_RECOMMENDATION_DISPLAY_LIMIT;
 ---
 
 {images.length > 0 && (
-  <section class="related-section" data-recommendations data-recommendation-limit="3">
+  <section class="related-section" data-recommendations data-recommendation-limit={limit}>
     <div class="content-title"><h2>{title}</h2><a href="/images">更多图片 <Icon name="arrow-right" class="inline-icon" /></a></div>
-    <div class="masonry-grid compact-grid">
-      {images.map((item, index) => <ImageCard item={item} recommendation hidden={index >= 3} />)}
+    <div class="image-recommendation-grid">
+      {images.map((item, index) => <ImageCard item={item} recommendation hidden={index >= limit} />)}
     </div>
     <p class="recommendations-exhausted" data-recommendations-empty hidden>这一组已经看过了，去图片库发现更多。</p>
   </section>

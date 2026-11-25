@@ -125,7 +125,7 @@ test("short general content appears inline while adult content keeps its summary
 test("image actions expose the original and copy a usable link when clipboard is unavailable", async ({ page }) => {
   await page.addInitScript(() => Object.defineProperty(navigator, "clipboard", { value: undefined }));
   await page.goto("/20260725-0e6n");
-  await expect(page.getByRole("link", { name: "查看 / 保存原图" })).toHaveAttribute("href", /^https:\/\/img\.xgif\.cn\//);
+  await expect(page.getByRole("link", { name: "查看原图" })).toHaveAttribute("href", /^https:\/\/img\.xgif\.cn\//);
   await page.getByRole("button", { name: "复制链接" }).click();
   await expect(page.locator("[data-copy-fallback]")).toBeVisible();
   await expect(page.locator("[data-copy-fallback]")).toHaveValue(/\/20260725-0e6n$/);

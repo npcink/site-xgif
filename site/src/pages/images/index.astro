@@ -1,18 +1,14 @@
 ---
 import Icon from "../../components/Icon.astro";
-import { getCollection } from "astro:content";
 import ImageCard from "../../components/ImageCard.astro";
 import ListPagination from "../../components/ListPagination.astro";
 import CatalogStatus from "../../components/CatalogStatus.astro";
 import { getCatalog } from "../../lib/catalog";
 import { pageTitle } from "../../config/site";
 import BaseLayout from "../../layouts/BaseLayout.astro";
-import { sortByDate } from "../../lib/content";
 
-const images = sortByDate(
-  (await getCollection("images")).filter((entry) => !entry.data.draft && entry.data.public),
-);
 const catalog = await getCatalog();
+const { images } = catalog;
 ---
 
 <BaseLayout title={pageTitle("图片与表情包")} description="按情绪、场景和标签整理的图片、GIF 与表情包。">
