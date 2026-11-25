@@ -6,8 +6,8 @@ export const siteConfig = {
     suffix: ".cn",
   },
   locale: "zh-CN",
-  defaultTitle: "xgif.cn · 好图与值得一读的片段",
-  description: "分享收集的图片、表情包和有趣文字，沿着相关推荐继续发现。",
+  defaultTitle: "xgif.cn · GIF 动图、表情包与文章选读",
+  description: "收录有趣的 GIF 动图、表情包和文章。图片可按情绪和场景浏览，文章保留编辑摘要、正文与来源信息。",
   defaultSocialImage: "/og.png",
   publisherName: "xgif.cn",
   mainNavigation: [
