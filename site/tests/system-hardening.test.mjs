@@ -15,6 +15,8 @@ test("scheduled production smoke requires the apex redirect", async () => {
   assert.match(workflow, /schedule:/u);
   assert.match(workflow, /REQUIRE_APEX_REDIRECT:\s*"true"/u);
   assert.match(workflow, /node site\/scripts\/production-smoke\.mjs/u);
+  assert.doesNotMatch(workflow, /EXPECTED_SHA/u);
+  assert.doesNotMatch(workflow, /release-acceptance/u);
   assert.match(smoke, /request\("\/articles\/"\)/u);
   assert.match(smoke, /data-detail-kind="article"/u);
   assert.doesNotMatch(smoke, /xgif\\\.cn\\\/articles\\\//u);

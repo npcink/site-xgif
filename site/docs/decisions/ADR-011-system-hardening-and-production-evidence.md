@@ -27,3 +27,5 @@ XGIF 的公开站点是 Cloudflare Workers Static Assets，管理器只在单人
 ## 后续状态
 
 2026-07-24，站点所有者已完成 Cloudflare 代理 DNS 和 Single Redirect 配置。HTTP 与 HTTPS 裸域请求均返回 301 到 `https://www.xgif.cn`，路径和查询参数得到保留；`REQUIRE_APEX_REDIRECT=true` 的生产巡检通过。
+
+2026-11-25：将日常生产可用性巡检与发布验收分开。定时任务继续运行 `site/scripts/production-smoke.mjs`（`npm run test:production`），只确认首页、版权与更正页、公开文章、sitemap、可选 R2 防盗链、必要时的裸域跳转，以及 `/build.json` 可访问且格式正确；不要求 `EXPECTED_SHA`，也不把巡检报告的线上 commit 当作发布验收。确认特定版本必须运行 `EXPECTED_SHA=<sha> REQUIRE_APEX_REDIRECT=true npm run test:release-acceptance`。验收在以下情况必须失败：缺少或空的 `EXPECTED_SHA`、线上 `/build.json` 的 commit 为 `unknown` 或与预期 SHA 不一致、首页 Content-Security-Policy 与当前仓库 `site/public/_headers` 中适用于首页的规则不符、已撤回文章 `20251030-tfm4` 与 `20251230-oucg` 的公开详情路由或预览路由不是 404。不得把 `unknown` 当作已发布 SHA。
