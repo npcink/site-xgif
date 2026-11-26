@@ -71,3 +71,24 @@ test("a failed semantic check remains visible in the result and private check re
   assert.ok(!record.includes("private-test-key"));
   assert.ok(!record.includes(file));
 });
+
+test("an upload is blocked when its private check receipt cannot be written", async t => {
+  const repoRoot = await mkdtemp(path.join(os.tmpdir(), "xgif-check-receipt-block-"));
+  t.after(() => rm(repoRoot, { recursive: true, force: true }));
+  const file = path.join(repoRoot, "image.png");
+  await writeFile(file, await sharp({ create: { width: 200, height: 200, channels: 3, background: "green" } }).png().toBuffer());
+  let uploads = 0;
+  await assert.rejects(
+    runImageTool({
+      repoRoot,
+      file,
+      upload: true,
+      apply: true,
+      env: { XGIF_R2_ENABLED: "true", XGIF_R2_BUCKET: "xgif-test", XGIF_R2_PUBLIC_BASE_URL: "https://img.example.test" },
+      appendFileImpl: async () => { throw new Error("receipt disk unavailable"); },
+      storeAsset: async () => { uploads += 1; return {}; },
+    }),
+    /检查回执写入失败.*阻止上传/u,
+  );
+  assert.equal(uploads, 0);
+});

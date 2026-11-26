@@ -25,7 +25,7 @@ export async function inspectImageFile(file) {
     sha256: createHash("sha256").update(buffer).digest("hex") };
 }
 
-export async function runImageTool({ repoRoot, file, upload = false, apply = false, reviewedSha256 = "", env = process.env, storeAsset = ensureR2Asset, fetchImpl = globalThis.fetch }) {
+export async function runImageTool({ repoRoot, file, upload = false, apply = false, reviewedSha256 = "", env = process.env, storeAsset = ensureR2Asset, fetchImpl = globalThis.fetch, appendFileImpl = appendFile }) {
   const workflowRoot = path.join(repoRoot, "workflow");
   await loadLocalEnv(workflowRoot, { env });
   return withToolLock(workflowRoot, async () => {
@@ -39,13 +39,18 @@ export async function runImageTool({ repoRoot, file, upload = false, apply = fal
     similarity.seriesEmbedding = seriesEmbedding;
     similarity.seriesTheme = seriesTheme;
     try {
-      await appendFile(path.join(workflowRoot, ".runtime/image-checks.jsonl"), JSON.stringify({
+      await appendFileImpl(path.join(workflowRoot, ".runtime/image-checks.jsonl"), JSON.stringify({
         schemaVersion: 1, checkedAt: new Date().toISOString(),
         requestedAction: upload && apply ? "upload" : "check",
         reviewed: reviewedSha256 === asset.sha256, ...metadata, similarity,
       }) + "\n", { mode: 0o600 });
       similarity.checkRecordSaved = true;
-    } catch { similarity.checkRecordSaved = false; }
+    } catch (error) {
+      similarity.checkRecordSaved = false;
+      if (upload && apply) {
+        throw new Error(`图片检查回执写入失败，已阻止上传：${error.message}`);
+      }
+    }
     if (!upload || !apply) return { ok: true, mode: "dry-run", ...metadata, similarity };
     const requiresSeriesReview = similarity.seriesCandidates.some((candidate) => candidate.requiresReview);
     if ((similarity.matches.some((match) => match.kind === "similar") || requiresSeriesReview || similarity.unavailable || semanticSeries.status === "partial"
