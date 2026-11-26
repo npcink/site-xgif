@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -77,6 +77,10 @@ test("an upload is blocked when its private check receipt cannot be written", as
   t.after(() => rm(repoRoot, { recursive: true, force: true }));
   const file = path.join(repoRoot, "image.png");
   await writeFile(file, await sharp({ create: { width: 200, height: 200, channels: 3, background: "green" } }).png().toBuffer());
+  await mkdir(path.join(repoRoot, "workflow/.runtime/image-checks.jsonl"), { recursive: true });
+  const check = await runImageTool({ repoRoot, file, env: {} });
+  assert.equal(check.mode, "dry-run");
+  assert.equal(check.similarity.checkRecordSaved, false);
   let uploads = 0;
   await assert.rejects(
     runImageTool({
@@ -85,7 +89,6 @@ test("an upload is blocked when its private check receipt cannot be written", as
       upload: true,
       apply: true,
       env: { XGIF_R2_ENABLED: "true", XGIF_R2_BUCKET: "xgif-test", XGIF_R2_PUBLIC_BASE_URL: "https://img.example.test" },
-      appendFileImpl: async () => { throw new Error("receipt disk unavailable"); },
       storeAsset: async () => { uploads += 1; return {}; },
     }),
     /检查回执写入失败.*阻止上传/u,

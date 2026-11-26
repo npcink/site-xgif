@@ -13,7 +13,7 @@ const contentId = z.string().regex(/^\d{8}-[a-z0-9]{4}$/, {
   message: "内容 ID 必须使用 YYYYMMDD-4位小写字母数字",
 });
 
-const imagePath = z.string().refine((value) => value.startsWith("/") || value.startsWith("https://"), {
+const imagePath = z.string().refine((value) => /^\/(?![/\\])/.test(value) || httpsUrl.safeParse(value).success, {
   message: "图片必须使用 public 目录路径或 HTTPS 地址",
 });
 

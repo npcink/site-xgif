@@ -1,8 +1,12 @@
 import type { CollectionEntry } from "astro:content";
 import { selectContentRecommendations } from "./recommendations.mjs";
 
-export function sortByDate<T extends { data: { pubDate: Date } }>(items: T[]) {
-  return [...items].sort((a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf());
+export function sortByDate<T extends { data: { pubDate: Date; contentId: string } }>(items: T[]) {
+  return [...items].sort(({ data: a }, { data: b }) => {
+    const byDate = b.pubDate.valueOf() - a.pubDate.valueOf();
+    if (byDate) return byDate;
+    return a.contentId < b.contentId ? -1 : a.contentId > b.contentId ? 1 : 0;
+  });
 }
 
 export function formatShortDate(date: Date) {

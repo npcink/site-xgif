@@ -35,18 +35,19 @@ test("RSS exposes a bounded, newest-first list of public articles", async () => 
   assert.doesNotMatch(feed, /content:encoded/u, "RSS 第一版只发布摘要，不重发完整正文");
 });
 
-test("RSS never exposes draft article IDs", async () => {
+test("RSS never exposes draft or held article IDs", async () => {
   const feed = await readFile(feedUrl, "utf8");
   const files = (await readdir(contentRoot)).filter((file) => file.endsWith(".md"));
   const drafts = await Promise.all(
     files.map(async (file) => {
       const markdown = await readFile(new URL(file, contentRoot), "utf8");
-      return field(markdown, "draft") === "true" ? field(markdown, "contentId") : null;
+      return field(markdown, "draft") === "true" || field(markdown, "publicationHold") === "true"
+        ? field(markdown, "contentId") : null;
     }),
   );
 
   for (const contentId of drafts.filter(Boolean)) {
-    assert.doesNotMatch(feed, new RegExp(`/${contentId}/`, "u"));
+    assert.doesNotMatch(feed, new RegExp(`/${contentId}(?:<|&lt;|/)`, "u"));
   }
 });
 

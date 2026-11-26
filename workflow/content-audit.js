@@ -89,12 +89,7 @@ function isGenericSourceUrl(value) {
 }
 
 function isValidHttpsUrl(value) {
-  try {
-    const url = new URL(value);
-    return url.protocol === "https:";
-  } catch {
-    return false;
-  }
+  return value.startsWith("https://") && URL.canParse(value);
 }
 
 function numberedSeriesIdentity(title) {

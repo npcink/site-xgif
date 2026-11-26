@@ -39,7 +39,9 @@ draft: false
 文章完整正文。
 ```
 
-`editorNote` 会显示在文章卡片或详情页，适合解释“为什么值得看”；`internalNote` 用于复核来源和导入批次，不在页面展示，但写在公开仓库的 Markdown 里仍可被阅读。旧 `note` 字段只为兼容历史内容保留，新内容不要继续使用。
+文章只有在 `draft` 和 `publicationHold` 均不为真时，才进入公开路由、列表、RSS、站点地图、收藏目录和推荐候选。本地开发预览不受公开筛选限制。页面只渲染显式标记为公开的 `editorNote`（不会回退到旧 `note`），也不读取 `internalNote`；公开仓库中的字段仍可在源码中读取，真正私密的备注不要写入公开 Markdown。
+
+来源与授权链接使用 HTTPS；封面和图片地址可以使用 HTTPS 或 `public/` 下的站内路径。此规则不自动改写历史来源或 Markdown 正文。列表按发布日期从新到旧排列，同日以稳定内容 ID 升序排列。
 
 文章的 `sourceKind`：`original` 表示原始来源，`publication` 表示媒体或专题来源页，`editorial` 表示本站编辑手记，`unknown` 表示来源未核实。不要把媒体首页标成原文。
 
@@ -60,7 +62,7 @@ licenseUrl: "https://unsplash.com/license"
 
 图片的 `sourceKind` 只接受 `original`（有可核验来源，保留来源链接、作者和授权信息）、`user_provided`（用户提供且已明确确认发布范围）和 `unknown`（来源未核实）。用户确认不等于原作者授权。
 
-图集使用有序的 `images` 数组（每项为 `{ "src": "...", "width": 640, "height": 480 }`），包含封面在内共 1–12 张；`image` 始终等于首张 `src`。由 AI 按现有 Markdown 与 Schema 创建，图片检查与上传见 [内容工具](../workflow/README.md)。`npm run test:gallery` 会创建并清理临时样本，验证桌面与手机切图。
+图集使用有序的 `images` 数组（每项为 `{ "src": "...", "width": 640, "height": 480 }`），包含封面在内共 1–12 张；`image` 始终等于首张 `src`。发布工具要求 `images:` 使用单行 JSON 数组，不使用多行 YAML 列表。由 AI 按现有 Markdown 与 Schema 创建，图片检查与上传见 [内容工具](../workflow/README.md)。`npm run test:gallery` 会创建并清理临时样本，验证桌面与手机切图。
 
 ## 构建
 
