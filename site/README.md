@@ -26,7 +26,7 @@ contentId: "20261112-ab12"
 summary: "两三句话摘要"
 source: "来源名称"
 sourceUrl: "https://example.com/original"
-sourceKind: "original" # original | publication | editorial
+sourceKind: "original" # original | publication | editorial | unknown
 tags: ["AI", "产品"]
 pubDate: 2026-07-10
 readTime: "3 分钟"
@@ -39,13 +39,16 @@ draft: false
 文章完整正文。
 ```
 
-`editorNote` 会显示在文章卡片或详情页，适合解释“为什么值得看”；`internalNote` 仅供 AI 在本地复核来源和导入批次。旧 `note` 字段只为兼容历史内容保留，新内容不要继续使用。
+`editorNote` 会显示在文章卡片或详情页，适合解释“为什么值得看”；`internalNote` 用于复核来源和导入批次，不在页面展示，但写在公开仓库的 Markdown 里仍可被阅读。旧 `note` 字段只为兼容历史内容保留，新内容不要继续使用。
+
+文章的 `sourceKind`：`original` 表示原始来源，`publication` 表示媒体或专题来源页，`editorial` 表示本站编辑手记，`unknown` 表示来源未核实。不要把媒体首页标成原文。
 
 ## 新增图片 / GIF
 
 复制 `src/content/images/` 中任意 Markdown 文件。`image` 可以是放在 `public/` 下的本地路径，也可以是远程图片 URL；能够确认来源的外部图片必须记录作者、来源页面与授权信息。
 
 ```md
+sourceKind: "original"
 source: "Unsplash · 示例作者"
 sourceUrl: "https://unsplash.com/photos/example"
 author: "示例作者"
@@ -55,7 +58,7 @@ licenseUrl: "https://unsplash.com/license"
 
 微信群、QQ 群等渠道转存且无法确认作者与授权的表情包使用 `sourceKind: "unknown"`，`source` 固定写为“群聊转存（来源待核实）”，不得虚构作者、来源链接或授权。公开详情页会显示来源待核实状态，并链接到 `/rights` 的投诉与下架说明。
 
-`sourceKind` 的含义：`original` 是原始文章链接；`publication` 是媒体或专题来源页；`editorial` 是本站编辑手记。不要把媒体首页标成原文。
+图片的 `sourceKind` 只接受 `original`（有可核验来源，保留来源链接、作者和授权信息）、`user_provided`（用户提供且已明确确认发布范围）和 `unknown`（来源未核实）。用户确认不等于原作者授权。
 
 图集使用有序的 `images` 数组（每项为 `{ "src": "...", "width": 640, "height": 480 }`），包含封面在内共 1–12 张；`image` 始终等于首张 `src`。由 AI 按现有 Markdown 与 Schema 创建，图片检查与上传见 [内容工具](../workflow/README.md)。`npm run test:gallery` 会创建并清理临时样本，验证桌面与手机切图。
 
