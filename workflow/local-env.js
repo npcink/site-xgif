@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { parseEnv } from "node:util";
 
 export async function loadLocalEnv(directory, { env = process.env } = {}) {
   const envPath = path.join(directory, ".env");
@@ -11,15 +12,8 @@ export async function loadLocalEnv(directory, { env = process.env } = {}) {
     throw error;
   }
 
-  for (const line of source.split(/\r?\n/u)) {
-    const match = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/u);
-    if (!match || env[match[1]] !== undefined) continue;
-    let value = match[2];
-    const quoted = (value.startsWith("\"") && value.endsWith("\""))
-      || (value.startsWith("'") && value.endsWith("'"));
-    if (quoted) value = value.slice(1, -1);
-    else value = value.replace(/\s+#.*$/u, "").trim();
-    env[match[1]] = value;
+  for (const [key, value] of Object.entries(parseEnv(source))) {
+    if (env[key] === undefined) env[key] = value;
   }
   return env;
 }

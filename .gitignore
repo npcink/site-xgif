@@ -27,6 +27,7 @@
 
 # misc
 .DS_Store
+._*
 *.pem
 
 # debug
@@ -54,6 +55,7 @@ yarn-error.log*
 /workflow/private-sources/
 /workflow/records/content-audit-latest.json
 /workflow/records/content-audit-latest.md
+/workflow/records/gallery-merges.jsonl
 /workflow/records/publication-events.jsonl
 
 # private local imports

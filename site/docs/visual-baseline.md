@@ -6,9 +6,9 @@ The archived Next implementation is the visual reference for the homepage and im
 
 ## Required screenshot baselines
 
-Run `npm run test:visual:linux` before merging changes that affect shared layout, typography, spacing, image treatment, or dialog behavior. On developer machines this syncs the current site source over SSH to the Apple M4 at `muze@100.102.170.79` and runs `mcr.microsoft.com/playwright:v1.61.1-noble` there. It never starts or falls back to local Docker. GitHub Linux CI already runs inside that pinned image and executes Playwright directly through the same entry point.
+Run `npm run test:visual:linux` before merging changes that affect shared layout, typography, spacing, image treatment, or dialog behavior. On developer machines this syncs the current site source over SSH to the configured M4 and runs `mcr.microsoft.com/playwright:v1.61.1-noble` there. It never starts or falls back to local Docker. GitHub Linux CI already runs inside that pinned image and executes Playwright directly through the same entry point without an SSH target.
 
-The developer machine needs Node.js, Git, SSH and rsync; the M4 needs reachable SSH, rsync and an already running Linux Docker engine. An unavailable host or Docker engine is an error. `XGIF_VISUAL_SSH_HOST` can select an SSH config alias for the M4; SSH config handles custom ports and keys. Setting `CI=1` on a developer machine does not select local execution.
+The developer machine needs Node.js, Git, SSH and rsync; the M4 needs reachable SSH, rsync and an already running Linux Docker engine. Before running from a developer machine, set `XGIF_VISUAL_SSH_HOST` to an SSH config alias or `user@host`. Keep the destination, port and key configuration local to SSH. A missing target fails before any command runs; an unavailable host or engine is also an error. Setting `CI=1` on a developer machine does not select local execution.
 
 The M4 host filesystem backing `/tmp` must have at least **10 GiB free**. The runner checks it before creating the task directory (before any Docker command) and again after source transfer, immediately before launching the container. Insufficient or unreadable space exits with status 73 and a readable error. This checks host space, not just free space inside Docker's VM; it is a preflight check, not a reservation against concurrent disk use.
 
@@ -19,6 +19,7 @@ Only Git-visible site source files (including uncommitted and untracked source c
 Playwright arguments pass through unchanged, for example:
 
 ```sh
+export XGIF_VISUAL_SSH_HOST=m4-visual # Replace with your local SSH alias.
 npm run test:visual:linux -- --project=mobile --grep 'image library'
 npm run test:visual:update:linux -- --project=mobile --grep 'image library'
 ```

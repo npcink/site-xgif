@@ -83,8 +83,10 @@ export async function runVisual({ siteDir = defaultSite, args = [], env = proces
     log("Linux CI：在工作流的 Playwright 容器内执行。");
     return (await command("npm", ["run", "test:visual", "--", ...args], { cwd: siteDir, signal })).code;
   }
-  const host = env.XGIF_VISUAL_SSH_HOST || "muze@100.102.170.79";
-  if (!/^[a-z\d_][a-z\d_.@-]*$/iu.test(host)) throw new Error("XGIF_VISUAL_SSH_HOST 必须是 SSH 主机别名或 user@host。");
+  const host = env.XGIF_VISUAL_SSH_HOST?.trim();
+  if (!host || !/^(?:[a-z\d_][a-z\d_.-]*@)?[a-z\d_][a-z\d_.-]*$/iu.test(host)) {
+    throw new Error("本机运行必须设置 XGIF_VISUAL_SSH_HOST 为 SSH 主机别名或 user@host。");
+  }
   const runId = `xgif-visual-${digest(await realpath(siteDir)).slice(0, 12)}-${randomBytes(6).toString("hex")}`;
   const artifactDir = path.join(siteDir, "test-results", runId);
   const ssh = (script, options = {}) => command("ssh", [...sshOptions, host, script], options);

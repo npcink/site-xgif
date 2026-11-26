@@ -2,7 +2,7 @@
 
 由 AI 在本机按需调用的脚本，不提供管理页面、HTTP API、后台进程或内置 AI 编辑器。AI 直接修改 Markdown；格式、内容契约和发布范围由确定性检查约束。架构决策见 [ADR-019](../site/docs/decisions/ADR-019-ai-managed-static-content.md)。
 
-需要 Node.js 22.12+。在 `workflow/` 运行 `npm ci`；预览、构建和 Wrangler 依赖在 `site/` 单独安装。可选的 R2、离线推荐及 AI 字段重跑配置见 `.env.example`，真实凭据只放本机 `.env`。普通内容工具不需要 AI 密钥；只有显式运行 `ai:metadata generate` 才调用所配置的模型。
+需要 Node.js 22.23.4 或更高版本；CI 使用 `site/.node-version` 固定的版本。在 `workflow/` 运行 `npm ci`；预览、构建和 Wrangler 依赖在 `site/` 单独安装。可选的 R2、离线推荐及 AI 字段重跑配置见 `.env.example`，真实凭据只放本机 `.env`。本工具按 Node.js 的 dotenv 规则读取文件：引号内可包含 `#`，引号外的 `#` 开始注释，同一文件中重复键以最后一项为准，已设置的环境变量优先于文件。普通内容工具不需要 AI 密钥；只有显式运行 `ai:metadata generate` 才调用所配置的模型。
 
 ## AI 编辑与预览
 
