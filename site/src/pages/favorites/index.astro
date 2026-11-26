@@ -1,4 +1,5 @@
 ---
+import { getPublicArticles } from "../../lib/public-articles";
 import Icon from "../../components/Icon.astro";
 import { getCollection } from "astro:content";
 import { pageTitle } from "../../config/site";
@@ -8,7 +9,7 @@ import { contentHref } from "../../lib/content";
 import { foodStallGallery, isGalleryChild } from "../../config/image-collection";
 
 const [articles, images] = await Promise.all([
-  getCollection("articles").then((entries) => entries.filter((entry) => !entry.data.draft)),
+  getPublicArticles(),
   getCollection("images").then((entries) => entries.filter(({ data }) => !data.draft && data.public && !isGalleryChild(data.contentId))),
 ]);
 const catalog = [

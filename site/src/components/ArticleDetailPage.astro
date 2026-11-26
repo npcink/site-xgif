@@ -1,4 +1,5 @@
 ---
+import { getPublicArticles } from "../lib/public-articles";
 import Icon from "./Icon.astro";
 import { getCollection, render, type CollectionEntry } from "astro:content";
 import ArticleRecommendations from "./ArticleRecommendations.astro";
@@ -23,7 +24,7 @@ const { article, preview = false } = Astro.props;
 const { Content, headings } = await render(article);
 const tableOfContents = headings.filter((heading) => heading.depth === 2 || heading.depth === 3);
 const [allArticles, allImages] = await Promise.all([
-  getCollection("articles"),
+  getPublicArticles(),
   getCollection("images").then((entries) => entries.filter(({ data }) => !data.draft && data.public && !isGalleryChild(data.contentId))),
 ]);
 const recommendedArticles = selectContentRecommendations(article, allArticles, {

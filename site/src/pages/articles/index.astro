@@ -1,6 +1,6 @@
 ---
+import { getPublicArticles } from "../../lib/public-articles";
 import Icon from "../../components/Icon.astro";
-import { getCollection } from "astro:content";
 import ArticleCard from "../../components/ArticleCard.astro";
 import ListPagination from "../../components/ListPagination.astro";
 import CatalogStatus from "../../components/CatalogStatus.astro";
@@ -9,7 +9,7 @@ import { pageTitle } from "../../config/site";
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import { sortByDate } from "../../lib/content";
 
-const articles = sortByDate((await getCollection("articles")).filter((entry) => !entry.data.draft && !entry.data.publicationHold));
+const articles = sortByDate(await getPublicArticles());
 const sources = Array.from(new Set(articles.map((entry) => entry.data.source)));
 const catalog = await getCatalog();
 ---
