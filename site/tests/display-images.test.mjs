@@ -36,7 +36,7 @@ test("WebP encoder retains animation frames, timing, and finite loop count", asy
   const input = await sharp(Buffer.from([255, 0, 0, 255, 0, 0, 0, 0, 255, 0, 0, 255]), {
     raw: { width: 2, height: 2, channels: 3, pageHeight: 1 },
   }).gif({ loop: 3, delay: [80, 140] }).toBuffer();
-  const result = await imageService.transform(input, { src: "animation.gif", width: 2, format: "webp", quality: 82 }, {
+  const result = await imageService.transform(input, { src: "animation.gif", width: 2, format: "webp", quality: 68 }, {
     service: { config: {} },
   });
   const metadata = await sharp(result.data, { animated: true }).metadata();
@@ -69,6 +69,19 @@ test("animated list cards request static posters while detail retains animation"
   const main = detail.match(/<img\b[^>]*\ssrc="([^"]+)"/)[1];
   const moving = await sharp(await readFile(new URL(`.${main}`, dist)), { animated: true }).metadata();
   assert.ok(moving.pages > 1);
+});
+
+test("heavy animated detail keeps both responsive copies below 3 MB", async () => {
+  const html = await readFile(new URL("20261112-6ix8/index.html", dist), "utf8");
+  const srcset = html.match(/<img\b[^>]*\ssrcset="([^"]+)"/u)?.[1];
+  assert.ok(srcset);
+  const copies = srcset.split(",").map(candidate => candidate.trim().split(/\s+/u));
+  assert.deepEqual(copies.map(([, width]) => width), ["480w", "640w"]);
+  for (const [src] of copies) {
+    const file = new URL(`.${src}`, dist);
+    assert.ok((await stat(file)).size < 3000000, `${src} exceeds the heavy animation budget`);
+    assert.equal((await sharp(await readFile(file), { animated: true }).metadata()).pages, 88);
+  }
 });
 
 test("static thumbnails honor source EXIF orientation", async () => {
