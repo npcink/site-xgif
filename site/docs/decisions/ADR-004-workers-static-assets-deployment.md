@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted
+Accepted。静态资源部署决策仍有效；原先“不部署 Worker 脚本”的决定已于 2026-11-16 由 [ADR-026](ADR-026-favorite-action-statistics.md) 部分更新。
 
 ## Date
 
@@ -12,13 +12,13 @@ Accepted
 
 ADR-003 曾依据 Cloudflare Pages 的 Astro 框架指南选择 Pages。但在实际创建项目时，Cloudflare 的新项目入口已经以 Workers Builds 为默认路径；Cloudflare 更新后的最佳实践也明确建议新建静态站优先使用 Workers Static Assets，Pages 继续工作，但新功能和优化集中在 Workers。
 
-XGIF 的 `site/` 是 Astro 纯静态站点，构建产物位于 `dist/`，不需要服务端渲染、数据库或边缘业务逻辑。首次 Workers Builds 失败不是平台不兼容，而是根目录为仓库根、构建命令为空，且仓库没有 Wrangler 静态资源配置，导致 `wrangler deploy` 找不到可上传目录。
+最初迁移时，XGIF 的 `site/` 是 Astro 纯静态站点，构建产物位于 `dist/`，不需要服务端渲染、数据库或边缘业务逻辑。首次 Workers Builds 失败不是平台不兼容，而是根目录为仓库根、构建命令为空，且仓库没有 Wrangler 静态资源配置，导致 `wrangler deploy` 找不到可上传目录。
 
 ## Decision
 
 - 使用 Cloudflare Workers Static Assets 连接 GitHub `npcink/site-xgif`，以 `main` 为生产分支。
 - Worker 项目名为 `site-www-xgif`，Root directory 为 `/site`，Build command 为 `npm run build`，Deploy command 为 `npx wrangler deploy`。
-- `site/wrangler.jsonc` 只配置 `assets.directory: "./dist"`；不设置 `main`，因此不部署 Worker 运行时脚本。
+- `site/wrangler.jsonc` 使用 `assets.directory: "./dist"` 部署静态文件。按 ADR-026，现行配置另设 `main: "worker/index.mjs"`，只有 `/api/favorites/events` 由 Worker 优先处理；D1 只保存按日汇总的收藏操作，不承载站点内容或个人收藏夹。
 - Node.js 版本由 `site/.node-version` 固定，Wrangler 作为 devDependency 锁定并由 `package-lock.json` 管理。
 - 早期曾用 npm override 修补 Miniflare 间接引入的 Sharp。2026-11-17 维护候选升级 Wrangler 与 Sharp 后，上游已经使用修补版本，移除旧 Sharp、Vite、esbuild 覆盖；以锁文件、依赖审计、构建和 dry-run 验证实际依赖，不再强制覆盖旧版本。详情见[依赖维护记录](../PERFORMANCE_CLOSEOUT_2026-11-17.md#依赖维护补充)。
 - GitHub Actions 除现有站点与视觉测试外，运行 `npm run check:deploy`，验证构建产物可以被 Wrangler 作为静态资源部署。
@@ -32,7 +32,7 @@ Pages 对纯静态站仍然有效，静态资源同样免费，Git 分支预览�
 
 ### 带 Worker 脚本的静态资源项目
 
-Workers 可以在静态资源前运行脚本，并接入 KV、R2、D1 或其他绑定。XGIF 当前所有公开页面都在构建期生成，没有需要按请求执行的逻辑；增加 `main` 会扩大运行时、计费和故障边界，因此不采用。
+Workers 可以在静态资源前运行脚本，并接入 KV、R2、D1 或其他绑定。2026-07-22 初次迁移时没有请求时逻辑，因此未采用；后来 ADR-026 仅为收藏操作汇总引入 Worker，不改变公开页面在构建期生成的方式。
 
 ### 只在控制台使用 `--assets` 参数
 
@@ -40,8 +40,8 @@ Deploy command 可以临时写成 `npx wrangler deploy --assets ./dist`，但配
 
 ## Consequences
 
-- 静态文件由 Workers Static Assets 在 Cloudflare 网络上缓存和提供；匹配静态资源的请求不调用 Worker 脚本。
+- 静态文件由 Workers Static Assets 在 Cloudflare 网络上缓存和提供；普通静态资源请求不调用收藏统计脚本。
 - 推送到 `main` 后，Workers Builds 在 `site/` 构建并部署；非生产分支可以生成预览版本。
-- 站点仍保持 Markdown + Git + Astro 静态构建，不引入线上后台、数据库或运行时密钥。
+- 站点仍保持 Markdown + Git + Astro 静态构建，不引入线上内容管理后台或运行时内容数据库。统计不可用不影响静态页面和浏览器本地收藏。
 - `npm run check:deploy` 会构建站点并执行 `wrangler deploy --dry-run`，用于在推送前发现根目录、产物目录或 Wrangler 配置回归。
-- 如果未来确实需要请求时逻辑，应另写 ADR 并显式增加 Worker `main`、绑定、费用与故障边界，而不是把逻辑隐式塞进当前静态部署。
+- 新增收藏统计以外的请求时逻辑，应另写 ADR 并显式说明路由、绑定、费用与故障边界，而不是把逻辑隐式塞进当前静态部署。
