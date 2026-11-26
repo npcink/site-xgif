@@ -1,4 +1,5 @@
 ---
+import { getPublicArticles } from "../lib/public-articles";
 import Icon from "./Icon.astro";
 import { getCollection, render, type CollectionEntry } from "astro:content";
 import ArticleRecommendations from "./ArticleRecommendations.astro";
@@ -22,7 +23,7 @@ const { item } = Astro.props;
 const collections = imageCollections.filter(({ members }) => members.some(({ id }) => id === item.data.contentId));
 const canonicalPath = contentHref(item);
 const { Content } = await render(item);
-const allArticles = (await getCollection("articles")).filter((entry) => !entry.data.draft);
+const allArticles = await getPublicArticles();
 const allImages = (await getCollection("images")).filter((entry) => !entry.data.draft && entry.data.public);
 const isFoodStallCover = item.data.contentId === foodStallGallery.cover;
 const images = isFoodStallCover ? validateGalleryImages(foodStallGallery.members.map((id) => {

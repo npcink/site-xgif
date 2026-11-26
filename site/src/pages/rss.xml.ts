@@ -1,11 +1,11 @@
+import { getPublicArticles } from "../lib/public-articles";
 import rss from "@astrojs/rss";
-import { getCollection } from "astro:content";
 import { siteConfig } from "../config/site";
 import { contentHref, sortByDate } from "../lib/content";
 
 export async function GET(context: { site?: URL }) {
   const articles = sortByDate(
-    (await getCollection("articles")).filter((article) => !article.data.draft),
+    await getPublicArticles(),
   ).slice(0, siteConfig.rss.maxItems);
 
   return rss({

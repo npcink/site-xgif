@@ -3,8 +3,8 @@ import { glob } from "astro/loaders";
 import { z } from "astro/zod";
 import { isProcessingReply } from "./lib/content-quality.mjs";
 
-const httpUrl = z.url().refine((value) => /^https?:\/\//.test(value), {
-  message: "必须使用 http 或 https 地址",
+const httpsUrl = z.url().refine((value) => value.startsWith("https://"), {
+  message: "必须使用 HTTPS 地址",
 });
 
 const sourceKind = z.enum(["original", "publication", "editorial", "unknown"]);
@@ -13,8 +13,8 @@ const contentId = z.string().regex(/^\d{8}-[a-z0-9]{4}$/, {
   message: "内容 ID 必须使用 YYYYMMDD-4位小写字母数字",
 });
 
-const imagePath = z.string().refine((value) => value.startsWith("/") || /^https?:\/\//.test(value), {
-  message: "图片必须使用 public 目录路径或 http/https 地址",
+const imagePath = z.string().refine((value) => /^\/(?![/\\])/.test(value) || httpsUrl.safeParse(value).success, {
+  message: "图片必须使用 public 目录路径或 HTTPS 地址",
 });
 
 const articles = defineCollection({
@@ -24,7 +24,7 @@ const articles = defineCollection({
     contentId,
     summary: z.string(),
     source: z.string(),
-    sourceUrl: httpUrl.optional(),
+    sourceUrl: httpsUrl.optional(),
     sourceKind: sourceKind.default("original"),
     tags: z.array(z.string()).min(1),
     pubDate: z.coerce.date(),
@@ -75,10 +75,10 @@ const images = defineCollection({
     height: z.number().int().positive().optional(),
     source: z.string(),
     sourceKind: imageSourceKind.default("original"),
-    sourceUrl: httpUrl.optional(),
+    sourceUrl: httpsUrl.optional(),
     author: z.string().optional(),
     license: z.string().optional(),
-    licenseUrl: httpUrl.optional(),
+    licenseUrl: httpsUrl.optional(),
     tags: z.array(z.string()).min(1),
     category: z.string(),
     mood: z.array(z.string()).default([]),

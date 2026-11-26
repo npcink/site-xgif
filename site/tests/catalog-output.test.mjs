@@ -1,8 +1,20 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFile } from "node:fs/promises";
+import { sortByDate } from "../src/lib/content.ts";
 
 const read = file => readFile(new URL(`../dist/${file}`, import.meta.url), "utf8");
+
+test("date sorting breaks ties by stable ID independently of input order", () => {
+  const entry = (contentId, date) => ({ data: { contentId, pubDate: new Date(date) } });
+  const older = entry("20261124-0abc", "2026-11-24");
+  const first = entry("20261125-0abc", "2026-11-25");
+  const second = entry("20261125-zabc", "2026-11-25");
+  const input = [second, older, first];
+  assert.deepEqual(sortByDate(input), [first, second, older]);
+  assert.deepEqual(sortByDate([...input].reverse()), [first, second, older]);
+  assert.deepEqual(input, [second, older, first]);
+});
 
 test("initial archives contain one page, search starts empty, and deferred cards have no active image sources", async () => {
   for (const [name, count] of [["articles", 12], ["images", 24], ["search", 0]]) {

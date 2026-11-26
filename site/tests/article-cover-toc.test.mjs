@@ -6,6 +6,9 @@ const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
 test("article schema preserves optional cover metadata", async () => {
   const schema = await read("src/content.config.ts");
+  assert.match(schema, /const httpsUrl =/u);
+  assert.match(schema, /value\.startsWith\("https:\/\/"\)/u);
+  assert.doesNotMatch(schema, /https\?:\\\/\\\//u);
   assert.match(schema, /coverImage: imagePath\.optional\(\)/u);
   assert.match(schema, /coverAlt: z\.string\(\)\.optional\(\)/u);
 });

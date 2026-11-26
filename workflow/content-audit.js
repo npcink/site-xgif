@@ -88,13 +88,8 @@ function isGenericSourceUrl(value) {
   }
 }
 
-function isValidHttpUrl(value) {
-  try {
-    const url = new URL(value);
-    return url.protocol === "http:" || url.protocol === "https:";
-  } catch {
-    return false;
-  }
+function isValidHttpsUrl(value) {
+  return value.startsWith("https://") && URL.canParse(value);
 }
 
 function numberedSeriesIdentity(title) {
@@ -166,8 +161,8 @@ async function auditArticle(item, repoRoot) {
   if (isExternalArticle(data) && !item.draft && isLegacyArticleDisclosure(body)) {
     item.blockers.push("外部来源公开文章仍是旧摘要占位，必须从私有来源库恢复完整正文。");
   }
-  if (sourceUrl && !isValidHttpUrl(sourceUrl)) {
-    item.blockers.push("来源链接不是有效的 HTTP(S) 地址。");
+  if (sourceUrl && !isValidHttpsUrl(sourceUrl)) {
+    item.blockers.push("来源链接不是有效的 HTTPS 地址。");
   }
   if (sourceKind === "unknown") {
     item.notices.push("来源链接缺失；公开页会明确显示“来源待确认”。");

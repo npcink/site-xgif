@@ -1,8 +1,12 @@
 import type { CollectionEntry } from "astro:content";
 import { selectContentRecommendations } from "./recommendations.mjs";
 
-export function sortByDate<T extends { data: { pubDate: Date } }>(items: T[]) {
-  return [...items].sort((a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf());
+export function sortByDate<T extends { data: { pubDate: Date; contentId: string } }>(items: T[]) {
+  return [...items].sort(({ data: a }, { data: b }) => {
+    const byDate = b.pubDate.valueOf() - a.pubDate.valueOf();
+    if (byDate) return byDate;
+    return a.contentId < b.contentId ? -1 : a.contentId > b.contentId ? 1 : 0;
+  });
 }
 
 export function formatShortDate(date: Date) {
@@ -34,18 +38,7 @@ export function selectArticleRecommendations(
 
 export { selectContentRecommendations };
 
-const internalArticleNotePatterns = [
-  /flomo\s*私人(?:笔记|收藏)?导入/i,
-  /请在公开前复核/,
-  /来源待确认/,
-  /内部导入/,
-];
-
-export function publicArticleNote(article: { editorNote?: string; note?: string }) {
-  const normalized = (article.editorNote || article.note)?.trim();
-  if (!normalized) return "";
-  return internalArticleNotePatterns.some((pattern) => pattern.test(normalized)) ? "" : normalized;
-}
+export { publicArticleNote } from "./article-visibility.mjs";
 
 export function allTags(
   articles: CollectionEntry<"articles">[],

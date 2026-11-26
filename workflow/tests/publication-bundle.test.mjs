@@ -91,6 +91,16 @@ test("asset extraction ignores remote and data URLs", () => {
   );
 });
 
+test("publication asset extraction requires the single-line gallery format", () => {
+  const document = (value) => `---\r\nimages: ${value}\r\n---\r\n`;
+  assert.deepEqual(referencedLocalAssetFiles(document('[{"src":"/images/memes/a.webp"},{"src":"/images/memes/b.webp"}]')), [
+    "site/public/images/memes/a.webp", "site/public/images/memes/b.webp",
+  ]);
+  for (const value of ["\r\n  - src: /images/memes/a.webp", "[\r\n  {}\r\n]", "{}", "[]", '[null]', '[{"src":" "}]']) {
+    assert.throws(() => referencedLocalAssetFiles(document(value)), /images 必须是单行 JSON/u);
+  }
+});
+
 test("online asset verification is limited to the public site and configured asset origin", () => {
   const markdown = `---
 coverImage: "/images/articles/cover.webp"

@@ -346,7 +346,7 @@ sourceKind: "unknown"
   assert.equal(report.counts.blocked, 2);
   assert.match(
     report.items.find((item) => item.title === "错误链接").blockers.join(" "),
-    /HTTP\(S\)/,
+    /HTTPS/,
   );
   assert.match(
     report.items.find((item) => item.title === "缺失图片").blockers.join(" "),
@@ -432,4 +432,17 @@ test("content audit blocks processing replies and publication holds", async () =
   const report = await auditContentLibrary({ repoRoot: dirs.repoRoot });
   assert.match(report.items.find((item) => item.contentId === "20260723-0001").blockers.join(" "), /AI 处理回复/);
   assert.match(report.items.find((item) => item.contentId === "20260723-0099").blockers.join(" "), /禁止公开发布/);
+});
+
+test("content audit requires HTTPS source URLs", async () => {
+  const dirs = await fixture();
+  await writeFile(
+    path.join(dirs.articlesDir, "20260723-0100.md"),
+    article({ contentId: "20260723-0100", sourceUrl: "http://example.test/article" }),
+    "utf8",
+  );
+  const report = await auditContentLibrary({ repoRoot: dirs.repoRoot });
+  const item = report.items.find((entry) => entry.contentId === "20260723-0100");
+  assert.equal(item.status, "blocked");
+  assert.match(item.blockers.join(" "), /HTTPS/);
 });

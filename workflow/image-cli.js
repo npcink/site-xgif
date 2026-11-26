@@ -45,7 +45,12 @@ export async function runImageTool({ repoRoot, file, upload = false, apply = fal
         reviewed: reviewedSha256 === asset.sha256, ...metadata, similarity,
       }) + "\n", { mode: 0o600 });
       similarity.checkRecordSaved = true;
-    } catch { similarity.checkRecordSaved = false; }
+    } catch (error) {
+      similarity.checkRecordSaved = false;
+      if (upload && apply) {
+        throw new Error("图片检查回执写入失败，已阻止上传。请检查本机 .runtime 目录后重试。", { cause: error });
+      }
+    }
     if (!upload || !apply) return { ok: true, mode: "dry-run", ...metadata, similarity };
     const requiresSeriesReview = similarity.seriesCandidates.some((candidate) => candidate.requiresReview);
     if ((similarity.matches.some((match) => match.kind === "similar") || requiresSeriesReview || similarity.unavailable || semanticSeries.status === "partial"

@@ -110,14 +110,20 @@ export function localAssetFileFromUrl(value) {
 export function referencedAssetUrls(markdown) {
   const source = String(markdown || "");
   const urls = [];
-  const frontmatter = source.match(/^---\r?\n([\s\S]*?)\r?\n---/u)?.[1] || "";
+  const frontmatter = source.match(/^---\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/u)?.[1] || "";
   for (const line of frontmatter.split(/\r?\n/u)) {
     const field = line.match(/^(?:image|coverImage):\s*(.*)$/u);
     if (field) urls.push(parseFrontmatterScalar(field[1]));
     const gallery = line.match(/^images:\s*(.*)$/u);
     if (gallery) {
-      const images = JSON.parse(gallery[1]);
-      if (!Array.isArray(images)) throw new Error("图集图片列表无效。");
+      const invalid = "图集 images 必须是单行 JSON 数组，每项都要有非空的 src。";
+      let images;
+      try { images = JSON.parse(gallery[1]); }
+      catch { throw new Error(invalid); }
+      if (!Array.isArray(images) || images.length === 0
+        || images.some((image) => typeof image?.src !== "string" || !image.src.trim())) {
+        throw new Error(invalid);
+      }
       urls.push(...images.map((image) => image.src));
     }
   }
