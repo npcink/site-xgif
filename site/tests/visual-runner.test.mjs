@@ -59,7 +59,7 @@ async function fixture(t, options = {}) {
     }
     assert.fail(`Unexpected local command: ${program}`);
   };
-  const run = (args = [], extra = {}) => runVisual({ siteDir, args, env: {}, command, log: (line) => messages.push(line), ...extra });
+  const run = (args = [], extra = {}) => runVisual({ siteDir, args, env: { XGIF_VISUAL_SSH_HOST: "m4-test" }, command, log: (line) => messages.push(line), ...extra });
   return { siteDir, filenames, run, calls, messages, get payload() { return payload; }, get artifactDir() { return artifactDir; } };
 }
 
@@ -111,6 +111,16 @@ test("offline M4 fails explicitly without local Docker; failed transfer keeps re
   assert.ok(failed.messages.some((line) => line.includes("保留 M4 任务目录")));
 });
 
+test("remote visual runs require an explicit SSH target before running commands", async (t) => {
+  const f = await fixture(t);
+  for (const env of [{}, { XGIF_VISUAL_SSH_HOST: " " }, { XGIF_VISUAL_SSH_HOST: "-oProxyCommand" }]) {
+    await assert.rejects(f.run([], { env }), /XGIF_VISUAL_SSH_HOST/u);
+  }
+  assert.deepEqual(f.calls, []);
+  assert.equal(await f.run([], { env: { XGIF_VISUAL_SSH_HOST: "tester@m4-test" } }), 0);
+  assert.ok(f.calls.filter(({ program }) => program === "ssh").every(({ args }) => args.at(-2) === "tester@m4-test"));
+});
+
 test("low host space refuses both preparation and container launch before any Docker or task creation", async (t) => {
   const f = await fixture(t);
   await f.run();
@@ -143,7 +153,7 @@ test("interruption returns diagnostics and cleans only this run while preserving
 
 test("each run has its own container/directory and only GitHub Linux CI executes locally", async (t) => {
   const f = await fixture(t);
-  await f.run(); await f.run([], { env: { CI: "1", GITHUB_ACTIONS: "true", RUNNER_OS: "Linux" }, platform: "darwin" });
+  await f.run(); await f.run([], { env: { XGIF_VISUAL_SSH_HOST: "m4-test", CI: "1", GITHUB_ACTIONS: "true", RUNNER_OS: "Linux" }, platform: "darwin" });
   const directories = f.calls.filter((c) => c.program === "ssh" && c.args.at(-1).includes("mktemp -d")).map((c) => c.args.at(-1));
   assert.equal(new Set(directories).size, 2);
   const calls = [];

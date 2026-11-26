@@ -40,7 +40,7 @@
     "image:media": "node image-media-cli.js"
   },
   "engines": {
-    "node": ">=22.5.0"
+    "node": ">=22.23.4"
   },
   "dependencies": {
     "sharp": "0.35.5"
