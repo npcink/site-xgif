@@ -30,7 +30,8 @@ const display = canOptimize ? await getImage({
   height: width && height ? Math.round(widths.at(-1)! * height / width) : undefined,
   widths,
   format: "webp",
-  quality: 82,
+  // Only moving detail copies use the smaller encoding; posters keep text sharp.
+  quality: animated && detail && !firstFrame ? 68 : 82,
   firstFrame,
 }) : undefined;
 const displaySrc = display?.src || src;
