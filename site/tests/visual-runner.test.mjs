@@ -6,6 +6,22 @@ import path from "node:path";
 import test from "node:test";
 import { runVisual, sourceSnapshot } from "../scripts/run-visual-remote.mjs";
 
+test("Playwright dependency, resolved package and both Linux images use the same exact version", async () => {
+  const read = (file) => readFile(new URL(file, import.meta.url), "utf8");
+  const [pkg, lock, ci, runner] = await Promise.all([
+    read("../package.json"), read("../package-lock.json"),
+    read("../../.github/workflows/verify.yml"), read("../scripts/run-visual-container.sh"),
+  ]);
+  const version = JSON.parse(pkg).devDependencies["@playwright/test"];
+  const packages = JSON.parse(lock).packages;
+  assert.match(version, /^\d+\.\d+\.\d+$/u);
+  assert.equal(packages[""].devDependencies["@playwright/test"], version);
+  assert.equal(packages["node_modules/@playwright/test"].version, version);
+  for (const source of [ci, runner]) {
+    assert.deepEqual([...source.matchAll(/mcr\.microsoft\.com\/playwright:v([^\s-]+)-noble/gu)].map((match) => match[1]), [version]);
+  }
+});
+
 async function fixture(t, options = {}) {
   const siteDir = await mkdtemp(path.join(os.tmpdir(), "xgif-visual-test-"));
   t.after(() => rm(siteDir, { recursive: true, force: true }));
