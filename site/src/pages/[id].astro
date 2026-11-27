@@ -1,6 +1,7 @@
 ---
 import { getPublicArticles } from "../lib/public-articles";
-import { getCollection, type CollectionEntry } from "astro:content";
+import { getPublicImages } from "../lib/public-images";
+import type { CollectionEntry } from "astro:content";
 import ArticleDetailPage from "../components/ArticleDetailPage.astro";
 import ImageDetailPage from "../components/ImageDetailPage.astro";
 import { pageTitle, siteConfig } from "../config/site";
@@ -16,7 +17,7 @@ export async function getStaticPaths() {
   const contentIdPattern = /^\d{8}-[a-z0-9]{4}$/;
   const [articles, images] = await Promise.all([
     getPublicArticles(),
-    getCollection("images").then((entries) => entries.filter((entry) => !entry.data.draft && entry.data.public)),
+    getPublicImages(),
   ]);
   const records: Props[] = [
     ...articles.map((entry) => ({ kind: "article" as const, entry })),

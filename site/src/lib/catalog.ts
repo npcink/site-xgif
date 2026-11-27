@@ -1,6 +1,6 @@
 import { getPublicArticles } from "./public-articles";
+import { getPublicImages } from "./public-images";
 import { createHash } from "node:crypto";
-import { getCollection } from "astro:content";
 import { sortByDate } from "./content";
 import { mediaFilterValues } from "./image-media.mjs";
 import { foodStallGallery, isGalleryChild } from "../config/image-collection";
@@ -11,7 +11,7 @@ let snapshot: ReturnType<typeof buildCatalog> | undefined;
 
 async function buildCatalog() {
   const articles = sortByDate(await getPublicArticles());
-  const publicImages = (await getCollection("images")).filter(entry => !entry.data.draft && entry.data.public);
+  const publicImages = await getPublicImages();
   const images = sortByDate(publicImages.filter(({ data }) => !isGalleryChild(data.contentId)));
   const sources = [...articles, ...sortByDate(publicImages)].map(entry => ({ id: entry.data.contentId, data: entry.data, body: entry.body }));
   const revision = createHash("sha256").update(JSON.stringify({ format: 1, sources, foodStallGallery })).digest("hex").slice(0, 20);

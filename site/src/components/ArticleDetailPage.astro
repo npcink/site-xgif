@@ -1,7 +1,8 @@
 ---
 import { getPublicArticles } from "../lib/public-articles";
+import { getPublicImages } from "../lib/public-images";
 import Icon from "./Icon.astro";
-import { getCollection, render, type CollectionEntry } from "astro:content";
+import { render, type CollectionEntry } from "astro:content";
 import ArticleRecommendations from "./ArticleRecommendations.astro";
 import FavoriteButton from "./FavoriteButton.astro";
 import ImageRecommendations from "./ImageRecommendations.astro";
@@ -25,14 +26,14 @@ const { Content, headings } = await render(article);
 const tableOfContents = headings.filter((heading) => heading.depth === 2 || heading.depth === 3);
 const [allArticles, allImages] = await Promise.all([
   getPublicArticles(),
-  getCollection("images").then((entries) => entries.filter(({ data }) => !data.draft && data.public && !isGalleryChild(data.contentId))),
+  getPublicImages(),
 ]);
 const recommendedArticles = selectContentRecommendations(article, allArticles, {
   limit: 12,
   ...staticRecommendationOptions(article.data.contentId, "articles"),
 });
 const imageRecommendationOptions = staticRecommendationOptions(article.data.contentId, "images");
-const relatedImages = selectContentRecommendations(article, allImages, {
+const relatedImages = selectContentRecommendations(article, allImages.filter(({ data }) => !isGalleryChild(data.contentId)), {
   limit: imageRecommendationOptions.preferredOnly ? IMAGE_RECOMMENDATION_CANDIDATE_LIMIT : IMAGE_RECOMMENDATION_DISPLAY_LIMIT,
   relatedSlots: 3,
   allowSurprise: false,

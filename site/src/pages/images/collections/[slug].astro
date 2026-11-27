@@ -1,5 +1,5 @@
 ---
-import { getCollection } from "astro:content";
+import { getPublicImages } from "../../../lib/public-images";
 import type { InferGetStaticPropsType } from "astro";
 import GalleryThumbnails from "../../../components/GalleryThumbnails.astro";
 import ImageGallery from "../../../components/ImageGallery.astro";
@@ -8,7 +8,7 @@ import { pageTitle } from "../../../config/site";
 import BaseLayout from "../../../layouts/BaseLayout.astro";
 
 export async function getStaticPaths() {
-  const publicImages = await getCollection("images", ({ data }) => !data.draft && data.public);
+  const publicImages = await getPublicImages();
   const byId = new Map(publicImages.map((image) => [image.data.contentId, image]));
   return imageCollections.map((collection) => ({
     params: { slug: collection.slug },

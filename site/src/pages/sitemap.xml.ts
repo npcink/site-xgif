@@ -1,5 +1,5 @@
 import { getPublicArticles } from "../lib/public-articles";
-import { getCollection } from "astro:content";
+import { getPublicImages } from "../lib/public-images";
 import { siteConfig } from "../config/site";
 import { allTags, contentHref } from "../lib/content";
 import { imageCollectionHref, imageCollections, isGalleryChild } from "../config/image-collection";
@@ -11,7 +11,7 @@ const entry = (path: string, lastmod?: Date) => `  <url>
 
 export async function GET() {
   const articles = await getPublicArticles();
-  const images = (await getCollection("images")).filter(({ data }) => !data.draft && data.public && !isGalleryChild(data.contentId));
+  const images = (await getPublicImages()).filter(({ data }) => !isGalleryChild(data.contentId));
   const tags = allTags(articles, images);
   const pages = [
     entry("/"),

@@ -1,7 +1,7 @@
 ---
 import { getPublicArticles } from "../../lib/public-articles";
+import { getPublicImages } from "../../lib/public-images";
 import Icon from "../../components/Icon.astro";
-import { getCollection } from "astro:content";
 import { pageTitle } from "../../config/site";
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import ListPagination from "../../components/ListPagination.astro";
@@ -10,7 +10,7 @@ import { foodStallGallery, isGalleryChild } from "../../config/image-collection"
 
 const [articles, images] = await Promise.all([
   getPublicArticles(),
-  getCollection("images").then((entries) => entries.filter(({ data }) => !data.draft && data.public && !isGalleryChild(data.contentId))),
+  getPublicImages(),
 ]);
 const catalog = [
   ...articles.map((entry) => ({
@@ -19,7 +19,7 @@ const catalog = [
     title: entry.data.title,
     href: contentHref(entry),
   })),
-  ...images.map((entry) => ({
+  ...images.filter(({ data }) => !isGalleryChild(data.contentId)).map((entry) => ({
     contentId: entry.data.contentId,
     kind: "image",
     title: entry.data.contentId === foodStallGallery.cover ? foodStallGallery.title : entry.data.title,

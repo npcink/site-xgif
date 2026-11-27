@@ -1,7 +1,7 @@
 ---
 import { getPublicArticles } from "../lib/public-articles";
+import { getPublicImages } from "../lib/public-images";
 import Icon from "../components/Icon.astro";
-import { getCollection } from "astro:content";
 import ArticleCard from "../components/ArticleCard.astro";
 import ImageCard from "../components/ImageCard.astro";
 import BaseLayout from "../layouts/BaseLayout.astro";
@@ -10,7 +10,7 @@ import { isGalleryChild } from "../config/image-collection";
 
 const articles = sortByDate(await getPublicArticles());
 const images = sortByDate(
-  (await getCollection("images")).filter(({ data }) => !data.draft && data.public && !isGalleryChild(data.contentId)),
+  (await getPublicImages()).filter(({ data }) => !isGalleryChild(data.contentId)),
 );
 const homeArticles = articles.slice(0, 8);
 const homeImages = images.slice(0, 6);
