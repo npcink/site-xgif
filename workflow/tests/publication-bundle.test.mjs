@@ -99,6 +99,8 @@ test("publication asset extraction requires the single-line gallery format", () 
   for (const value of ["\r\n  - src: /images/memes/a.webp", "[\r\n  {}\r\n]", "{}", "[]", '[null]', '[{"src":" "}]']) {
     assert.throws(() => referencedLocalAssetFiles(document(value)), /images 必须是单行 JSON/u);
   }
+  assert.throws(() => referencedLocalAssetFiles('---\n"images": [{"src":"/images/memes/a.webp"}]\n---\n'), /images 必须是单行 JSON/u);
+  assert.deepEqual(referencedLocalAssetFiles('Example\n---\nimages: not-frontmatter\n---\n'), []);
 });
 
 test("online asset verification is limited to the public site and configured asset origin", () => {

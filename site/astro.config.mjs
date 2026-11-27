@@ -1,6 +1,7 @@
 import { defineConfig } from "astro/config";
 import { satteri } from "@astrojs/markdown-satteri";
 import { siteConfig } from "./src/config/site.ts";
+import galleryFormatCheck from "./src/lib/gallery-format-check.mjs";
 import staticAssetVersions from "./src/lib/version-static-assets.mjs";
 
 export default defineConfig({
@@ -9,7 +10,7 @@ export default defineConfig({
   trailingSlash: "never",
   // The deployed CSP permits same-origin stylesheets, not inline <style> tags.
   build: { inlineStylesheets: "never" },
-  integrations: [staticAssetVersions()],
+  integrations: [galleryFormatCheck(), staticAssetVersions()],
   image: {
     service: { entrypoint: "./src/lib/display-image-service.mjs" },
     remotePatterns: [{ protocol: "https", hostname: "img.xgif.cn", pathname: "/memes/**" }],

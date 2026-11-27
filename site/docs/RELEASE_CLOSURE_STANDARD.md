@@ -163,9 +163,9 @@ EXPECTED_SHA=<main-sha> REQUIRE_APEX_REDIRECT=true npm run test:release-acceptan
 
 发布验收必须失败，如果：
 
-- 未设置 `EXPECTED_SHA`，或线上 `/build.json` 的 commit 为 `unknown`，或与目标 SHA 不一致（真实 SHA 允许前缀匹配）；
+- 未设置 `EXPECTED_SHA`、线上 `/build.json` 未返回完整 40 位 SHA，或线上 SHA 与目标不一致（仅 `EXPECTED_SHA` 可以是至少 7 位的前缀；正式发布使用完整值）；
 - 首页 `Content-Security-Policy` 与当前仓库 `site/public/_headers` 中适用于首页的规则不符；
-- 已撤回文章 `20251030-tfm4`、`20251230-oucg` 的公开详情路由 `/{id}` 或预览路由 `/preview/articles/{id}` 不是 404。
+- 重点核验的未上线条目 `20251030-tfm4`、`20251230-oucg`、`20260824-k43x` 的详情路由 `/{id}` 或预览路由 `/preview/articles/{id}` 不是 404。若某条以后明确获准上线，需在同一变更更新该清单与契约测试。
 
 可用性巡检至少验证：
 

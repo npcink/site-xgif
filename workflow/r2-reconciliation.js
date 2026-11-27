@@ -56,13 +56,14 @@ export async function reconcileR2Assets({
     readJsonLines(ledgerPath),
   ]);
   const validLedger = ledger.filter((row) => !row.invalid && row.publicUrl);
-  const ledgerUrls = new Set(validLedger.map((row) => row.publicUrl));
+  const ledgerUrls = new Set();
+  const duplicates = new Set();
+  for (const { publicUrl } of validLedger) {
+    if (ledgerUrls.has(publicUrl)) duplicates.add(publicUrl);
+    else ledgerUrls.add(publicUrl);
+  }
   const referenceUrls = new Set(references.map((row) => row.publicUrl));
-  const duplicateLedgerUrls = [...new Set(
-    validLedger
-      .filter((row, index, rows) => rows.findIndex((candidate) => candidate.publicUrl === row.publicUrl) !== index)
-      .map((row) => row.publicUrl),
-  )];
+  const duplicateLedgerUrls = [...duplicates];
 
   const referencedWithoutLedger = references.filter((row) => !ledgerUrls.has(row.publicUrl));
   const ledgerWithoutReference = validLedger

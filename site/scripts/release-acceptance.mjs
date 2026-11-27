@@ -4,10 +4,10 @@ import process from "node:process";
 import {
   assertCspMatches,
   assertLiveCommitMatches,
-  assertWithdrawnRouteStatus,
+  assertUnpublishedRouteStatus,
   homepageCspFromHeaders,
   requireExpectedSha,
-  withdrawnRoutes,
+  unpublishedArticleRoutes,
 } from "./lib/release-acceptance-contract.mjs";
 
 const baseUrl = new URL(process.env.XGIF_PRODUCTION_URL || "https://www.xgif.cn/");
@@ -37,9 +37,9 @@ const home = await request("/");
 assert.equal(home.response.status, 200, "www 首页不可用");
 assertCspMatches(home.response.headers.get("content-security-policy"), expectedCsp);
 
-for (const path of withdrawnRoutes()) {
+for (const path of unpublishedArticleRoutes()) {
   const result = await request(path, { redirect: "manual" });
-  assertWithdrawnRouteStatus(path, result.response.status);
+  assertUnpublishedRouteStatus(path, result.response.status);
 }
 
 let apexReady = false;
