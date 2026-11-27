@@ -3,6 +3,37 @@ import { catalogItems, waitForCatalog } from "./archive-helpers.mjs";
 
 const visibleHrefs = locator => locator.evaluateAll(items => items.map(item => item.getAttribute("href")));
 
+test("narrow article pagination matches the gallery page position and the static fallback uses links", async ({ page, browser }) => {
+  await page.setViewportSize({ width: 320, height: 844 });
+  await page.goto("/articles?page=2");
+  await waitForCatalog(page);
+  const pages = Math.ceil((await catalogItems(page, "articles")).length / 12);
+  const nav = page.getByRole("navigation", { name: "文章分页" });
+  await expect(nav.locator("[data-page-numbers]")).toBeHidden();
+  await expect(nav.locator("[data-page-position]")).toHaveText(`2 / ${pages}`);
+  await nav.getByRole("button", { name: "上一页" }).click();
+  await expect(nav.locator("[data-page-position]")).toHaveText(`1 / ${pages}`);
+  await expect(nav.getByRole("button", { name: "上一页" })).toBeDisabled();
+  await page.goto("/articles?page=999999");
+  await waitForCatalog(page);
+  await expect(nav.locator("[data-page-position]")).toHaveText(`${pages} / ${pages}`);
+  await expect(nav.getByRole("button", { name: "下一页" })).toBeDisabled();
+
+  const context = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 320, height: 844 } });
+  try {
+    const fallback = await context.newPage();
+    await fallback.goto(new URL("/browse/articles/1", page.url()).href);
+    const links = fallback.getByRole("navigation", { name: "文章逐页浏览" });
+    await expect(links.locator(".page-position")).toHaveText(/^1 \/ \d+$/u);
+    await expect(links.getByRole("link", { name: "上一页" })).toHaveCount(0);
+    await links.getByRole("link", { name: "下一页" }).click();
+    await expect(fallback).toHaveURL(/\/browse\/articles\/2\/?$/u);
+    await expect(links.getByRole("link", { name: "上一页" })).toBeVisible();
+  } finally {
+    await context.close();
+  }
+});
+
 test("image pagination keeps the page end compact and preserves desktop page shortcuts", async ({ page }, testInfo) => {
   const mobile = testInfo.project.name === "mobile";
   if (mobile) await page.setViewportSize({ width: 320, height: 844 });

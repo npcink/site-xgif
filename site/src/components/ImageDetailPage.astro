@@ -76,8 +76,10 @@ const imageRatioKey =
     )}
     {isGallery && <GalleryThumbnails images={images} />}
     <div class="image-detail-copy">
-      <h1 class={isFoodStallCover ? "gallery-title" : "sr-only"}>{galleryTitle}</h1>
-      <p class="section-kicker">{mediaLabel}</p>
+      <div class="image-detail-heading">
+        <h1 class:list={[{ "gallery-title": isFoodStallCover }]}>{galleryTitle}</h1>
+        <p class="section-kicker">{mediaLabel}</p>
+      </div>
       <div class="image-detail-actions">
         <a class="image-original-link" data-gallery-original href={item.data.image} target="_blank" rel="noreferrer">{upscaleLabel ? "查看放大版" : "查看原图"} <Icon name="arrow-up-right" class="inline-icon" /></a>
         <div class="image-secondary-actions">
@@ -85,7 +87,7 @@ const imageRatioKey =
           <button class="copy-link-button" type="button" data-copy-url={canonicalPath}>{isGallery ? "复制图集链接" : "复制链接"}</button>
         </div>
       </div>
-      {upscaleLabel && <p class="image-save-hint">此图为{upscaleLabel}。</p>}
+      {upscaleLabel && <p class="image-save-hint">{item.data.upscale === "lanczos" ? "此图为 " : "此图为"}{upscaleLabel}。</p>}
       <p class="action-feedback" data-copy-status role="status" aria-live="polite"></p>
       <input class="copy-link-fallback" data-copy-fallback aria-label={`${isGallery ? "图集" : "图片"}链接，可选择后复制`} readonly hidden />
       <div class="image-detail-meta">
