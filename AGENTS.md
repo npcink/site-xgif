@@ -1,6 +1,6 @@
 # XGIF 开发入口
 
-开始工作先读 `README.md`、`site/docs/PROJECT_HANDOFF.md`、`workflow/docs/CONTENT_PUBLISHING_HANDOFF_2026-11-16.md` 和 `workflow/docs/LOCAL_PUBLISHER_ENGINEERING_STANDARD.md`。最近阶段事实与纠错见 `workflow/docs/CLOSEOUT_RETROSPECTIVE_2026-11-16.md`；历史文档的端口、后台和状态不能当作当前事实。
+开始工作先读 [README](README.md) 和[当前运行手册](site/docs/PROJECT_HANDOFF.md)。改站点或交付流程查[站点手册](site/README.md)与[开发与交付规范](site/docs/DEVELOPMENT_AND_DELIVERY_STANDARD.md)；改内容或工具查[内容工具手册](workflow/README.md)与[工具工程规范](workflow/docs/LOCAL_PUBLISHER_ENGINEERING_STANDARD.md)。历史批次按需查阅；其中的端口、后台、版本和状态不能当作当前事实。
 
 - Astro 静态内容 + 按需 CLI；不恢复 CMS/内容管理后台。Cloudflare Worker/D1 仅汇总主动收藏动作。
 - 原文、标点、错字、来源、授权、稳定 ID、日期和原图字节不由 AI 擅自改写。短文不扩写。标题/摘要等衍生字段使用可预览、版本化、可回退流程。

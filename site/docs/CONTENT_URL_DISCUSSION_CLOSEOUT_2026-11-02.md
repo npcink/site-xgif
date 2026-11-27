@@ -39,7 +39,7 @@
 
 已核对的实现入口：
 
-- [生成器](../../workflow/content-id.js)与[发布台](../../workflow/server.js)：生成、跨文章与图片查重、碰撞重试。
+- [生成器](../../workflow/content-id.js)与当时的发布台：生成、跨文章与图片查重、碰撞重试。旧发布台入口已删除，见 [ADR-019](decisions/ADR-019-ai-managed-static-content.md)。
 - [内容模式](../src/content.config.ts)与[详情路由](../src/pages/[id].astro)：格式校验和公开内容跨类型重复检查。
 - [弹窗识别](../public/scripts/detail-dialog.js)、[收藏数据](../public/scripts/favorites-store.js)及[推荐引擎](../../workflow/recommendation-engine.js)：均依赖现有 ID。
 - [本地索引](../../workflow/local-data-store.js)与[历史迁移器](../../workflow/content-id-migration.js)：标识还会进入派生数据和台账路径；历史迁移器不是本次迁移计划。
