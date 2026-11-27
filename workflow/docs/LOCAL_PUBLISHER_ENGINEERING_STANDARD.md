@@ -1,6 +1,6 @@
 # XGIF 内容工具工程规范
 
-状态：当前有效；最后更新：2026-11-25。旧发布台界面与 API 规范由 [ADR-019](../../site/docs/decisions/ADR-019-ai-managed-static-content.md) 取代。
+状态：当前有效；最后更新：2026-11-27。文件名沿用历史称呼；旧发布台界面与 API 规范由 [ADR-019](../../site/docs/decisions/ADR-019-ai-managed-static-content.md) 取代。
 
 ## 范围
 
@@ -54,7 +54,7 @@ Markdown 是正文和元数据依据，`contentId` 不可重建。R2 或公开�
 - 阶段完成分别核对：源码提交合并、线上版本、私有恢复备份、文档/评测、分支/worktree；不能以一次测试或 HTTP 200 代替整体收尾。
 - 私有草稿、完整运行台账和来源备份不是待提交代码；保留在本机和私有历史，不能为了让 Git 状态变空而公开。
 
-后续任务先读 [当前交接](CONTENT_PUBLISHING_HANDOFF_2026-11-16.md) 和 [复盘](CLOSEOUT_RETROSPECTIVE_2026-11-16.md)，再按真实新内容继续。
+本节的历史背景见 [2026-11-16 批次交接](CONTENT_PUBLISHING_HANDOFF_2026-11-16.md)和[复盘](CLOSEOUT_RETROSPECTIVE_2026-11-16.md)。现行操作从[内容工具手册](../README.md)进入。
 
 ## 审计后的维护规则（2026-11-26）
 

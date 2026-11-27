@@ -109,19 +109,11 @@ EXPECTED_SHA=<sha> REQUIRE_APEX_REDIRECT=true npm run test:release-acceptance
 
 ## 维护交接
 
-项目目标、架构边界、运行命令与部署前提见 [docs/PROJECT_HANDOFF.md](docs/PROJECT_HANDOFF.md)；技术选型到五批收口的历史脉络见 [docs/DEVELOPMENT_HISTORY_AND_LESSONS_2026-08-03.md](docs/DEVELOPMENT_HISTORY_AND_LESSONS_2026-08-03.md)；长期开发门槛、Git/worktree、验证证据和完成定义见 [docs/DEVELOPMENT_AND_DELIVERY_STANDARD.md](docs/DEVELOPMENT_AND_DELIVERY_STANDARD.md)；完整生产闭环与后续收尾步骤分别见 [docs/DEVELOPMENT_RETROSPECTIVE_2026-08-03.md](docs/DEVELOPMENT_RETROSPECTIVE_2026-08-03.md) 和 [docs/RELEASE_CLOSURE_STANDARD.md](docs/RELEASE_CLOSURE_STANDARD.md)。
+当前操作见[运行手册](docs/PROJECT_HANDOFF.md)；专项规则、架构决策和历史验收见[站点文档索引](docs/README.md)。
 
 ## 部署
 
-Cloudflare Worker 连接 GitHub 仓库 `npcink/site-xgif`，使用以下配置：
-
-| 配置 | 值 |
-| --- | --- |
-| Project name | `site-www-xgif` |
-| Production branch | `main` |
-| Root directory | `/site` |
-| Build command | `npm run build` |
-| Deploy command | `npx wrangler deploy` |
+Cloudflare Workers Builds 项目配置与生产核验入口见[运行手册](docs/PROJECT_HANDOFF.md#部署与核验)。
 
 `wrangler.jsonc` 将 Astro 静态资源目录固定为 `./dist`。`worker/index.mjs` 仅处理同源收藏动作汇总，使用已配置的 D1 和限流绑定；公开正文与图片仍由静态资源服务，不运行 CMS。部署不携带 `workflow/.env` 或私有内容。
 

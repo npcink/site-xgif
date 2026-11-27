@@ -28,6 +28,13 @@ Frontmatter 的数组与图集字段使用 JSON 单行形式，例如 `tags: ["�
 
 ## 内容检查与发布
 
+| 用途 | 入口与写入边界 |
+| --- | --- |
+| 日常检查、同步和预览 | `content:audit` 检查内容契约并写本机报告，不修改正文；`content:sync` 默认只检查选中文件，明确使用 `--apply` 才进入隔离发布流程。预览从 `site/` 启动。 |
+| 按需核对来源与导入痕迹 | `npm run source:audit` 只报告来源字段和可修复的导入格式问题，不替代 `content:audit`，也不联网核验来源或授权。`source:audit:apply` 会批量写入文章并可能更新 flomo 导入台账；先审报告并备份，未经确认不执行。 |
+| 按需检查 Markdown 模式 | `npm run patterns:audit` 只报告多余空行、行尾空白等格式问题；`npm run patterns:audit -- --examples` 只核对规则样例。不自动改正文。 |
+| 历史迁移 | `package.json` 中的 ID、治理字段、内容债务、段落、回收站和备注迁移不属于例行发布。按[迁移与恢复](#从旧后台迁移与恢复)核对脚本副作用、备份和适用范围；不要假定所有 `*:migrate` 命令默认只读。 |
+
 以下路径均相对仓库根目录，命令在 `workflow/` 内执行：
 
 ```bash
@@ -133,6 +140,8 @@ npm run recommendations:build -- --require-embeddings
 先从公开 Git 或私有 `backups/content-history.git` 恢复 Markdown、图片和台账，必要时从私有远端恢复；再 `data:rebuild`、R2 对账、运行站点测试并通过 PR 部署。回滚此架构改动可恢复旧代码，但不要覆盖迁移后的内容或私有数据。
 
 `docs/` 与 `PROJECT_HISTORY.md` 中的旧编辑器、API、端口和启动命令属于历史记录，以本文和 [工程规范](docs/LOCAL_PUBLISHER_ENGINEERING_STANDARD.md) 为当前入口。
+
+按任务查阅：发布同步见 [`content-sync-cli.js`](content-sync-cli.js)，图片核验与上传见 [`image-cli.js`](image-cli.js)，推荐维护见 [`recommendation-cli.js`](recommendation-cli.js)。旧架构和批次复盘统一从[工具文档索引](docs/README.md)按需查阅。
 
 ### 发布快照与原始依据评测
 

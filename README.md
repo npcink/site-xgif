@@ -33,4 +33,4 @@ Markdown 是内容权威源；图片保存在公开资源目录或 R2。SQLite �
 
 根目录只保留项目目录与仓库元数据；依赖、构建产物和缓存存放在对应业务目录。旧发布管理器的历史文档保存在 `workflow/docs/`，只用于追溯，不再作为当前操作入口。
 
-当前阶段交接、已知限制和下一步见 [内容发布交接](workflow/docs/CONTENT_PUBLISHING_HANDOFF_2026-11-16.md)；开发经验见 [收尾复盘](workflow/docs/CLOSEOUT_RETROSPECTIVE_2026-11-16.md)。后续任务应先读这些文件，不依赖当前会话历史。
+协作约束见 [AGENTS.md](AGENTS.md)。按任务从上面的站点或工具手册查找专项规则；历史批次不作为现行操作入口。
