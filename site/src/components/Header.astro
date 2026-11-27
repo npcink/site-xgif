@@ -3,6 +3,8 @@ import Icon from "./Icon.astro";
 import { siteConfig } from "../config/site";
 
 const pathname = Astro.url.pathname;
+const channelPath = pathname.replace(/^\/browse(?=\/)/u, "");
+const isChannel = (href: string) => channelPath === href || channelPath.startsWith(`${href}/`);
 ---
 
 <header class="site-header">
@@ -11,7 +13,7 @@ const pathname = Astro.url.pathname;
   </a>
   <nav class="desktop-nav" aria-label="主导航">
     {siteConfig.mainNavigation.map((link) => (
-      <a href={link.href} aria-current={pathname.startsWith(link.href) ? "page" : undefined}>
+      <a href={link.href} aria-current={isChannel(link.href) ? "page" : undefined}>
         {link.label}
       </a>
     ))}
@@ -28,7 +30,7 @@ const pathname = Astro.url.pathname;
     <summary><span class="sr-only">菜单</span><Icon name="menu" /><Icon name="close" /></summary>
     <nav aria-label="移动端主导航">
       {siteConfig.mainNavigation.map((link) => (
-        <a href={link.href} aria-current={pathname.startsWith(link.href) ? "page" : undefined}>{link.label}</a>
+        <a href={link.href} aria-current={isChannel(link.href) ? "page" : undefined}>{link.label}</a>
       ))}
     </nav>
   </details>

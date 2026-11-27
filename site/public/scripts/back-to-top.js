@@ -2,6 +2,7 @@
   const button = document.querySelector("body > .back-to-top");
   if (!button) return;
   const footer = document.querySelector("body > footer");
+  const homeTags = document.querySelector(".tag-library .tag-cloud");
   const mobile = window.matchMedia("(max-width: 900px)");
   const isArticle = Boolean(document.querySelector("main .article-detail"));
 
@@ -16,6 +17,12 @@
     if (!hidden && footer) {
       const footerClearance = Math.max(0, viewport - footer.getBoundingClientRect().top + 8);
       button.style.setProperty("--back-to-top-footer-clearance", `${footerClearance}px`);
+    }
+    if (!hidden && homeTags) {
+      const control = button.getBoundingClientRect();
+      const tags = homeTags.getBoundingClientRect();
+      button.toggleAttribute("data-obscures-tags", control.bottom > tags.top && control.top < tags.bottom &&
+        control.right > tags.left && control.left < tags.right);
     }
   };
 

@@ -431,7 +431,7 @@ test("search prompts fit and clearing restores the empty field", async ({ page }
 });
 
 test("full archive pagination fits wherever numeric shortcuts are shown", async ({ page }) => {
-  for (const [path, current, width] of [["/articles?page=7", "7", 320], ["/images?page=5", "5", 601], ["/images?page=5", "5", 1440]]) {
+  for (const [path, current, width] of [["/articles?page=7", "7", 601], ["/images?page=5", "5", 601], ["/images?page=5", "5", 1440]]) {
     await page.setViewportSize({ width, height: 850 });
     await page.goto(path);
     const numbers = page.locator("[data-page-numbers]");
@@ -446,5 +446,62 @@ test("full archive pagination fits wherever numeric shortcuts are shown", async 
       });
     });
     expect(fits, `${path} at ${width}px`).toBe(true);
+  }
+});
+
+test("the home tag wall remains clickable where it meets the floating control", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/");
+  const button = page.locator("body > .back-to-top");
+  await page.evaluate(() => window.scrollTo({ top: innerHeight + 100, behavior: "instant" }));
+  await expect(button).toBeVisible();
+  await page.evaluate(() => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "instant" }));
+  await expect(button).toBeHidden();
+  const lastTag = page.locator(".tag-cloud a").last();
+  const target = await lastTag.getAttribute("href");
+  const rect = await button.evaluate(element => element.getBoundingClientRect().toJSON());
+  const x = rect.x + rect.width / 2;
+  const y = rect.y + rect.height / 2;
+  expect(await lastTag.evaluate((tag, point) => tag.contains(document.elementFromPoint(point.x, point.y)), { x, y })).toBe(true);
+  await page.mouse.click(x, y);
+  await expect(page).toHaveURL(url => decodeURIComponent(url.pathname).replace(/\/$/u, "") === decodeURIComponent(target));
+});
+
+test("short search and 404 pages put the footer at the viewport bottom", async ({ page }) => {
+  for (const path of ["/search", "/not-a-real-xgif-page"]) {
+    await page.goto(path);
+    if (path === "/search") await expect(page.locator("[data-search-browse]")).toBeVisible();
+    const footer = page.getByRole("contentinfo");
+    const { y, height } = await footer.boundingBox();
+    expect(y + height).toBeCloseTo(page.viewportSize().height, 0);
+  }
+});
+
+test("the colored tag banner keeps its small count readable", async ({ page }) => {
+  await page.goto("/tags/医疗");
+  const count = page.locator(".tag-detail-hero .tag-result-count");
+  await expect(count).toBeVisible();
+  const contrast = await count.evaluate(element => {
+    const luminance = (color) => color.match(/\d+/gu).slice(0, 3).map(Number).map(value => value / 255)
+      .map(value => value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4)
+      .reduce((sum, value, index) => sum + value * [0.2126, 0.7152, 0.0722][index], 0);
+    const fg = luminance(getComputedStyle(element).color);
+    const bg = luminance(getComputedStyle(element.closest(".tag-detail-hero")).backgroundColor);
+    return (Math.max(fg, bg) + 0.05) / (Math.min(fg, bg) + 0.05);
+  });
+  expect(contrast).toBeGreaterThanOrEqual(4.5);
+});
+
+test("channel navigation has a persistent current marker", async ({ page }, testInfo) => {
+  const mobile = testInfo.project.name === "mobile";
+  for (const [path, href] of [["/articles", "/articles"], ["/images?media=animated", "/images"], ["/tags/医疗", "/tags"], ["/browse/articles/1", "/articles"]]) {
+    await page.goto(path);
+    if (mobile) await page.locator(".mobile-nav summary").click();
+    const nav = page.getByRole("navigation", { name: mobile ? "移动端主导航" : "主导航", exact: true });
+    const current = nav.locator('[aria-current="page"]');
+    await expect(current).toHaveAttribute("href", href);
+    if (mobile) await expect(current).toHaveCSS("text-decoration-line", "underline");
+    else await expect.poll(() => current.evaluate(link => parseFloat(getComputedStyle(link, "::after").right))).toBe(0);
   }
 });

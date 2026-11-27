@@ -298,6 +298,7 @@ test("a deferred gallery slide reports loading without moving its stage", async 
 });
 
 async function expectImageActions(copy, mediaLabel) {
+  await expect(copy.getByRole("heading", { level: 1 })).toBeVisible();
   await expect(copy.locator(".section-kicker")).toHaveText(mediaLabel);
   await expect(copy.getByRole("button", { name: "收藏", exact: true })).toBeVisible();
   await expect(copy.getByRole("link", { name: "查看原图" })).toHaveAttribute("target", "_blank");
@@ -305,14 +306,20 @@ async function expectImageActions(copy, mediaLabel) {
   const geometry = await copy.evaluate(root => {
     const box = selector => root.querySelector(selector).getBoundingClientRect().toJSON();
     return {
-      title: box(".section-kicker"), primary: box(".image-original-link"), actions: box(".image-detail-actions"),
+      title: box("h1"), label: box(".section-kicker"), primary: box(".image-original-link"), actions: box(".image-detail-actions"),
       favorite: box(".favorite-toggle"), copy: box(".copy-link-button"), meta: box(".image-detail-meta"),
       source: box(".image-source"), overflow: root.scrollWidth - root.clientWidth,
     };
   });
-  expect(geometry.primary.top).toBeGreaterThan(geometry.title.bottom);
-  expect(geometry.favorite.top).toBeCloseTo(geometry.copy.top);
-  expect(geometry.favorite.left).toBeLessThan(geometry.copy.left);
+  expect(geometry.title.height).toBeGreaterThan(20);
+  expect(geometry.label.top).toBeGreaterThan(geometry.title.bottom);
+  expect(geometry.primary.top).toBeGreaterThan(geometry.label.bottom);
+  if (geometry.actions.width >= geometry.favorite.width + geometry.copy.width + 8) {
+    expect(geometry.favorite.top).toBeCloseTo(geometry.copy.top);
+    expect(geometry.favorite.left).toBeLessThan(geometry.copy.left);
+  } else {
+    expect(geometry.copy.top).toBeGreaterThanOrEqual(geometry.favorite.bottom);
+  }
   expect(geometry.primary.top).toBeLessThanOrEqual(geometry.favorite.top);
   for (const action of [geometry.primary, geometry.favorite, geometry.copy]) expect(action.height).toBeGreaterThanOrEqual(43.5);
   expect(geometry.meta.top).toBeGreaterThan(geometry.actions.bottom);
@@ -360,7 +367,17 @@ test("the reported animated image stays at native size in routes and dialogs", a
       await Promise.allSettled(root.getAnimations().map(animation => animation.finished));
     });
     await checkSize(dialog.locator(".image-detail"));
+    await expectImageActions(dialog.locator(".image-detail-copy"), "动图详情");
   }
+});
+
+test("the audited standalone image displays its existing title and keeps the original action", async ({ page }) => {
+  await page.goto("/20261124-1mr5");
+  const copy = page.locator(".image-detail-copy");
+  const h1 = copy.getByRole("heading", { name: "你来的正是时候", level: 1 });
+  expect((await h1.boundingBox()).height).toBeGreaterThan(20);
+  await expect(copy.getByText("此图为 Lanczos 放大版。", { exact: true })).toBeVisible();
+  await expect(copy.getByRole("link", { name: "查看放大版" })).toHaveAttribute("target", "_blank");
 });
 
 test("image information has compact spacing, aligned continuation headers and plain text tags", async ({ page }, testInfo) => {
@@ -384,7 +401,7 @@ test("image information has compact spacing, aligned continuation headers and pl
       const copy = root.querySelector(".image-detail-copy");
       return {
         media: box(".image-detail-grid > figure"), copy: box(".image-detail-copy"),
-        kicker: box(".section-kicker"),
+        title: box(".image-detail-heading h1"),
         heading: box(".related-section h2"), more: box(".related-section .content-title > a"),
         sourcePadding: parseFloat(getComputedStyle(copy.querySelector(".image-source")).paddingTop),
         contentLeft: copy.getBoundingClientRect().left + parseFloat(getComputedStyle(copy).paddingLeft),
@@ -394,7 +411,7 @@ test("image information has compact spacing, aligned continuation headers and pl
     expect(layout.sourcePadding).toBeLessThanOrEqual(16);
     expect(layout.overflow).toBeLessThanOrEqual(1);
     if (width <= 900) {
-      expect(layout.kicker.top - layout.media.bottom).toBeLessThanOrEqual(24);
+      expect(layout.title.top - layout.media.bottom).toBeLessThanOrEqual(24);
       expect(Math.abs(layout.heading.left - layout.contentLeft)).toBeLessThanOrEqual(1);
       expect(layout.more.bottom).toBeLessThanOrEqual(layout.heading.bottom + 2);
     }
