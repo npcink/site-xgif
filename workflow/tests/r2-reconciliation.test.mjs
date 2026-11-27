@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -69,6 +69,19 @@ test("R2 reconciliation exposes recoverable partial publication states", async (
   assert.equal(report.ok, false);
   assert.equal(report.counts.referencedWithoutLedger, 1);
   assert.equal(report.counts.ledgerWithoutReference, 1);
+});
+
+test("R2 reconciliation reports each duplicate once in repeated occurrence order", async (t) => {
+  const dirs = await fixture();
+  t.after(() => rm(dirs.repoRoot, { recursive: true, force: true }));
+  const first = "https://img.xgif.cn/memes/first.webp";
+  const second = "https://img.xgif.cn/memes/second.webp";
+  const ledger = [first, second, second, first, second].map(publicUrl => JSON.stringify({ publicUrl })).join("\n");
+  await writeFile(dirs.ledgerPath, ledger);
+  const report = await reconcileR2Assets(dirs);
+  assert.deepEqual(report.duplicateLedgerUrls, [second, first]);
+  assert.equal(report.counts.duplicateLedgerUrls, 2);
+  assert.equal(report.counts.ledgerRows, 5);
 });
 
 test("R2 reconciliation verifies remote objects and private source bytes when requested", async () => {

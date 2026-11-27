@@ -4,11 +4,10 @@ import test from "node:test";
 import {
   assertCspMatches,
   assertLiveCommitMatches,
-  assertWithdrawnRouteStatus,
+  assertUnpublishedRouteStatus,
   homepageCspFromHeaders,
   requireExpectedSha,
-  withdrawnRoutes,
-  WITHDRAWN_ARTICLE_IDS,
+  unpublishedArticleRoutes,
 } from "../scripts/lib/release-acceptance-contract.mjs";
 
 const headersText = await readFile(new URL("../public/_headers", import.meta.url), "utf8");
@@ -23,18 +22,20 @@ test("release acceptance requires a real EXPECTED_SHA and rejects unknown", () =
   assert.throws(() => requireExpectedSha(undefined), /必须设置 EXPECTED_SHA/u);
   assert.throws(() => requireExpectedSha("unknown"), /不得把 unknown/u);
   assert.throws(() => requireExpectedSha("not-a-sha"), /不是有效提交/u);
+  assert.throws(() => requireExpectedSha("a".repeat(41)), /不是有效提交/u);
   assert.equal(requireExpectedSha("81cc0b0"), "81cc0b0");
 });
 
-test("release acceptance rejects unknown or mismatched live commits and allows SHA prefix matches", () => {
+test("release acceptance requires a full live SHA and optionally matches an expected prefix", () => {
   const expected = "81cc0b0f35b4277ad8e04c576defa0c89a00166f";
   assert.throws(() => assertLiveCommitMatches("unknown", expected), /unknown/u);
   assert.throws(() => assertLiveCommitMatches("", expected), /缺少 commit/u);
-  assert.throws(() => assertLiveCommitMatches("deadbeef", expected), /不一致/u);
+  assert.throws(() => assertLiveCommitMatches("deadbeef".padEnd(40, "0"), expected), /不一致/u);
   assert.throws(() => assertLiveCommitMatches(expected, ""), /必须设置 EXPECTED_SHA/u);
   assert.doesNotThrow(() => assertLiveCommitMatches(expected, expected));
   assert.doesNotThrow(() => assertLiveCommitMatches(expected, "81cc0b0"));
-  assert.doesNotThrow(() => assertLiveCommitMatches("81cc0b0", expected));
+  assert.throws(() => assertLiveCommitMatches("81cc0b0", expected), /完整 40 位/u);
+  assert.throws(() => assertLiveCommitMatches("81cc0b0", "81cc0b0"), /完整 40 位/u);
 });
 
 test("release acceptance compares homepage CSP to the current _headers rule", () => {
@@ -52,21 +53,22 @@ test("release acceptance compares homepage CSP to the current _headers rule", ()
   assert.throws(() => assertCspMatches("default-src 'self'", homepageCspFromHeaders(catalogOnly)), /未定义首页/u);
 });
 
-test("release acceptance requires 404 for withdrawn public and preview routes", () => {
-  assert.deepEqual(WITHDRAWN_ARTICLE_IDS, ["20251030-tfm4", "20251230-oucg"]);
-  assert.deepEqual(withdrawnRoutes(), [
+test("release acceptance requires 404 for tracked unpublished public and preview routes", () => {
+  assert.deepEqual(unpublishedArticleRoutes(), [
     "/20251030-tfm4",
     "/preview/articles/20251030-tfm4",
     "/20251230-oucg",
     "/preview/articles/20251230-oucg",
+    "/20260824-k43x",
+    "/preview/articles/20260824-k43x",
   ]);
-  for (const path of withdrawnRoutes()) {
-    assert.doesNotThrow(() => assertWithdrawnRouteStatus(path, 404));
-    assert.throws(() => assertWithdrawnRouteStatus(path, 200), /应为 404/u);
+  for (const path of unpublishedArticleRoutes()) {
+    assert.doesNotThrow(() => assertUnpublishedRouteStatus(path, 404));
+    assert.throws(() => assertUnpublishedRouteStatus(path, 200), /应为 404/u);
   }
-  assert.match(releaseScript, /withdrawnRoutes\(\)/u);
+  assert.match(releaseScript, /unpublishedArticleRoutes\(\)/u);
   assert.match(releaseScript, /redirect: "manual"/u);
-  assert.match(releaseScript, /assertWithdrawnRouteStatus\(path, result\.response\.status\)/u);
+  assert.match(releaseScript, /assertUnpublishedRouteStatus\(path, result\.response\.status\)/u);
 });
 
 test("package script and workflows keep daily smoke separate from release acceptance", () => {

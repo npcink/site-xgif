@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 
-export const WITHDRAWN_ARTICLE_IDS = Object.freeze(["20251030-tfm4", "20251230-oucg"]);
+export const UNPUBLISHED_ARTICLE_IDS = Object.freeze(["20251030-tfm4", "20251230-oucg", "20260824-k43x"]);
 
-const SHA_PATTERN = /^[a-f0-9]{7,64}$/iu;
+const SHA_PREFIX = /^[a-f0-9]{7,40}$/iu;
+const FULL_SHA = /^[a-f0-9]{40}$/iu;
 
-export function withdrawnRoutes(ids = WITHDRAWN_ARTICLE_IDS) {
+export function unpublishedArticleRoutes(ids = UNPUBLISHED_ARTICLE_IDS) {
   return ids.flatMap((id) => [`/${id}`, `/preview/articles/${id}`]);
 }
 
@@ -12,7 +13,7 @@ export function requireExpectedSha(value) {
   const expectedSha = String(value ?? "").trim();
   assert.ok(expectedSha, "发布验收必须设置 EXPECTED_SHA");
   assert.notEqual(expectedSha.toLowerCase(), "unknown", "不得把 unknown 当作已发布 SHA");
-  assert.match(expectedSha, SHA_PATTERN, `EXPECTED_SHA 不是有效提交：${expectedSha}`);
+  assert.match(expectedSha, SHA_PREFIX, `EXPECTED_SHA 不是有效提交：${expectedSha}`);
   return expectedSha;
 }
 
@@ -21,11 +22,11 @@ export function assertLiveCommitMatches(commit, expectedSha) {
   const live = String(commit ?? "").trim();
   assert.ok(live, "线上 /build.json 缺少 commit");
   assert.notEqual(live.toLowerCase(), "unknown", "线上 /build.json commit 为 unknown，不能作为发布验收");
-  assert.match(live, SHA_PATTERN, `线上 commit 不是有效提交：${live}`);
+  assert.match(live, FULL_SHA, `线上 commit 必须是完整 40 位 SHA：${live}`);
   const liveSha = live.toLowerCase();
   const expectedNorm = expected.toLowerCase();
   assert.ok(
-    liveSha.startsWith(expectedNorm) || expectedNorm.startsWith(liveSha),
+    liveSha.startsWith(expectedNorm),
     `线上提交 ${live} 与预期 ${expected} 不一致`,
   );
 }
@@ -91,6 +92,6 @@ export function assertCspMatches(liveCsp, expectedCsp) {
   assert.equal(live, expected, "首页 Content-Security-Policy 与当前仓库 site/public/_headers 不一致");
 }
 
-export function assertWithdrawnRouteStatus(path, status) {
-  assert.equal(status, 404, `已撤回路由 ${path} 应为 404，实际为 ${status}`);
+export function assertUnpublishedRouteStatus(path, status) {
+  assert.equal(status, 404, `未上线文章路由 ${path} 应为 404，实际为 ${status}`);
 }

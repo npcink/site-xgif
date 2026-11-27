@@ -4,6 +4,7 @@ import { join, relative, sep } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { parseFrontmatter } from "astro/markdown";
+import { UNPUBLISHED_ARTICLE_IDS } from "../scripts/lib/release-acceptance-contract.mjs";
 
 const readOutput = (path) => readFile(new URL(`../dist/${path}`, import.meta.url), "utf8");
 
@@ -127,7 +128,7 @@ test("production output excludes draft previews and unpublished content IDs", as
     unpublishedIds("images", (data) => data.draft === true || data.public === false),
     readdir(root, { recursive: true, withFileTypes: true }),
   ]);
-  const hidden = new Set([...drafts, ...privateImages]);
+  const hidden = new Set([...drafts, ...privateImages, ...UNPUBLISHED_ARTICLE_IDS]);
   const assertNoHiddenIds = (text, file) => {
     for (const [id] of text.matchAll(/\b\d{8}-[a-z0-9]{4}\b/gu)) {
       assert.ok(!hidden.has(id), `${file} must not expose unpublished content ID ${id}`);

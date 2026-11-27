@@ -62,7 +62,7 @@ licenseUrl: "https://unsplash.com/license"
 
 图片的 `sourceKind` 只接受 `original`（有可核验来源，保留来源链接、作者和授权信息）、`user_provided`（用户提供且已明确确认发布范围）和 `unknown`（来源未核实）。用户确认不等于原作者授权。
 
-图集使用有序的 `images` 数组（每项为 `{ "src": "...", "width": 640, "height": 480 }`），包含封面在内共 1–12 张；`image` 始终等于首张 `src`。发布工具要求 `images:` 使用单行 JSON 数组，不使用多行 YAML 列表。由 AI 按现有 Markdown 与 Schema 创建，图片检查与上传见 [内容工具](../workflow/README.md)。`npm run test:gallery` 会创建并清理临时样本，验证桌面与手机切图。
+图集使用有序的 `images` 数组（每项为 `{ "src": "...", "width": 640, "height": 480 }`），包含封面在内共 1–12 张；`image` 始终等于首张 `src`。站点构建与发布打包要求 `images:` 使用单行 JSON 数组，不使用多行 YAML 列表。由 AI 按现有 Markdown 与 Schema 创建，图片检查与上传见 [内容工具](../workflow/README.md)。`npm run test:gallery` 会创建并清理临时样本，验证桌面与手机切图。
 
 ## 构建
 

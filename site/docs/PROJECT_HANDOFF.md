@@ -1,12 +1,14 @@
 # XGIF 当前运行手册
 
-最后更新：2026-11-25
+最后更新：2026-11-27
+
+2026-11-26，PR #122 与 #123 已合并并分别通过线上发布验收。#122 压缩默认分享 PNG，#123 仅降低动图详情展示副本的 WebP 编码质量，保留原图和帧时序。线上详情抽样字节减少约 38%；真实访客是否更快尚无对应样本，不能用本机节流测试替代。当前生产版本仍以 `/build.json` 为准。对照口径见[性能复盘](PERFORMANCE_CLOSEOUT_2026-11-17.md#2026-11-26-分享图与动图详情发布)。
 
 2026-11-25 的图片发布、滑动图集、详情版式与推荐补位见[图片发布与界面阶段交接](IMAGE_PUBLISHING_AND_UI_HANDOFF_2026-11-25.md)。PR #113 已合并并发布；上线时生产 `/build.json` 命中功能提交 `81cc0b0f35b4277ad8e04c576defa0c89a00166f`，严格生产巡检与关键页面抽验通过。后续文档提交可能更新构建标记，当前版本以实时 `/build.json` 为准。
 
 PR #100 已于 2026-11-18 经用户明确授权合并并自动部署，功能版本为 `47d840eb0aa75e423371060d90bc77a80d56ac37`。严格生产巡检、桌面／手机交互与真实缓存响应验收通过；详细证据与恢复点见 [性能阶段收尾的发布验收](PERFORMANCE_CLOSEOUT_2026-11-17.md#2026-11-18-生产发布与验收)。当前线上 SHA 始终以 `/build.json` 为准，后续文档提交可能更新构建 SHA。
 
-标签／搜索截图的间歇差异已定位并修正测试；`picomatch` 公告仍无上游修补版，推荐质量限制仍保留。下一步使用真实访问数据观察收益，全文索引只有形成实测瓶颈才继续分片。主目录私有资料不得当作垃圾清理；通用经验见[开发与交付规范第 15 节](DEVELOPMENT_AND_DELIVERY_STANDARD.md#15-静态性能依赖与验收经验2026-11-18)。
+标签／搜索截图的间歇差异已定位并修正测试。此前引用的 `picomatch` 公告 [GHSA-fc5q-39xc-vjpf](https://github.com/advisories/GHSA-fc5q-39xc-vjpf) 已于 2026-11-18 撤回，不再以这条公告为依据调整依赖；常规审计继续。推荐质量限制仍保留，全文索引只有形成实测瓶颈才继续分片。主目录私有资料不得当作垃圾清理；通用经验见[开发与交付规范第 15 节](DEVELOPMENT_AND_DELIVERY_STANDARD.md#15-静态性能依赖与验收经验2026-11-18)。
 
 PR #102 已于 2026-11-19 合并并上线，版本为 `9bdd8c304cf434551e83ebb36b4ee4d8f558d139`；[界面排查记录](IMAGE_LAYOUT_AUDIT_2026-11-18.md)说明新版首页、搜索和图片布局。PR #103 基于它整合了[首次加载修复](COLD_LOAD_INVESTIGATION_2026-11-18.md)：默认列表提前显示，图片库首图优先，卡片缓存避免预取屏外图片；首次搜索并行请求目录和全文索引，结果分片有空位就补发，已过期的查询不再安排新请求。新版首页只按类型切换，文章卡片无需再携带独立全文字段；搜索输入前仍只显示浏览入口。当前部署以 `/build.json` 为准。
 
@@ -77,7 +79,7 @@ npm run content:sync -- site/src/content/articles/<contentId>.md
 git diff --check
 ```
 
-交互变更增加相应浏览器测试；布局变更运行 Linux 视觉基线；部署配置变更运行 `cd site && npm run check:deploy`。日常生产可用性巡检为 `cd site && npm run test:production`，不能代替版本验收。确认具体版本必须运行 `cd site && EXPECTED_SHA=<sha> REQUIRE_APEX_REDIRECT=true npm run test:release-acceptance`；缺少预期 SHA、线上 commit 为 `unknown`、首页 CSP 与当前 `site/public/_headers` 不符，或已撤回文章路由不是 404 时，不得视为发布通过。
+交互变更增加相应浏览器测试；布局变更运行 Linux 视觉基线；部署配置变更运行 `cd site && npm run check:deploy`。日常生产可用性巡检为 `cd site && npm run test:production`，不能代替版本验收。确认具体版本必须运行 `cd site && EXPECTED_SHA=<sha> REQUIRE_APEX_REDIRECT=true npm run test:release-acceptance`，核对线上完整 SHA、首页 CSP、裸域跳转和重点未上线文章的详情及预览路由 404。详见[发布核验规则](RELEASE_CLOSURE_STANDARD.md#57-部署与生产核验)。
 
 通过测试、创建 PR、合并、Cloudflare 构建和线上核验分别报告，不能相互替代。下架必须经过公开 Git 删除、部署和线上消失核验。
 

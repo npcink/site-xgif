@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
+import { readGalleryFrontmatter } from "../site/src/lib/gallery-frontmatter.mjs";
 
 export const publicContentPrefixes = [
   "site/src/content/articles/",
@@ -114,19 +115,8 @@ export function referencedAssetUrls(markdown) {
   for (const line of frontmatter.split(/\r?\n/u)) {
     const field = line.match(/^(?:image|coverImage):\s*(.*)$/u);
     if (field) urls.push(parseFrontmatterScalar(field[1]));
-    const gallery = line.match(/^images:\s*(.*)$/u);
-    if (gallery) {
-      const invalid = "图集 images 必须是单行 JSON 数组，每项都要有非空的 src。";
-      let images;
-      try { images = JSON.parse(gallery[1]); }
-      catch { throw new Error(invalid); }
-      if (!Array.isArray(images) || images.length === 0
-        || images.some((image) => typeof image?.src !== "string" || !image.src.trim())) {
-        throw new Error(invalid);
-      }
-      urls.push(...images.map((image) => image.src));
-    }
   }
+  for (const image of readGalleryFrontmatter(source) ?? []) urls.push(image.src);
   for (const match of source.matchAll(/!\[[^\]]*\]\(\s*(?:<([^>]+)>|([^\s)]+))(?:\s+["'][^"']*["'])?\s*\)/gu)) {
     urls.push(match[1] || match[2] || "");
   }
