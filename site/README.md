@@ -109,9 +109,7 @@ EXPECTED_SHA=<sha> REQUIRE_APEX_REDIRECT=true npm run test:release-acceptance
 
 ## 维护交接
 
-- **现行**：[运行手册](docs/PROJECT_HANDOFF.md)、[开发与交付规范](docs/DEVELOPMENT_AND_DELIVERY_STANDARD.md)、[发布收尾规范](docs/RELEASE_CLOSURE_STANDARD.md)。
-- **决策**：[架构决策记录](docs/decisions/)保留决策与取代关系；例如 [ADR-019 静态内容与 CLI](docs/decisions/ADR-019-ai-managed-static-content.md)、[ADR-031 草稿与生产可见性](docs/decisions/ADR-031-repository-drafts-and-production-visibility.md)。
-- **历史**：[早期开发与收口](docs/DEVELOPMENT_HISTORY_AND_LESSONS_2026-08-03.md)、[性能发布与对照](docs/PERFORMANCE_CLOSEOUT_2026-11-17.md)、[冷加载排查](docs/COLD_LOAD_INVESTIGATION_2026-11-18.md)、[界面修复复盘](docs/UI_FIXES_RETROSPECTIVE_2026-11-23.md)、[图库候选复盘](docs/IMAGE_LIBRARY_UI_CLOSEOUT_2026-11-24.md)、[图库与界面阶段交接](docs/IMAGE_PUBLISHING_AND_UI_HANDOFF_2026-11-25.md)。历史 SHA 和验收仅对应当时的版本。
+当前操作见[运行手册](docs/PROJECT_HANDOFF.md)；专项规则、架构决策和历史验收见[站点文档索引](docs/README.md)。
 
 ## 部署
 

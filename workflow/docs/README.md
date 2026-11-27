@@ -6,6 +6,7 @@
 
 - [内容工具手册](../README.md)：预览、内容检查、同步、图片、推荐、备份和发布快照。
 - [内容工具工程规范](LOCAL_PUBLISHER_ENGINEERING_STANDARD.md)：数据边界、批量发布、图集复核、验证和恢复约束。文件名沿用历史称呼。
+- [AI 字段重跑](AI_METADATA_RERUNS.md)：小样本评测、批量对照、版本与回退。
 
 ## 历史批次
 

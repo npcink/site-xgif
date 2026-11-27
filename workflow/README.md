@@ -141,7 +141,7 @@ npm run recommendations:build -- --require-embeddings
 
 `docs/` 与 `PROJECT_HISTORY.md` 中的旧编辑器、API、端口和启动命令属于历史记录，以本文和 [工程规范](docs/LOCAL_PUBLISHER_ENGINEERING_STANDARD.md) 为当前入口。
 
-按任务查阅：发布同步见 [`content-sync-cli.js`](content-sync-cli.js)，图片核验与上传见 [`image-cli.js`](image-cli.js)，推荐维护见 [`recommendation-cli.js`](recommendation-cli.js)。版本化 AI 字段规则见 [ADR-021](../site/docs/decisions/ADR-021-versioned-ai-metadata-reruns.md)；旧架构与批次经验见[项目历史](PROJECT_HISTORY.md)、[2026-11-16 交接](docs/CONTENT_PUBLISHING_HANDOFF_2026-11-16.md)和[复盘](docs/CLOSEOUT_RETROSPECTIVE_2026-11-16.md)。
+按任务查阅：发布同步见 [`content-sync-cli.js`](content-sync-cli.js)，图片核验与上传见 [`image-cli.js`](image-cli.js)，推荐维护见 [`recommendation-cli.js`](recommendation-cli.js)。旧架构和批次复盘统一从[工具文档索引](docs/README.md)按需查阅。
 
 ### 发布快照与原始依据评测
 
